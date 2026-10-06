@@ -82,11 +82,23 @@ struct VivariumPatchStart {
 };
 
 /**
- * Everything boot() needs. The node fills it from res://config/vivarium_start.json and from the
- * directory Godot loaded this library from; no value of it lives in the vegetation plugin.
+ * Reads one file of the staged bundle by its name (the bundle index, the manifest it names) into
+ * `out`; false when the stage holds no such file. The node reads through Godot's FileAccess, so
+ * the stage may lie inside the exported package (Android); a test reads the build's bundle
+ * directory. The manager itself never opens a stage file.
+ */
+using VivariumStageReadFn = bool (*)(const char* name, std::string& out, void* user);
+
+/**
+ * Everything boot() and self_test() need. The node fills it from res://config/vivarium_start.json
+ * and from the stage Godot loaded this library from; no value of it lives in the vegetation plugin.
  */
 struct VivariumStartConfig {
-    std::string bundle_dir;          // ABSOLUTE: holds the bundle index, the plugin and its manifest
+    VivariumStageReadFn read_stage = nullptr;  // REQUIRED: reads the bundle index and the manifest
+    void*       read_stage_user = nullptr;     // handed back to read_stage unchanged
+    std::string library_dir;         // ABSOLUTE directory the plugin library lies in; EMPTY: the
+                                     // library is opened by its file name and the platform linker
+                                     // resolves it in the app's own namespace (Android, PLAN 02.1)
     std::string log_file;            // ABSOLUTE log file under user://, empty = callback only
     std::string port;                // host port the vegetation plugin offers
     std::string op_create;           // configure operation that creates one patch
@@ -105,6 +117,17 @@ struct VivariumBundleInfo {
     std::string plugin;       // plugin name
     std::string version;      // plugin version
     std::string api_version;  // ASE plugin API the plugin was built against
+};
+
+/**
+ * What one self-test run counted. A scenario that could not run to its end (no host, plugin not
+ * loadable, a broken table entry) counts as one error of its own - a self-test that did not run
+ * is never a self-test without errors.
+ */
+struct VivariumSelfTestResult {
+    uint32_t cases = 0;    // scenarios run to their end, each on a test host of its own
+    uint32_t checks = 0;   // comparisons made: one per expected value, status and record count
+    uint32_t errors = 0;   // failed comparisons plus scenarios that could not run
 };
 
 /** One patch as the last snapshot showed it - a copy, never a reference into the App. */
@@ -156,6 +179,26 @@ public:
     ase::kernel::HostStatus boot(const VivariumStartConfig& config);
 
     /**
+     * SELF-TEST (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3) - the number cases G0 to I3 of the
+     * table text (config/vivarium_selftest.toml) through the real host facade and the real
+     * plugin of the stage, BEFORE any game host: every scenario runs on a test host of its own
+     * that is created, run, stopped and destroyed before the next one exists, so there is never
+     * a second simulation beside another. The test hosts write no log file - opening one would
+     * rotate the game host's file - and hand their lines to this manager's sink like the game
+     * host does.
+     *
+     * Refused (one error, nothing run) while this manager holds a host: the game host boots
+     * after the self-test, never beside it.
+     *
+     * @param config  the start configuration boot() takes: stage reader, library, port, operations
+     * @param table   the text of the self-test table
+     * @param report  receives one line per comparison ("check=G0 target=1 key=biomass actual=...
+     *                expected=... result=ok") and one closing line with the three counts
+     */
+    VivariumSelfTestResult self_test(const VivariumStartConfig& config, const std::string& table,
+                                     std::vector<std::string>& report);
+
+    /**
      * RUNNING
      */
     /** Advance by dt seconds, capped at tick_max_seconds, then read the snapshot. */
@@ -177,6 +220,11 @@ public:
 
     /**
      * LOG LINES - any thread in, the node's thread out
+     *
+     * On Android the line goes straight to logcat (__android_log_write, tag GODOT_LOG_SOURCE)
+     * from the thread that wrote it and is NOT queued: logcat is the platform's console, and a
+     * line held for the next frame would be lost with a process that never reaches it. Elsewhere
+     * it waits in the queue for the node, which prints it to Godot's output.
      */
     void store_log_line(const char* line, uint32_t len, int level);
     /** Move every queued line into `out` (appended); returns how many were moved. */
@@ -194,6 +242,21 @@ public:
     [[nodiscard]] uint64_t tick_count() const;
     [[nodiscard]] uint32_t system_count() const;
 
+    /**
+     * The proportional set size of this process in KiB, read from /proc/self/smaps_rollup - the
+     * memory figure of acceptance A10 and of the reset check (PLAN 02.3). false, and out 0, when
+     * the kernel offers no rollup: a missing measurement is never reported as a small one.
+     */
+    [[nodiscard]] bool read_pss_kib(uint64_t& out) const;
+
+    /**
+     * How often the host's App ran the named schedule - counted by its tick scheduler, never
+     * derived here from simulated time. Answers like KernelEmbeddedHost::schedule_runs;
+     * HostStatusInvalidState without a running host, which is then not asked at all. runs is 0
+     * on every answer but HostStatusOk.
+     */
+    [[nodiscard]] ase::kernel::HostStatus schedule_runs(const char* schedule, uint64_t* runs) const;
+
     /** Readable name of a HostStatus for the error panel and the log. */
     [[nodiscard]] static const char* status_name(ase::kernel::HostStatus status);
 
@@ -207,6 +270,8 @@ private:
     ase::kernel::HostStatus fail(const char* step, ase::kernel::HostStatus status);
     ase::kernel::HostStatus read_bundle();
     ase::kernel::HostStatus read_snapshot();
+    /** The string load_plugin takes: the library's path under library_dir, or its bare name. */
+    [[nodiscard]] std::string plugin_library() const;
 
     // The log queue is declared BEFORE the host: members die in reverse order, so the host - and
     // the logger it owns, whose sink writes into this queue - is gone before the queue is.

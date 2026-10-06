@@ -14,19 +14,40 @@
  *
  *              THE LOG IS ONE STREAM. The host's logger (ase-log inside the runtime library)
  *              writes the file under user://logs and hands every line to the resource manager;
- *              the view prints them once per frame. Its own lines - the boot line, every action
- *              with its target and result, every stage change - go through the SAME logger via
- *              KernelEmbeddedHost::note, never around it. Nothing is logged per render frame.
+ *              the view prints them once per frame (on Android the manager writes them to logcat
+ *              itself). Its own lines - the boot line, every action with its target and result,
+ *              every stage change - go through the SAME logger via KernelEmbeddedHost::note,
+ *              never around it. Nothing is logged per render frame.
+ *
+ *              THE STAGE IS THE RUNNING BUILD'S (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.1):
+ *              res://native/<os>-<arch>/<config>, named by Godot's own words for this build.
+ *              Bundle index, manifest and build identity are read from there through FileAccess,
+ *              so a stage packed into an APK reads like one on disk. The plugin is opened beside
+ *              the adapter when Godot loaded the adapter from a file on disk, else by its bare
+ *              name in the app's linker namespace - never through res:// or a package path.
+ *
+ *              TWO EXPLICIT MODES (PLAN 02.3), off unless the launch names them: the self-test
+ *              runs the table config/vivarium_selftest.toml on test hosts of its own BEFORE the
+ *              game host boots; the measurement records host and frame times after a warm-up and
+ *              writes one block when the recording is complete.
+ *
+ *              THE LAYOUT IS PLACED, NOT STRETCHED (PLAN 02.3): the expand aspect of the project
+ *              hands the view the whole visible surface, of any aspect ratio. draw() fills it with
+ *              the background, places the three bands of the layout through place_view and draws
+ *              every element with the transform of its band; the header colour reaches up to the
+ *              top edge, over a camera cut-out. tap() matches the rectangles as that frame placed
+ *              them, so a tap lands where the button was seen.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
  * @created     2026-10-05
- * @modified    2026-10-05
+ * @modified    2026-10-06
  * @version     00.00.01.00001
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
+#include <ase/adp/godot/godot_view_layout.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
 #include <ase/math/math.hpp>
@@ -43,14 +64,19 @@
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/char_string.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
+#include <godot_cpp/variant/rect2i.hpp>
+#include <godot_cpp/variant/transform2d.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -62,7 +88,7 @@ using ase::kernel::HostStatus;
 
 namespace {
 
-// ── configuration readers: each answers false for a missing key or a wrong type ──────────
+// Configuration readers: each answers false for a missing key or a wrong type.
 
 bool numeric(const ::godot::Variant& value) {
     return value.get_type() == ::godot::Variant::FLOAT || value.get_type() == ::godot::Variant::INT;
@@ -215,11 +241,52 @@ bool in_editor() {
     return ::godot::Engine::get_singleton()->is_editor_hint();
 }
 
+/**
+ * VivariumStageReadFn of the view: one text file of the stage (bundle index, manifest), through
+ * FileAccess - so a stage inside an exported package reads like one on disk. user is the view's
+ * stage directory (res://). Both files are UTF-8 text, so their bytes survive the round trip.
+ */
+bool read_stage_file(const char* name, std::string& out, void* user) {
+    const ::godot::String path = static_cast<const ::godot::String*>(user)->path_join(::godot::String::utf8(name));
+    if (!::godot::FileAccess::file_exists(path)) {
+        return false;
+    }
+    const ::godot::CharString text = ::godot::FileAccess::get_file_as_string(path).utf8();
+    out.assign(text.get_data(), static_cast<std::size_t>(text.length()));
+    return true;
+}
+
+/** Nearest-rank percentile of `samples` (taken by copy: the order of the recording stays). */
+uint32_t percentile(std::vector<uint32_t> samples, uint32_t percent) {
+    if (samples.empty()) {
+        return 0u;
+    }
+    const std::size_t rank =
+        (static_cast<std::size_t>(percent) * samples.size() + GODOT_MEASURE_PERCENT - 1u) / GODOT_MEASURE_PERCENT;
+    const std::size_t index = rank == 0u ? 0u : rank - 1u;
+    std::nth_element(samples.begin(), samples.begin() + static_cast<std::ptrdiff_t>(index), samples.end());
+    return samples[index];
+}
+
+/** "p50=.. p95=.. p99=.. max=.." of one recorded series, in microseconds. */
+::godot::String series(const std::vector<uint32_t>& samples) {
+    const uint32_t largest = samples.empty() ? 0u : *std::max_element(samples.begin(), samples.end());
+    return "p50=" + ::godot::String::num_uint64(percentile(samples, GODOT_MEASURE_P50)) +
+           " p95=" + ::godot::String::num_uint64(percentile(samples, GODOT_MEASURE_P95)) +
+           " p99=" + ::godot::String::num_uint64(percentile(samples, GODOT_MEASURE_P99)) +
+           " max=" + ::godot::String::num_uint64(largest);
+}
+
+/** A microsecond count as a sample: a frame longer than 71 minutes is a stall, held at the top. */
+uint32_t sample_of(uint64_t usec) {
+    return usec > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(usec);
+}
+
 }  // anonymous namespace
 
-// =============================================================================
-// LIFETIME
-// =============================================================================
+/**
+ * LIFETIME
+ */
 
 VivariumView::VivariumView(::godot::Node2D* node) : node_(node) {}
 
@@ -237,7 +304,20 @@ void VivariumView::ready() {
     }
     configured_ = load_config();
     if (configured_) {
+        // PLAN 02.3: the self-test runs on test hosts of its own BEFORE the game host exists, and
+        // only when the launch asks for it; its report goes through the game host once that is up.
+        if (launched_with(modes_.selftest_argument)) {
+            run_self_test();
+        }
+        measurement_.active = launched_with(modes_.measure_argument);
+        measurement_.warmup_left = modes_.measure_warmup_seconds;
+        measurement_.record_left = modes_.measure_record_seconds;
         boot_host();
+        for (const std::string& line : selftest_report_) {
+            note(text_of(line));
+        }
+        selftest_report_.clear();
+        drain_log();
     }
     node_->set_process(true);
     node_->queue_redraw();
@@ -252,9 +332,9 @@ void VivariumView::exit_tree() {
     drain_log();
 }
 
-// =============================================================================
-// CONFIGURATION (res://config/vivarium_start.json)
-// =============================================================================
+/**
+ * CONFIGURATION (res://config/vivarium_start.json)
+ */
 
 bool VivariumView::load_config() {
     const ::godot::String text = ::godot::FileAccess::get_file_as_string(GODOT_CONFIG_PATH);
@@ -266,23 +346,78 @@ bool VivariumView::load_config() {
         return fail_config(GODOT_CONFIG_PATH);
     }
     const ::godot::Dictionary root = parsed;
-    if (!load_host_config(root) || !load_layout(root) || !load_texts(root)) {
+    if (!load_host_config(root) || !load_layout(root) || !load_texts(root) || !load_modes(root)) {
         return false;  // the failing key stands on the error panel already
     }
+    if (!load_stage()) {
+        return false;
+    }
+    start_.log_file = utf8_of(::godot::ProjectSettings::get_singleton()->globalize_path(GODOT_LOG_PATH));
+    return true;
+}
 
-    // THE BUNDLE IS WHERE THIS LIBRARY WAS LOADED FROM - never the working directory. The
-    // runtime, the plugin, its manifest and the bundle index lie beside libase_adp_godot.so.
+bool VivariumView::load_stage() {
+    // THE STAGE OF THE RUNNING BUILD, named by Godot's own words for it - the words the
+    // avt.gdextension sections are keyed by. Never the working directory.
+    ::godot::OS* os = ::godot::OS::get_singleton();
+    stage_dir_ = ::godot::String(GODOT_STAGE_ROOT)
+                     .path_join(os->get_name().to_lower() + GODOT_STAGE_JOIN +
+                                ::godot::Engine::get_singleton()->get_architecture_name())
+                     .path_join(os->is_debug_build() ? GODOT_STAGE_DEBUG : GODOT_STAGE_RELEASE);
+    start_.read_stage = &read_stage_file;
+    start_.read_stage_user = &stage_dir_;
+
+    // WHERE THE PLUGIN IS OPENED: beside the adapter when Godot loaded the adapter from a file on
+    // disk (desktop) - and then that file MUST lie in this stage, or the view would read one
+    // stage's index and load another stage's libraries. When Godot opened the adapter by its bare
+    // name (Android: the APK's native library directory, searched by the app's linker
+    // namespace), the plugin is opened by its bare name too (PLAN 02.1).
     ::godot::String library_path;
     ::godot::internal::gdextension_interface_get_library_path(::godot::internal::library,
                                                               library_path._native_ptr());
     if (library_path.begins_with("res://") || library_path.begins_with("user://")) {
         library_path = ::godot::ProjectSettings::get_singleton()->globalize_path(library_path);
     }
-    const ::godot::String bundle_dir = library_path.get_base_dir();
-    start_.bundle_dir = utf8_of(bundle_dir);
-    start_.log_file = utf8_of(::godot::ProjectSettings::get_singleton()->globalize_path(GODOT_LOG_PATH));
-    identity_ = read_identity(bundle_dir.path_join(GODOT_IDENTITY_FILE));
+    start_.library_dir.clear();
+    if (library_path.is_absolute_path() && ::godot::FileAccess::file_exists(library_path)) {
+        const ::godot::String library_dir = library_path.get_base_dir().simplify_path();
+        const ::godot::String stage_on_disk =
+            ::godot::ProjectSettings::get_singleton()->globalize_path(stage_dir_).simplify_path();
+        if (library_dir != stage_on_disk) {
+            return fail_config("stage");
+        }
+        start_.library_dir = utf8_of(library_dir);
+    }
+    identity_ = read_identity(stage_dir_.path_join(GODOT_IDENTITY_FILE));
     return true;
+}
+
+bool VivariumView::load_modes(const ::godot::Dictionary& root) {
+    // Both modes are configured always and run only on request: a missing section is a broken
+    // configuration, not a switched-off mode.
+    ::godot::Dictionary modes;
+    ::godot::Dictionary selftest;
+    ::godot::Dictionary measure;
+    if (!read_section(root, "modes", modes)) {
+        return fail_config("modes");
+    }
+    if (!read_section(modes, "selftest", selftest) || !read_text(selftest, "argument", modes_.selftest_argument) ||
+        !read_text(selftest, "table", modes_.selftest_table)) {
+        return fail_config("modes.selftest");
+    }
+    if (!read_section(modes, "measure", measure) || !read_text(measure, "argument", modes_.measure_argument) ||
+        !read_number(measure, "warmup_seconds", modes_.measure_warmup_seconds) ||
+        !read_number(measure, "record_seconds", modes_.measure_record_seconds) ||
+        !(modes_.measure_warmup_seconds >= 0.0) || !(modes_.measure_record_seconds > 0.0)) {
+        return fail_config("modes.measure");
+    }
+    return true;
+}
+
+bool VivariumView::launched_with(const ::godot::String& argument) const {
+    // Godot's user arguments: everything after `--` on the command line, and on Android the
+    // strings of the intent extra command_line_params after their own `--`.
+    return !argument.is_empty() && ::godot::OS::get_singleton()->get_cmdline_user_args().has(argument);
 }
 
 bool VivariumView::fail_config(const char* key) {
@@ -436,6 +571,59 @@ bool VivariumView::load_layout(const ::godot::Dictionary& root) {
         !read_text(button, "label", texts_.reset)) {
         return fail_config("buttons.reset");
     }
+    // The bands come last: they are checked against every element read above.
+    return load_bands(layout);
+}
+
+bool VivariumView::load_bands(const ::godot::Dictionary& layout) {
+    ::godot::Dictionary bands;
+    double top_end = 0.0;
+    double bottom_start = 0.0;
+    if (!read_section(layout, "bands", bands) || !read_number(bands, "top_end", top_end) ||
+        !read_number(bands, "bottom_start", bottom_start)) {
+        return fail_config("layout.bands");
+    }
+    ViewBands& placed_bands = layout_.bands;
+    placed_bands.width = layout_.size.x;
+    placed_bands.height = layout_.size.y;
+    placed_bands.top_end = static_cast<float>(top_end);
+    placed_bands.bottom_start = static_cast<float>(bottom_start);
+    if (!(placed_bands.width > 0.0f) || !(placed_bands.top_end > 0.0f) ||
+        !(placed_bands.top_end <= placed_bands.bottom_start) || !(placed_bands.bottom_start < placed_bands.height)) {
+        return fail_config("layout.bands");
+    }
+    // EVERY ELEMENT IN ONE BAND: on a taller surface the bands move apart, and an element across
+    // an edge would be drawn in two pieces. A text line belongs to the band of its baseline; the
+    // info block is three lines, so its third baseline is checked with the first.
+    if (!in_one_band(placed_bands, 0.0f, layout_.header_height)) {
+        return fail_config("layout.bands: header_height");
+    }
+    if (!in_one_band(placed_bands, layout_.title_at.y, layout_.title_at.y)) {
+        return fail_config("layout.bands: title");
+    }
+    if (!in_one_band(placed_bands, layout_.build_at.y, layout_.build_at.y)) {
+        return fail_config("layout.bands: build");
+    }
+    if (!in_one_band(placed_bands, layout_.info_at.y, layout_.info_at.y + 2.0f * layout_.info_line)) {
+        return fail_config("layout.bands: info");
+    }
+    if (!in_one_band(placed_bands, layout_.note_at.y, layout_.note_at.y)) {
+        return fail_config("layout.bands: note");
+    }
+    for (const ::godot::Rect2& rect : layout_.patch_rects) {
+        if (!in_one_band(placed_bands, rect.position.y, rect.get_end().y)) {
+            return fail_config("layout.bands: patches[].rect");
+        }
+    }
+    if (!in_one_band(placed_bands, layout_.water_rect.position.y, layout_.water_rect.get_end().y)) {
+        return fail_config("layout.bands: buttons.water");
+    }
+    if (!in_one_band(placed_bands, layout_.pause_rect.position.y, layout_.pause_rect.get_end().y)) {
+        return fail_config("layout.bands: buttons.pause");
+    }
+    if (!in_one_band(placed_bands, layout_.reset_rect.position.y, layout_.reset_rect.get_end().y)) {
+        return fail_config("layout.bands: buttons.reset");
+    }
     return true;
 }
 
@@ -498,9 +686,9 @@ bool VivariumView::load_texts(const ::godot::Dictionary& root) {
     return true;
 }
 
-// =============================================================================
-// HOST LIFECYCLE
-// =============================================================================
+/**
+ * HOST LIFECYCLE
+ */
 
 void VivariumView::boot_host() {
     failure_text_ = ::godot::String();
@@ -509,6 +697,7 @@ void VivariumView::boot_host() {
     // The frame after a boot carries the boot time, not simulation time.
     drop_next_delta_ = true;
     stages_.assign(start_.patches.size(), GODOT_STAGE_NONE);
+    host_boots_ += 1u;
 
     const HostStatus status = resources_.boot(start_);
     if (status != ase::kernel::HostStatusOk) {
@@ -568,14 +757,93 @@ void VivariumView::restart() {
         + " gpu=" + rendering->get_video_adapter_name()
         + " pid=" + ::godot::String::num_int64(::godot::OS::get_singleton()->get_process_id())
         + " abi=" + engine->get_architecture_name()
+        + " platform_abi=" + identity_value(identity_, "platform_abi")
         + " config=" + identity_value(identity_, "config")
+        + " stage=" + stage_dir_
+        + " plugin_load=" + (start_.library_dir.empty() ? "name" : "path")
+        + " selftest=" + (selftest_ran_ ? "errors:" + ::godot::String::num_uint64(selftest_errors_) : "off")
+        + " measure=" + (measurement_.active ? "on" : "off")
+        + " boots=" + ::godot::String::num_uint64(host_boots_)
         + " patches=" + ::godot::String::num_uint64(resources_.patch_count())
         + " systems=" + ::godot::String::num_uint64(resources_.system_count());
 }
 
-// =============================================================================
-// FRAME
-// =============================================================================
+/**
+ * EXPLICIT MODES (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3)
+ */
+
+void VivariumView::run_self_test() {
+    // The table is a staged file like the start configuration; a missing one is reported by the
+    // manager as a self-test that could not run - never as one without errors.
+    const ::godot::String table = ::godot::FileAccess::get_file_as_string(modes_.selftest_table);
+    selftest_report_.clear();
+    const VivariumSelfTestResult result = resources_.self_test(start_, utf8_of(table), selftest_report_);
+    selftest_ran_ = true;
+    selftest_errors_ = result.errors;
+    drain_log();  // the test hosts' own lines come before the game host's
+}
+
+void VivariumView::measure_frame(uint64_t frame_start_usec, uint64_t host_usec) {
+    VivariumMeasurement& measurement = measurement_;
+    const uint64_t previous = measurement.last_usec;
+    measurement.last_usec = frame_start_usec;
+    // The first ticking frame after a start or a pause has no interval of its own.
+    if (previous == 0u || frame_start_usec <= previous) {
+        return;
+    }
+    const uint64_t interval = frame_start_usec - previous;
+    const double seconds = static_cast<double>(interval) / GODOT_USEC_PER_SECOND;
+    if (!measurement.recording) {
+        measurement.warmup_left -= seconds;
+        if (measurement.warmup_left > 0.0) {
+            return;
+        }
+        measurement.recording = true;
+        const auto reserved = static_cast<std::size_t>(modes_.measure_record_seconds * GODOT_MEASURE_FRAMES_RESERVED);
+        measurement.host_usec.reserve(reserved);
+        measurement.frame_usec.reserve(reserved);
+        measurement.pss_start_read = resources_.read_pss_kib(measurement.pss_start_kib);
+        measurement.boots_at_start = host_boots_;
+        note("measure begin warmup_s=" + ::godot::String::num(modes_.measure_warmup_seconds, GODOT_LOG_DECIMALS) +
+             " record_s=" + ::godot::String::num(modes_.measure_record_seconds, GODOT_LOG_DECIMALS) + " " +
+             measure(GODOT_NO_OBJECT));
+        return;
+    }
+    measurement.host_usec.push_back(sample_of(host_usec));
+    measurement.frame_usec.push_back(sample_of(interval));
+    measurement.record_left -= seconds;
+    if (measurement.record_left <= 0.0) {
+        report_measurement();
+    }
+}
+
+void VivariumView::report_measurement() {
+    VivariumMeasurement& measurement = measurement_;
+    uint64_t pss_end_kib = 0u;
+    const bool pss_end_read = resources_.read_pss_kib(pss_end_kib);
+    uint64_t recorded_usec = 0u;
+    for (const uint32_t interval : measurement.frame_usec) {
+        recorded_usec += interval;
+    }
+    const double recorded_seconds = static_cast<double>(recorded_usec) / GODOT_USEC_PER_SECOND;
+    const double fps = recorded_seconds > 0.0 ? static_cast<double>(measurement.frame_usec.size()) / recorded_seconds : 0.0;
+    // ONE BLOCK, written when the recording is complete: nothing was logged per frame.
+    note("measure host_usec frames=" + ::godot::String::num_uint64(measurement.host_usec.size()) + " " +
+         series(measurement.host_usec));
+    note("measure frame_usec frames=" + ::godot::String::num_uint64(measurement.frame_usec.size()) + " " +
+         series(measurement.frame_usec) + " fps=" + ::godot::String::num(fps, GODOT_LOG_DECIMALS) +
+         " recorded_s=" + ::godot::String::num(recorded_seconds, GODOT_LOG_DECIMALS));
+    note("measure end pss_kib_start=" +
+         (measurement.pss_start_read ? ::godot::String::num_uint64(measurement.pss_start_kib) : ::godot::String("unknown")) +
+         " pss_kib_end=" + (pss_end_read ? ::godot::String::num_uint64(pss_end_kib) : ::godot::String("unknown")) +
+         " restarts=" + ::godot::String::num_uint64(host_boots_ - measurement.boots_at_start) +
+         " pauses=" + ::godot::String::num_uint64(measurement.pauses) + " " + measure(GODOT_NO_OBJECT));
+    measurement = VivariumMeasurement{};
+}
+
+/**
+ * FRAME
+ */
 
 bool VivariumView::ticking() const {
     return resources_.running() && failure_text_.is_empty() && !user_paused_ && !app_paused_ &&
@@ -584,18 +852,35 @@ bool VivariumView::ticking() const {
 
 void VivariumView::process(double delta) {
     drain_log();
+    // A surface of another size than the one the last frame was placed on - a resized window, a
+    // folded handset - needs a new placement even while nothing ticks.
+    const ::godot::Vector2 visible = node_->get_viewport_rect().size;
+    if (visible.x != drawn_surface_.width || visible.y != drawn_surface_.height) {
+        node_->queue_redraw();
+    }
     if (!ticking()) {
+        // A pause breaks the chain of frame intervals: the next ticking frame starts a new one.
+        measurement_.last_usec = 0u;
         return;
     }
     if (drop_next_delta_) {
         // After a boot or a resume the first delta holds the time spent outside the simulation.
         drop_next_delta_ = false;
+        measurement_.last_usec = 0u;
         return;
     }
+    // Host time (tick + snapshot) is measured apart from the whole _process interval (PLAN 02.3),
+    // on Godot's monotonic clock, never from delta - Godot may smooth that.
+    ::godot::Time* clock = ::godot::Time::get_singleton();
+    const uint64_t frame_start_usec = clock->get_ticks_usec();
     const HostStatus status = resources_.advance(static_cast<float>(delta));
+    const uint64_t host_usec = clock->get_ticks_usec() - frame_start_usec;
     if (status == ase::kernel::HostStatusOk) {
         follow_stages();
         follow_water();
+        if (measurement_.active) {
+            measure_frame(frame_start_usec, host_usec);
+        }
     } else if (!resources_.running()) {
         // The manager stopped the host (a broken snapshot) - the panel says where.
         failure_text_ = texts_.error + ": " + resources_.failure_step() + " (" +
@@ -614,6 +899,7 @@ void VivariumView::notification(int32_t what) {
     // pause the user chose (V5), and no reason lets ticks through in the background.
     if (what == ::godot::Node::NOTIFICATION_APPLICATION_PAUSED) {
         app_paused_ = true;
+        measurement_.pauses += measurement_.recording ? 1u : 0u;
         note("pause reason=application " + measure(GODOT_NO_OBJECT));
     } else if (what == ::godot::Node::NOTIFICATION_APPLICATION_RESUMED) {
         app_paused_ = false;
@@ -621,6 +907,7 @@ void VivariumView::notification(int32_t what) {
         note("resume reason=application " + measure(GODOT_NO_OBJECT));
     } else if (what == ::godot::Node::NOTIFICATION_APPLICATION_FOCUS_OUT) {
         focus_lost_ = true;
+        measurement_.pauses += measurement_.recording ? 1u : 0u;
         note("pause reason=focus " + measure(GODOT_NO_OBJECT));
     } else if (what == ::godot::Node::NOTIFICATION_APPLICATION_FOCUS_IN) {
         focus_lost_ = false;
@@ -695,8 +982,15 @@ void VivariumView::follow_water() {
 
 ::godot::String VivariumView::measure(uint32_t object_id) const {
     ::godot::String line = "t=" + ::godot::String::num(resources_.simulation_seconds(), GODOT_LOG_DECIMALS) +
-                           " ticks=" + ::godot::String::num_uint64(resources_.tick_count()) +
-                           " patches=" + ::godot::String::num_uint64(resources_.patch_count());
+                           " ticks=" + ::godot::String::num_uint64(resources_.tick_count());
+    // Steps are the scheduler's count of the step schedule, never t divided by its interval. A host
+    // that cannot answer (none yet, stopped) gives no steps= at all instead of a false 0; the host
+    // logs its own refusal.
+    uint64_t steps = 0u;
+    if (resources_.schedule_runs(GODOT_LOG_STEP_SCHEDULE, &steps) == ase::kernel::HostStatusOk) {
+        line += " steps=" + ::godot::String::num_uint64(steps);
+    }
+    line += " patches=" + ::godot::String::num_uint64(resources_.patch_count());
     const VivariumPatchView* patch = resources_.get_patch(object_id);
     if (patch == nullptr) {
         return line;
@@ -726,9 +1020,9 @@ void VivariumView::note(const ::godot::String& line) {
     }
 }
 
-// =============================================================================
-// INPUT
-// =============================================================================
+/**
+ * INPUT
+ */
 
 void VivariumView::unhandled_input(const ::godot::Ref<::godot::InputEvent>& event) {
     if (in_editor() || !node_->is_visible_in_tree()) {
@@ -736,7 +1030,8 @@ void VivariumView::unhandled_input(const ::godot::Ref<::godot::InputEvent>& even
     }
     // ONE PATH PER PHYSICAL TAP: touch arrives as ScreenTouch, a mouse as MouseButton - the
     // project switches Godot's touch-to-mouse emulation off, so an Android tap waters once.
-    // make_input_local maps through the inverse canvas transform onto the logical surface.
+    // make_input_local maps through the inverse canvas transform onto the visible surface; tap()
+    // matches that point against the layout as the last frame placed it.
     const ::godot::Ref<::godot::InputEvent> local = node_->make_input_local(event);
     const ::godot::Ref<::godot::InputEventScreenTouch> touch = local;
     const ::godot::Ref<::godot::InputEventMouseButton> mouse = local;
@@ -759,23 +1054,27 @@ void VivariumView::unhandled_input(const ::godot::Ref<::godot::InputEvent>& even
 }
 
 void VivariumView::tap(const ::godot::Vector2& at) {
-    if (layout_.reset_rect.has_point(at)) {
+    // Without a placement - no configuration, a surface without room - nothing was drawn to tap.
+    if (!(placement_.scale > 0.0f)) {
+        return;
+    }
+    if (placed(layout_.reset_rect).has_point(at)) {
         restart();
         return;
     }
     if (!configured_ || !failure_text_.is_empty()) {
         return;  // on the error panel only Reiniciar answers
     }
-    if (layout_.pause_rect.has_point(at)) {
+    if (placed(layout_.pause_rect).has_point(at)) {
         toggle_pause();
         return;
     }
-    if (layout_.water_rect.has_point(at)) {
+    if (placed(layout_.water_rect).has_point(at)) {
         water();
         return;
     }
     for (size_t i = 0; i < layout_.patch_rects.size() && i < start_.patches.size(); ++i) {
-        if (layout_.patch_rects[i].has_point(at)) {
+        if (placed(layout_.patch_rects[i]).has_point(at)) {
             select(start_.patches[i].object_id);
             return;
         }
@@ -823,45 +1122,120 @@ void VivariumView::toggle_pause() {
     user_paused_ = !user_paused_;
     if (!user_paused_) {
         drop_next_delta_ = true;
+    } else {
+        measurement_.pauses += measurement_.recording ? 1u : 0u;
     }
     note(::godot::String(user_paused_ ? "pause" : "resume") + " reason=user " +
          measure(GODOT_NO_OBJECT));
     node_->queue_redraw();
 }
 
-// =============================================================================
-// DRAWING - projections of the last snapshot, nothing else
-// =============================================================================
+/**
+ * PLACEMENT - the layout's three bands on the visible surface (godot_view_layout.hpp)
+ */
+
+ViewSurface VivariumView::surface() const {
+    // The visible part of the canvas. With the expand aspect it starts at the origin and carries
+    // the window's aspect ratio, in the logical units of the layout.
+    const ::godot::Rect2 visible = node_->get_viewport_rect();
+    ViewSurface surface;
+    surface.width = visible.size.x;
+    surface.height = visible.size.y;
+    // Camera cut-out and gesture bar exist on a handset only. On the desktop the safe area is the
+    // screen's, not the window's, and would push the layout off any window that is not maximised.
+    if (!::godot::OS::get_singleton()->has_feature(GODOT_FEATURE_MOBILE)) {
+        return surface;
+    }
+    // DisplayServer reports the safe area in window pixels; the viewport's final transform maps
+    // the canvas onto them, so its inverse maps the safe area back onto the canvas.
+    const ::godot::Rect2i safe = ::godot::DisplayServer::get_singleton()->get_display_safe_area();
+    const ::godot::Transform2D to_canvas = node_->get_viewport()->get_final_transform().affine_inverse();
+    const ::godot::Vector2 safe_start = to_canvas.xform(::godot::Vector2(safe.position));
+    const ::godot::Vector2 safe_end = to_canvas.xform(::godot::Vector2(safe.position + safe.size));
+    surface.inset_left = ase::math::max(0.0f, safe_start.x - visible.position.x);
+    surface.inset_top = ase::math::max(0.0f, safe_start.y - visible.position.y);
+    surface.inset_right = ase::math::max(0.0f, visible.get_end().x - safe_end.x);
+    surface.inset_bottom = ase::math::max(0.0f, visible.get_end().y - safe_end.y);
+    return surface;
+}
+
+::godot::Rect2 VivariumView::placed(const ::godot::Rect2& rect) const {
+    // The same mapping use_band hands the canvas: scale, then the column and the band's offset.
+    const float scale = placement_.scale;
+    return ::godot::Rect2(placement_.offset_x + rect.position.x * scale,
+                          band_offset(layout_.bands, placement_, rect.position.y) + rect.position.y * scale,
+                          rect.size.x * scale, rect.size.y * scale);
+}
+
+void VivariumView::use_band(float layout_y) {
+    const float scale = placement_.scale;
+    node_->draw_set_transform(
+        ::godot::Vector2(placement_.offset_x, band_offset(layout_.bands, placement_, layout_y)), 0.0f,
+        ::godot::Vector2(scale, scale));
+}
+
+void VivariumView::use_canvas() {
+    node_->draw_set_transform(::godot::Vector2(), 0.0f, ::godot::Vector2(1.0f, 1.0f));
+}
+
+/**
+ * DRAWING - projections of the last snapshot, nothing else
+ */
 
 void VivariumView::draw() {
     if (in_editor()) {
         return;
     }
+    drawn_surface_ = surface();
+    const ::godot::Rect2 visible(0.0f, 0.0f, drawn_surface_.width, drawn_surface_.height);
+    use_canvas();
+    node_->draw_rect(visible, ::godot::Color::hex(GODOT_COLOR_BACKGROUND));
     if (!configured_) {
-        draw_failure();
+        // Without a configuration there is no layout to place: the error panel takes the surface.
+        placement_ = ViewPlacement{};
+        draw_failure(visible.grow(-GODOT_PATCH_INSET));
         return;
     }
-    const ::godot::Ref<::godot::Font> font = view_font();
-    node_->draw_rect(::godot::Rect2(::godot::Vector2(), layout_.size), ::godot::Color::hex(GODOT_COLOR_BACKGROUND));
-    node_->draw_rect(::godot::Rect2(0.0f, 0.0f, layout_.size.x, layout_.header_height),
+    placement_ = place_view(layout_.bands, drawn_surface_);
+    if (!(placement_.scale > 0.0f)) {
+        return;  // a surface without room for the layout: the background stands alone
+    }
+    // The header colour runs over the whole width and up to the top edge - over a camera
+    // cut-out too - and ends where the placed header band ends.
+    node_->draw_rect(::godot::Rect2(0.0f, 0.0f, visible.size.x,
+                                    placement_.top_y + layout_.header_height * placement_.scale),
                      ::godot::Color::hex(GODOT_COLOR_HEADER));
+    const ::godot::Ref<::godot::Font> font = view_font();
+    use_band(layout_.title_at.y);
     node_->draw_string(font, layout_.title_at, texts_.title, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
                        GODOT_FONT_TITLE, ::godot::Color::hex(GODOT_COLOR_TEXT));
+    use_band(layout_.build_at.y);
     node_->draw_string(font, layout_.build_at, build_line_, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
                        build_font_size_, ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
 
     if (failure_text_.is_empty()) {
         for (size_t i = 0; i < layout_.patch_rects.size() && i < start_.patches.size(); ++i) {
+            use_band(layout_.patch_rects[i].position.y);
             draw_patch(layout_.patch_rects[i], start_.patches[i].object_id);
         }
     } else {
-        draw_failure();
+        // The error panel stands where the patches stand, in their band.
+        ::godot::Rect2 panel = layout_.patch_rects.front();
+        for (const ::godot::Rect2& rect : layout_.patch_rects) {
+            panel = panel.merge(rect);
+        }
+        use_band(panel.position.y);
+        draw_failure(panel);
     }
     draw_info();
+    use_band(layout_.water_rect.position.y);
     draw_button(layout_.water_rect, texts_.water, can_water());
+    use_band(layout_.pause_rect.position.y);
     draw_button(layout_.pause_rect, user_paused_ ? texts_.resume : texts_.pause,
                 resources_.running() && failure_text_.is_empty());
+    use_band(layout_.reset_rect.position.y);
     draw_button(layout_.reset_rect, texts_.reset, true);
+    use_canvas();
 }
 
 void VivariumView::draw_patch(const ::godot::Rect2& rect, uint32_t object_id) {
@@ -932,6 +1306,7 @@ void VivariumView::draw_button(const ::godot::Rect2& rect, const ::godot::String
 }
 
 void VivariumView::draw_info() {
+    // Each line in the band of its baseline (load_bands holds the three info lines in one).
     const ::godot::Ref<::godot::Font> font = view_font();
     ::godot::Vector2 at = layout_.info_at;
     const VivariumPatchView* patch = resources_.get_patch(selected_id_);
@@ -939,10 +1314,12 @@ void VivariumView::draw_info() {
         patch == nullptr ? texts_.selection_none
                          : texts_.area + " " + ::godot::String::num_uint64(selected_id_) + texts_.separator +
                                stage_text(stage_of(selected_id_));
+    use_band(at.y);
     node_->draw_string(font, at, texts_.selection + ": " + selection, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
                        GODOT_FONT_BODY, ::godot::Color::hex(GODOT_COLOR_TEXT));
     at.y += layout_.info_line;
     if (patch != nullptr) {
+        use_band(at.y);
         node_->draw_string(font, at,
                            texts_.biomass + " " + ::godot::String::num(patch->biomass, GODOT_TEXT_DECIMALS) +
                                texts_.separator + texts_.moisture + " " +
@@ -960,21 +1337,17 @@ void VivariumView::draw_info() {
     if (user_paused_ || app_paused_ || focus_lost_) {
         clock += texts_.separator + texts_.paused;
     }
+    use_band(at.y);
     node_->draw_string(font, at, clock, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f, GODOT_FONT_BODY,
                        ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
+    use_band(layout_.note_at.y);
     node_->draw_string(font, layout_.note_at, texts_.restart_note, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
                        GODOT_FONT_SMALL, ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
 }
 
-void VivariumView::draw_failure() {
-    // The error picture instead of an empty surface: where it broke and with which status.
-    ::godot::Rect2 panel = node_->get_viewport_rect().grow(-GODOT_PATCH_INSET);
-    if (!layout_.patch_rects.empty()) {
-        panel = layout_.patch_rects.front();
-        for (const ::godot::Rect2& rect : layout_.patch_rects) {
-            panel = panel.merge(rect);
-        }
-    }
+void VivariumView::draw_failure(const ::godot::Rect2& panel) {
+    // The error picture instead of an empty surface: where it broke and with which status. The
+    // caller hands the panel in the coordinates of the transform it set.
     node_->draw_rect(panel, ::godot::Color::hex(GODOT_COLOR_ERROR));
     node_->draw_multiline_string(view_font(),
                                  panel.position + ::godot::Vector2(GODOT_PATCH_INSET, GODOT_LABEL_OFFSET),

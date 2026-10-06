@@ -16,6 +16,14 @@
  *              dt at most 0.125 s. The expected numbers are those of Phase 00 (avt_headless.cpp):
  *              one Regulation step is four ticks of 0.125 s, drain 0.75 and growth 2.0 per step.
  *
+ *              THE STAGE READER IS THE TEST'S OWN (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.1): the
+ *              node reads index and manifest through Godot's FileAccess, this test through
+ *              ase-fileio from the bundle directory - the manager sees only VivariumStageReadFn.
+ *
+ *              THE SELF-TEST (PLAN 02.3, A2) runs the client's table config/vivarium_selftest.toml
+ *              here on Linux - the same table, the same runner and the same plugin the device
+ *              runs. A wrong expected value is its positive control: the runner must count it.
+ *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    process/validation/check
@@ -47,9 +55,23 @@ using ase::kernel::HostStatus;
 
 namespace {
 
-VivariumStartConfig vivarium_config() {
+// The test's VivariumStageReadFn: one file of the bundle directory `user` names.
+bool read_bundle_file(const char* name, std::string& out, void* user) {
+    const std::string path = ase::fileio::path_join(*static_cast<const std::string*>(user), name);
+    if (!ase::fileio::file_exists(path)) {
+        return false;
+    }
+    out = ase::fileio::read_text(path);
+    return true;
+}
+
+// The plan's start configuration over the bundle directory `bundle`, which must outlive it: the
+// library is opened by path there, as on the desktop.
+VivariumStartConfig vivarium_config(std::string& bundle) {
     VivariumStartConfig config;
-    config.bundle_dir = ASE_ADP_GODOT_TEST_BUNDLE;
+    config.read_stage = &read_bundle_file;
+    config.read_stage_user = &bundle;
+    config.library_dir = bundle;
     config.port = "vegetation.patch.v1";
     config.op_create = "create_patch";
     config.op_irrigate = "irrigate";
@@ -124,8 +146,9 @@ bool any_line_carries(const std::vector<std::string>& lines, const std::string& 
 }  // anonymous namespace
 
 TEST_CASE("V1: one boot - one host, the plugin's two systems, four patches at their start values") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
     GodotHostResourceManager resources;
-    REQUIRE(resources.boot(vivarium_config()) == ase::kernel::HostStatusOk);
+    REQUIRE(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
     CHECK(resources.running());
     CHECK(resources.system_count() == 2u);
     CHECK(resources.patch_count() == 4u);
@@ -155,8 +178,9 @@ TEST_CASE("V1: one boot - one host, the plugin's two systems, four patches at th
 }
 
 TEST_CASE("V2: watering patch 4 raises only its moisture, and only after the next Regulation step") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
     GodotHostResourceManager resources;
-    REQUIRE(resources.boot(vivarium_config()) == ase::kernel::HostStatusOk);
+    REQUIRE(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
     CHECK(resources.irrigate(4u) == ase::kernel::HostStatusOk);
     // Nothing optimistic: the view still shows what the port reported.
     CHECK(near(moisture_of(resources, 4u), 10.0));
@@ -176,8 +200,9 @@ TEST_CASE("V2: watering patch 4 raises only its moisture, and only after the nex
 }
 
 TEST_CASE("V3: patch 4 dies after seven seconds, patches 1 to 3 reach full cover at twenty") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
     GodotHostResourceManager resources;
-    REQUIRE(resources.boot(vivarium_config()) == ase::kernel::HostStatusOk);
+    REQUIRE(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
 
     advance_steps(resources, 14u);  // 7 s: 10 - 14 x 0.75 reaches 0
     const VivariumPatchView* fourth = resources.get_patch(4u);
@@ -206,8 +231,9 @@ TEST_CASE("V3: patch 4 dies after seven seconds, patches 1 to 3 reach full cover
 }
 
 TEST_CASE("dt: a long frame is capped, a broken frame is refused without a tick") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
     GodotHostResourceManager resources;
-    REQUIRE(resources.boot(vivarium_config()) == ase::kernel::HostStatusOk);
+    REQUIRE(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
 
     // A one-second stall advances the App by the cap only - no catch-up.
     CHECK(resources.advance(1.0f) == ase::kernel::HostStatusOk);
@@ -229,9 +255,10 @@ TEST_CASE("dt: a long frame is capped, a broken frame is refused without a tick"
 }
 
 TEST_CASE("V7: twenty restarts - always four patches, two systems, the start values, no old input") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
     GodotHostResourceManager resources;
     for (uint32_t cycle = 0u; cycle < 20u; ++cycle) {
-        REQUIRE(resources.boot(vivarium_config()) == ase::kernel::HostStatusOk);
+        REQUIRE(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
         CHECK(resources.system_count() == 2u);
         CHECK(resources.patch_count() == 4u);
         CHECK(resources.tick_count() == 0u);
@@ -251,22 +278,21 @@ TEST_CASE("V7: twenty restarts - always four patches, two systems, the start val
 
 TEST_CASE("V8: a bundle without its plugin library fails at load_plugin, loudly and without a simulation") {
     // A copy of the real bundle WITHOUT the library: index and manifest name a file that is gone.
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
     std::string manifest_name;
     {
         GodotHostResourceManager reference;
-        REQUIRE(reference.boot(vivarium_config()) == ase::kernel::HostStatusOk);
+        REQUIRE(reference.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
         manifest_name = reference.get_bundle().manifest;
     }
-    const std::string bundle = ASE_ADP_GODOT_TEST_BUNDLE;
-    const std::string broken = bundle + "-without-library";
+    std::string broken = bundle + "-without-library";
     REQUIRE(ase::fileio::create_directories(broken));
     REQUIRE(ase::fileio::write_text(ase::fileio::path_join(broken, GODOT_BUNDLE_INDEX),
                                     ase::fileio::read_text(ase::fileio::path_join(bundle, GODOT_BUNDLE_INDEX))));
     REQUIRE(ase::fileio::write_text(ase::fileio::path_join(broken, manifest_name),
                                     ase::fileio::read_text(ase::fileio::path_join(bundle, manifest_name))));
 
-    VivariumStartConfig config = vivarium_config();
-    config.bundle_dir = broken;
+    const VivariumStartConfig config = vivarium_config(broken);
     GodotHostResourceManager resources;
     CHECK(resources.boot(config) == ase::kernel::HostStatusNotFound);
     CHECK(std::string(resources.failure_step()) == GODOT_STEP_LOAD);
@@ -287,27 +313,35 @@ TEST_CASE("V8: a bundle without its plugin library fails at load_plugin, loudly 
 }
 
 TEST_CASE("a missing bundle and an incomplete configuration are named by their step") {
-    VivariumStartConfig nowhere = vivarium_config();
-    nowhere.bundle_dir = "/nonexistent/avt-bundle";
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
+    std::string nowhere_dir("/nonexistent/avt-bundle");
+    const VivariumStartConfig nowhere = vivarium_config(nowhere_dir);
     GodotHostResourceManager resources;
     CHECK(resources.boot(nowhere) == ase::kernel::HostStatusNotFound);
     CHECK(std::string(resources.failure_step()) == GODOT_STEP_BUNDLE);
     CHECK(!resources.running());
 
-    VivariumStartConfig no_cap = vivarium_config();
+    VivariumStartConfig no_cap = vivarium_config(bundle);
     no_cap.tick_max_seconds = 0.0f;
     CHECK(resources.boot(no_cap) == ase::kernel::HostStatusInvalidArgument);
     CHECK(std::string(resources.failure_step()) == GODOT_STEP_CONFIG);
     // Refused before a host exists.
     CHECK(!resources.has_host());
 
-    VivariumStartConfig wrong_port = vivarium_config();
+    // Without a stage reader there is nothing to boot from - refused before a host exists too.
+    VivariumStartConfig no_reader = vivarium_config(bundle);
+    no_reader.read_stage = nullptr;
+    CHECK(resources.boot(no_reader) == ase::kernel::HostStatusInvalidArgument);
+    CHECK(std::string(resources.failure_step()) == GODOT_STEP_CONFIG);
+    CHECK(!resources.has_host());
+
+    VivariumStartConfig wrong_port = vivarium_config(bundle);
     wrong_port.port = "vegetation.patch.v9";
     CHECK(resources.boot(wrong_port) == ase::kernel::HostStatusNotFound);
     CHECK(std::string(resources.failure_step()) == GODOT_STEP_PORT);
 
     // POSITIVE CONTROL: the same manager boots the right configuration afterwards.
-    CHECK(resources.boot(vivarium_config()) == ase::kernel::HostStatusOk);
+    CHECK(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
     CHECK(std::string(resources.failure_step()).empty());
 }
 
@@ -316,7 +350,8 @@ TEST_CASE("the host's lines and the view's own line reach the queue and the log 
     REQUIRE(path.front() == '/');
     (void)ase::utils::fs::remove(path);
 
-    VivariumStartConfig config = vivarium_config();
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
+    VivariumStartConfig config = vivarium_config(bundle);
     config.log_file = path;
     {
         GodotHostResourceManager resources;
@@ -341,8 +376,9 @@ TEST_CASE("the host's lines and the view's own line reach the queue and the log 
 }
 
 TEST_CASE("clear_all is idempotent and leaves no host behind") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
     GodotHostResourceManager resources;
-    REQUIRE(resources.boot(vivarium_config()) == ase::kernel::HostStatusOk);
+    REQUIRE(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
     resources.clear_all();
     resources.clear_all();
     CHECK(!resources.has_host());
@@ -350,6 +386,130 @@ TEST_CASE("clear_all is idempotent and leaves no host behind") {
     CHECK(resources.system_count() == 0u);
     CHECK(resources.patch_count() == 0u);
     CHECK(resources.advance(0.125f) == ase::kernel::HostStatusInvalidState);
+}
+
+TEST_CASE("A2 on Linux: the self-test table passes on the real plugin, every case of G0 to I3 checked") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
+    const std::string table = ase::fileio::read_text(ASE_ADP_GODOT_TEST_SELFTEST);
+    REQUIRE(!table.empty());
+
+    GodotHostResourceManager resources;
+    std::vector<std::string> report;
+    const VivariumSelfTestResult result = resources.self_test(vivarium_config(bundle), table, report);
+    CHECK(result.errors == 0u);
+    CHECK(result.checks > 0u);
+    // Every scenario of the table ran to its end: as many as the table has `[[case]]` HEADERS. A
+    // TOML header stands at the start of its line; the FORM comment of the table names the same
+    // word inside a comment line, and counting every occurrence counted that comment as a case.
+    uint32_t scenarios = 0u;
+    for (std::string::size_type at = table.find("[[case]]"); at != std::string::npos;
+         at = table.find("[[case]]", at + 1u)) {
+        if (at == 0u || table[at - 1u] == '\n') {
+            scenarios += 1u;
+        }
+    }
+    CHECK(result.cases == scenarios);
+
+    // The plan's number cases, each with at least one comparison line - and no line failed.
+    for (const char* plan_case : {"G0", "G1", "G2", "G3", "G4", "I0", "I1", "I2", "I3"}) {
+        bool reported = false;
+        for (const std::string& line : report) {
+            reported = reported || line.find(std::string("check=") + plan_case + " ") != std::string::npos;
+        }
+        CHECK_MESSAGE(reported, plan_case);
+    }
+    for (const std::string& line : report) {
+        CHECK_MESSAGE(line.find("result=FAILED") == std::string::npos, line);
+    }
+    REQUIRE(!report.empty());
+    CHECK(report.back().find("selftest end") == 0u);
+
+    // The test hosts are gone: the manager leaves as it came, ready for the game host.
+    CHECK(!resources.has_host());
+    CHECK(resources.get_bundle().plugin.empty());
+    CHECK(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
+}
+
+TEST_CASE("the self-test counts a wrong expected value and runs on (positive control)") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
+    std::string table = ase::fileio::read_text(ASE_ADP_GODOT_TEST_SELFTEST);
+    // G0's moisture after one step is 99.25; the first such line of the table is G0's.
+    const std::string::size_type at = table.find("moisture = 99.25");
+    REQUIRE(at != std::string::npos);
+    table.replace(at, std::string("moisture = 99.25").size(), "moisture = 99.0");
+
+    GodotHostResourceManager resources;
+    std::vector<std::string> clean_report;
+    const VivariumSelfTestResult clean =
+        resources.self_test(vivarium_config(bundle), ase::fileio::read_text(ASE_ADP_GODOT_TEST_SELFTEST), clean_report);
+    std::vector<std::string> report;
+    const VivariumSelfTestResult result = resources.self_test(vivarium_config(bundle), table, report);
+    CHECK(result.errors == 1u);
+    // One wrong value hides nothing else: the same scenarios and comparisons as the clean run.
+    CHECK(result.cases == clean.cases);
+    CHECK(result.checks == clean.checks);
+    bool failed_g0 = false;
+    for (const std::string& line : report) {
+        failed_g0 = failed_g0 || (line.find("check=G0 ") != std::string::npos &&
+                                  line.find("key=moisture") != std::string::npos &&
+                                  line.find("result=FAILED") != std::string::npos);
+    }
+    CHECK(failed_g0);
+}
+
+TEST_CASE("a self-test that cannot run is never a self-test without errors") {
+    std::string bundle(ASE_ADP_GODOT_TEST_BUNDLE);
+    GodotHostResourceManager resources;
+    std::vector<std::string> report;
+
+    // A table that is no TOML: one error, no scenario.
+    VivariumSelfTestResult result = resources.self_test(vivarium_config(bundle), "case = [[[", report);
+    CHECK(result.errors == 1u);
+    CHECK(result.cases == 0u);
+
+    // A table without cases: one error, no scenario.
+    result = resources.self_test(vivarium_config(bundle), "tolerance = 0.0001\ntick_seconds = 0.125\n", report);
+    CHECK(result.errors == 1u);
+    CHECK(result.cases == 0u);
+
+    // Beside a game host it refuses: never two simulations at once.
+    const std::string table = ase::fileio::read_text(ASE_ADP_GODOT_TEST_SELFTEST);
+    REQUIRE(resources.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
+    result = resources.self_test(vivarium_config(bundle), table, report);
+    CHECK(result.errors == 1u);
+    CHECK(result.cases == 0u);
+    CHECK(resources.running());  // the game host is untouched
+    resources.clear_all();
+
+    // A stage without its plugin: every scenario fails at load_plugin, none counts as run.
+    std::string broken = bundle + "-selftest-without-library";
+    REQUIRE(ase::fileio::create_directories(broken));
+    {
+        GodotHostResourceManager reference;
+        REQUIRE(reference.boot(vivarium_config(bundle)) == ase::kernel::HostStatusOk);
+        const std::string manifest_name = reference.get_bundle().manifest;
+        REQUIRE(ase::fileio::write_text(ase::fileio::path_join(broken, GODOT_BUNDLE_INDEX),
+                                        ase::fileio::read_text(ase::fileio::path_join(bundle, GODOT_BUNDLE_INDEX))));
+        REQUIRE(ase::fileio::write_text(ase::fileio::path_join(broken, manifest_name),
+                                        ase::fileio::read_text(ase::fileio::path_join(bundle, manifest_name))));
+    }
+    report.clear();
+    result = resources.self_test(vivarium_config(broken), table, report);
+    CHECK(result.cases == 0u);
+    CHECK(result.errors > 0u);
+    for (const std::string& line : report) {
+        CHECK_MESSAGE((line.find("step=load_plugin") != std::string::npos || line.find("selftest end") == 0u), line);
+    }
+}
+
+TEST_CASE("the PSS of this process is read from smaps_rollup, or reported as not read") {
+    GodotHostResourceManager resources;
+    uint64_t pss = 0u;
+    if (resources.read_pss_kib(pss)) {
+        CHECK(pss > 0u);  // a running test process occupies memory
+    } else {
+        CHECK(pss == 0u);  // no rollup on this kernel: no value, and no invented one
+    }
 }
 
 }  // namespace ase::adp::godot

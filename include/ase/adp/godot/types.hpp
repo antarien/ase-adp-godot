@@ -85,6 +85,52 @@ constexpr const char* GODOT_BUNDLE_KEY_VERSION = "version";     // index key: pl
 constexpr const char* GODOT_BUNDLE_KEY_API = "api_version";     // index key: ASE plugin API
 
 /**
+ * Where the stage of the running build lies: res://native/<os>-<arch>/<config>/, the layout
+ * scripts/stage_native.py writes. os, arch and config are Godot's own words for the running build
+ * (OS::get_name lower-cased, Engine::get_architecture_name, OS::is_debug_build) - the same feature
+ * words the avt.gdextension sections are keyed by, so the stage the view reads is the stage Godot
+ * took the adapter from.
+ */
+constexpr const char* GODOT_STAGE_ROOT = "res://native";         // root of every staged platform
+constexpr const char* GODOT_STAGE_JOIN = "-";                    // between os and arch in a stage directory
+constexpr const char* GODOT_STAGE_DEBUG = "debug";               // stage of a debug build
+constexpr const char* GODOT_STAGE_RELEASE = "release";           // stage of a release build
+
+/**
+ * The self-test table (clients/avt-client-android/config/vivarium_selftest.toml, PLAN_ASE_VIVARIUM_
+ * PHASE_02_ANDROID 02.3): the keys of its TOML form, read by GodotHostResourceManager::self_test.
+ */
+constexpr const char* GODOT_SELFTEST_KEY_TOLERANCE = "tolerance";    // largest accepted |actual - expected|
+constexpr const char* GODOT_SELFTEST_KEY_TICK = "tick_seconds";      // dt of one host tick
+constexpr const char* GODOT_SELFTEST_KEY_CASE = "case";              // array of scenarios, one test host each
+constexpr const char* GODOT_SELFTEST_KEY_PATCHES = "patches";        // patches configured before start
+constexpr const char* GODOT_SELFTEST_KEY_ID = "id";                  // object id of a patch or of a target
+constexpr const char* GODOT_SELFTEST_KEY_DO = "do";                  // actions of a scenario, in order
+constexpr const char* GODOT_SELFTEST_KEY_CHECK = "check";            // case of the plan an action checks
+constexpr const char* GODOT_SELFTEST_KEY_SECONDS = "seconds";        // action: advance the host
+constexpr const char* GODOT_SELFTEST_KEY_IRRIGATE = "irrigate";      // action: submit one watering
+constexpr const char* GODOT_SELFTEST_KEY_STATUS = "status";          // expected HostStatus of an action
+constexpr const char* GODOT_SELFTEST_KEY_EXPECT = "expect";          // action: compare snapshot values
+constexpr const char* GODOT_SELFTEST_KEY_RECORDS = "records";        // action: compare the record count
+constexpr double GODOT_SELFTEST_TICK_EXACT = 0.000001;              // a seconds action lies this close to whole ticks
+constexpr uint32_t GODOT_SELFTEST_DECIMALS = 4u;                     // decimals of actual and expected in a report line
+constexpr uint32_t GODOT_NUMBER_BYTES = 32u;                         // text of one number in a report line, NUL included
+constexpr int GODOT_LOG_LEVEL_MAX = 5;                               // highest level a host line carries (spdlog critical)
+
+/**
+ * Measurement mode (PLAN 02.3, acceptance A10): percentiles of the host time (tick + snapshot)
+ * and of the whole _process interval, both in microseconds, and the PSS of the process.
+ */
+constexpr uint32_t GODOT_MEASURE_P50 = 50u;                          // median
+constexpr uint32_t GODOT_MEASURE_P95 = 95u;                          // budget percentile of the plan
+constexpr uint32_t GODOT_MEASURE_P99 = 99u;                          // tail
+constexpr uint32_t GODOT_MEASURE_PERCENT = 100u;                     // whole of a percentile
+constexpr double GODOT_MEASURE_FRAMES_RESERVED = 240.0;              // frames per second the buffers are reserved for
+constexpr double GODOT_USEC_PER_SECOND = 1000000.0;                  // Time::get_ticks_usec per second
+constexpr const char* GODOT_PSS_SOURCE = "/proc/self/smaps_rollup";  // proportional set size of this process
+constexpr const char* GODOT_PSS_KEY = "Pss:";                         // its line, value in kB
+
+/**
  * Boot steps of GodotHostResourceManager::boot - the name a failure is reported under.
  */
 constexpr const char* GODOT_STEP_NONE = "";                // no failure recorded
@@ -169,10 +215,13 @@ constexpr float GODOT_PATCH_INSET = 14.0f;                  // gap between patch
 constexpr float GODOT_BAR_HEIGHT = 16.0f;                   // height of the moisture bar
 constexpr float GODOT_LABEL_OFFSET = 34.0f;                 // baseline of a label below a rect's top
 constexpr float GODOT_HALF = 0.5f;                          // centre of a span
+constexpr float GODOT_LAYOUT_SCALE_MAX = 1.0f;              // a layout is never magnified: spare space is distributed, not filled
+constexpr const char* GODOT_FEATURE_MOBILE = "mobile";      // Godot feature of a handheld OS: the window is the screen, its safe area applies
 constexpr float GODOT_SEED_DOT_RADIUS = 5.0f;               // radius of one seed dot on bare soil
 constexpr int32_t GODOT_SEED_DOTS = 3;                      // seed dots per row and per column
 constexpr int32_t GODOT_ERROR_LINES = 6;                    // most lines the error panel wraps to
 constexpr int64_t GODOT_LOG_DECIMALS = 3;                   // decimals of a measured value in a log line
+constexpr const char* GODOT_LOG_STEP_SCHEDULE = "Regulation";  // schedule whose runs a log line counts as steps=
 constexpr int64_t GODOT_TEXT_DECIMALS = 1;                  // decimals of a value drawn on the surface
 
 }  // namespace ase::adp::godot
