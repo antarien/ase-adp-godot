@@ -5,9 +5,10 @@
  *
  * @file        godot_vivarium_node.hpp
  * @brief       VivariumView - instance data and behaviour of the Godot class AseVivariumView
- * @description The demo frontend of PLAN_ASE_VIVARIUM_PHASE_01_INTEG: four patches seen from
- *              above, the actions Regar, Pausar/Continuar and Reiniciar, a header with the build
- *              identity. One view owns exactly ONE GodotHostResourceManager and through it one
+ * @description The frontend of PLAN_ASE_VIVARIUM_PHASE_01_INTEG: the four patches of ase-pl-flora
+ *              seen from above - cover, stage and soil water as the modules compute them - the
+ *              game clock, the actions Regar and Reiniciar, a header with the build identity. One
+ *              view owns exactly ONE GodotHostResourceManager and through it one
  *              KernelEmbeddedHost - no global App, no singleton. Godot draws and takes input; the
  *              simulation stays in the ASE registry of that host.
  *
@@ -17,6 +18,12 @@
  *              view draws and reads input through node_, the godot-cpp handle of exactly that
  *              object - no C++ type of this adapter derives from a Godot type.
  *
+ *              NO PAUSE (PLAN 01.3 point 4): there is no pause button and no stopped host. Every
+ *              frame hands the host the real time since the previous one, measured on Godot's
+ *              monotonic clock; a span in the background comes back as one long frame, and the
+ *              host catches it up in ordinary ticks over the next frames. The world the player
+ *              finds has gone on - like the server, which never stops.
+ *
  *              EVERY HANDSET WITHOUT BARS (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3): the project's
  *              expand aspect hands the view the whole visible surface of the window, whatever its
  *              aspect ratio. The view fills it with its background and places the layout's three
@@ -25,19 +32,19 @@
  *              the column centred, never magnified. A tap is matched against the rectangles as
  *              they were placed for the last drawn frame.
  *
- *              WHAT THE VIEW NEVER DOES: it computes no growth, writes no simulation value back
- *              and shows no optimistic number. Every drawn value is the copy the port reported
- *              after the last tick; the stage colour is the projection of the port's own flags.
+ *              WHAT THE VIEW NEVER DOES: it computes nothing a module computes, writes no
+ *              simulation value back and shows no optimistic number. Every drawn value is the copy
+ *              the ports reported after the last advance.
  *
- *              THE EDITOR STAYS SIMULATION-FREE (V0): ready() returns when Engine::is_editor_hint,
- *              so importing or editing the scene starts no host and loads no plugin.
+ *              THE EDITOR STAYS SIMULATION-FREE (L0): ready() returns when Engine::is_editor_hint,
+ *              so importing or editing the scene starts no host and loads no unit.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
  * @created     2026-10-05
- * @modified    2026-10-06
- * @version     00.00.01.00001
+ * @modified    2026-10-07
+ * @version     00.00.02.00002
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -59,15 +66,13 @@
 namespace ase::adp::godot {
 
 /**
- * Where things stand on the logical 720 x 1280 surface and how values are scaled for drawing -
- * read from res://config/vivarium_start.json, never written into the code. Every rectangle and
- * every text line lies inside ONE of the three bands; load_layout refuses a configuration where
- * one crosses a band edge, because the bands move apart on a taller surface.
+ * Where things stand on the logical 720 x 1280 surface - read from
+ * res://config/vivarium_start.json, never written into the code. Every rectangle and every text
+ * line lies inside ONE of the three bands; load_layout refuses a configuration where one crosses a
+ * band edge, because the bands move apart on a taller surface.
  */
 struct VivariumLayout {
     ::godot::Vector2 size;
-    double           biomass_full = 0.0;   // cover drawn full at this biomass
-    double           moisture_full = 0.0;  // moisture bar drawn full at this moisture
     ViewBands        bands;                // logical size and the two band edges (layout.bands)
     float            header_height = 0.0f;
     ::godot::Vector2 title_at;
@@ -75,9 +80,8 @@ struct VivariumLayout {
     ::godot::Vector2 info_at;
     float            info_line = 0.0f;
     ::godot::Vector2 note_at;
-    std::vector<::godot::Rect2> patch_rects;  // same order as VivariumStartConfig::patches
+    std::vector<::godot::Rect2> place_rects;  // the rectangle of each place, index = place
     ::godot::Rect2   water_rect;
-    ::godot::Rect2   pause_rect;
     ::godot::Rect2   reset_rect;
 };
 
@@ -95,22 +99,22 @@ struct VivariumModes {
 };
 
 /**
- * One measurement run (acceptance A10): foreground time counts down the warm-up, then the
- * recording, and every ticking frame in the recording stores its host time (tick + snapshot)
- * and its whole _process interval. The block is written ONCE, when the recording is complete -
- * nothing is logged per frame while it runs.
+ * One measurement run (acceptance A10): real time counts down the warm-up, then the recording,
+ * and every frame in the recording stores its host time (advance + snapshots) and its whole
+ * _process interval. The block is written ONCE, when the recording is complete - nothing is
+ * logged per frame while it runs.
  */
 struct VivariumMeasurement {
     bool                  active = false;       // requested at launch and not yet reported
     bool                  recording = false;    // warm-up over, samples are stored
-    double                warmup_left = 0.0;    // foreground seconds of warm-up still to run
-    double                record_left = 0.0;    // foreground seconds of recording still to run
-    uint64_t              last_usec = 0;        // Time::get_ticks_usec of the previous ticking frame, 0 = none
-    std::vector<uint32_t> host_usec;            // per recorded frame: KernelEmbeddedHost tick + snapshot
+    double                warmup_left = 0.0;    // seconds of warm-up still to run
+    double                record_left = 0.0;    // seconds of recording still to run
+    uint64_t              last_usec = 0;        // Time::get_ticks_usec of the previous frame, 0 = none
+    std::vector<uint32_t> host_usec;            // per recorded frame: advance + snapshots
     std::vector<uint32_t> frame_usec;           // per recorded frame: the interval since the previous frame
     uint64_t              pss_start_kib = 0;    // PSS when the recording began
     bool                  pss_start_read = false;
-    uint32_t              pauses = 0;           // pauses that fell into the recording
+    uint32_t              catch_ups = 0;        // returns from the background that fell into the recording
     uint32_t              boots_at_start = 0;   // host boots counted when the recording began
 };
 
@@ -122,19 +126,20 @@ struct VivariumTexts {
     ::godot::String area;
     ::godot::String simulation;
     ::godot::String ticks;
-    ::godot::String biomass;
-    ::godot::String moisture;
-    ::godot::String age;
+    ::godot::String day;
+    ::godot::String hour;
+    ::godot::String coverage;
+    ::godot::String soil;
     ::godot::String stage_seed;
     ::godot::String stage_sprout;
+    ::godot::String stage_grow;
     ::godot::String stage_mature;
-    ::godot::String stage_dead;
-    ::godot::String paused;
+    ::godot::String condition_wilted;
+    ::godot::String condition_dead;
+    ::godot::String unknown;
     ::godot::String restart_note;
     ::godot::String error;
     ::godot::String water;
-    ::godot::String pause;
-    ::godot::String resume;
     ::godot::String reset;
     ::godot::String separator;   // between the parts of one line, e.g. "área 2 · Broto"
 };
@@ -146,11 +151,11 @@ struct VivariumTexts {
  * ready (_ready), process (_process), draw (_draw), unhandled_input (_unhandled_input),
  * exit_tree (_exit_tree) and notification (every notification of the object).
  *
- * Lifecycle (PLAN 01.3): ready boots the host through the resource manager; process advances it
- * with dt capped and reads the snapshot; notification keeps the pause reasons apart (user,
- * application, focus) and drops the first delta after a resume; exit_tree and Reiniciar run the
- * same teardown. Input: one press per physical tap, ScreenTouch or the left mouse button, mapped
- * onto the canvas through make_input_local and matched against the placed layout.
+ * Lifecycle (PLAN 01.3): ready boots the host through the resource manager; process hands it
+ * the real time of every frame and reads the snapshots; notification logs the app's way into
+ * and out of the background, nothing more; exit_tree and Reiniciar run the same teardown.
+ * Input: one press per physical tap, ScreenTouch or the left mouse button, mapped onto the
+ * canvas through make_input_local and matched against the placed layout.
  */
 class VivariumView {
 public:
@@ -171,8 +176,10 @@ public:
 private:
     bool load_config();
     bool load_stage();
+    bool stage_data();
     bool load_host_config(const ::godot::Dictionary& root);
     bool load_layout(const ::godot::Dictionary& root);
+    bool load_places(const ::godot::Dictionary& root);
     bool load_bands(const ::godot::Dictionary& layout);
     bool load_texts(const ::godot::Dictionary& root);
     bool load_modes(const ::godot::Dictionary& root);
@@ -186,27 +193,27 @@ private:
     void boot_host();
     void restart();
     void tap(const ::godot::Vector2& at);
-    void select(uint32_t object_id);
+    void select(uint32_t place);
     void water();
-    void toggle_pause();
+    void announce_patches();
     void follow_stages();
     void follow_water();
+    void follow_catch_up(double elapsed_s);
     void drain_log();
     void note(const ::godot::String& line);
 
     [[nodiscard]] bool can_water() const;
-    [[nodiscard]] bool ticking() const;
-    [[nodiscard]] uint8_t stage_of(uint32_t object_id) const;
     [[nodiscard]] ::godot::String stage_text(uint8_t stage) const;
+    [[nodiscard]] ::godot::String patch_text(const VivariumPatchView& patch) const;
     [[nodiscard]] ::godot::String boot_line() const;
-    [[nodiscard]] ::godot::String measure(uint32_t object_id) const;
+    [[nodiscard]] ::godot::String measure(uint32_t place) const;
 
     [[nodiscard]] ViewSurface surface() const;
     [[nodiscard]] ::godot::Rect2 placed(const ::godot::Rect2& rect) const;
     void use_band(float layout_y);
     void use_canvas();
 
-    void draw_patch(const ::godot::Rect2& rect, uint32_t object_id);
+    void draw_patch(const ::godot::Rect2& rect, uint32_t place);
     void draw_button(const ::godot::Rect2& rect, const ::godot::String& label, bool enabled);
     void draw_info();
     void draw_failure(const ::godot::Rect2& panel);
@@ -230,16 +237,16 @@ private:
     int32_t                  build_font_size_ = GODOT_FONT_SMALL;  // fitted to the width at boot
     ::godot::String          failure_text_;    // not empty: the error panel stands instead of the patches
     std::vector<std::string> log_lines_;       // drained once per frame and printed
-    std::vector<uint8_t>     stages_;          // last drawn stage per configured patch
-    uint32_t                 selected_id_ = GODOT_NO_OBJECT;
-    uint32_t                 water_pending_id_ = GODOT_NO_OBJECT;  // watered, its step not yet seen
-    double                   water_pending_from_ = 0.0;            // its moisture when watered
-    double                   water_pending_age_ = 0.0;             // its age when watered
+    std::vector<uint8_t>     stages_;          // last logged stage per place
+    std::vector<uint8_t>     conditions_;      // last logged condition per place
+    bool                     patches_announced_ = false;  // every place's record stood once and got its line
+    uint32_t                 selected_place_ = GODOT_NO_PLACE;
+    uint32_t                 water_pending_place_ = GODOT_NO_PLACE;  // watered, its arrival not yet seen
+    double                   water_pending_from_ = 0.0;              // its soil water when watered, mm
+    uint64_t                 water_pending_steps_ = 0;               // Dissemination runs when watered
+    int64_t                  last_frame_ns_ = 0;                     // the previous frame on the boot clock, 0 = none yet
+    bool                     catching_up_ = false;                   // a return from the background is being caught up
     bool                     configured_ = false;
-    bool                     user_paused_ = false;
-    bool                     app_paused_ = false;
-    bool                     focus_lost_ = false;
-    bool                     drop_next_delta_ = false;
 };
 
 }  // namespace ase::adp::godot

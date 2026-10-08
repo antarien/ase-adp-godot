@@ -3,16 +3,16 @@
  *
  * @file        godot_host_resource_manager.cpp
  * @brief       GodotHostResourceManager - External resource manager for the embedded ASE host of AseVivariumView
- * @description Flyweight Pattern implementation for unique_ptr<KernelEmbeddedHost> and the
- *              patch views copied out of its port snapshot.
+ * @description Flyweight Pattern implementation for unique_ptr<KernelEmbeddedHost> and the patch
+ *              and clock views copied out of its port snapshots.
  *              The node stores ONLY uint32_t object ids, the manager owns everything behind them.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
  * @created     2026-10-05
- * @modified    2026-10-05
- * @version     00.00.01.00001 [seed]
+ * @modified    2026-10-07
+ * @version     00.00.03.00003 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -29,14 +29,28 @@
  *   └────────────────┘   .get_patch(selected_id)
  *
  * WHY THIS EXISTS:
- *   PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.2: AseVivariumView owns exactly ONE KernelEmbeddedHost,
- *   and "der ResourceManager kapselt Factory/Fehler/Abbau". The Godot node knows ids, rectangles
- *   and colours; everything that touches the host - the bundle, the plugin, the port, the
- *   teardown - happens here, without a Godot type, so it is tested against the real plugin.
+ *   PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.3: AseVivariumView owns exactly ONE KernelEmbeddedHost,
+ *   and the resource manager carries factory, failure and teardown. The Godot node knows ids,
+ *   places, rectangles and colours; everything that touches the host - the bundle, the units,
+ *   the data root, the ports, the teardown - happens here, without a Godot type, so it is tested
+ *   against the real bundle.
  *
  * WHAT IT NEVER DOES:
- *   It writes no simulation value back and computes no growth. The views are copies of what the
- *   port reported after the last tick; the stage flags are the port's own 0/1 values.
+ *   It writes no simulation value back and computes nothing a module computes. The views are
+ *   copies of what the ports reported after the last advance; stage and condition are the codes
+ *   of ase-plant as the plugin forwards them.
+ *
+ * NO PAUSE (PLAN 01.3 point 4):
+ *   advance() hands the host the real time the frame took, uncapped. The host ticks it in
+ *   ordinary steps of its scheduler's frame, at most catch_up_steps of them per call, and keeps
+ *   the rest in its backlog - a return from the background is caught up over a few frames, never
+ *   in one giant step and never dropped.
+ *
+ * THE SELF-TEST STARTS ONE TEST HOST (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3):
+ *   self_test() creates, loads and starts one host, runs every scenario of the table on it in
+ *   order - each a check of one step within a few frames - and stops it once. A start per
+ *   scenario would pay the dearest step of the host again for every case and test nothing the
+ *   first start did not.
  *
  * THREAD SAFETY:
  *   The log sink is the only entry from a second thread (the host's logging worker); it only
@@ -46,10 +60,11 @@
  *
  * WHERE THE BUNDLE COMES FROM (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.1):
  *   The manager never opens a stage file. The caller's VivariumStageReadFn reads the bundle index
- *   and the manifest it names - through Godot's FileAccess in the app, so a stage packed into an
- *   APK reads like one on disk. The plugin library is opened under library_dir, or, with an
- *   empty library_dir, by its bare file name, which Android's linker resolves in the app's own
- *   namespace; neither res:// nor a package path ever reaches dlopen.
+ *   and the manifests it names - through Godot's FileAccess in the app, so a stage packed into an
+ *   APK reads like one on disk. The libraries are opened under library_dir, or, with an empty
+ *   library_dir, by their bare file names, which Android's linker resolves in the app's own
+ *   namespace; neither res:// nor a package path ever reaches dlopen. The data files are read by
+ *   the units themselves, below the data root the host names: files_dir is a real directory.
  *
  * ECS RESOURCE MANAGER IMPLEMENTATION COMPLIANCE
  *
@@ -106,6 +121,7 @@ using ase::kernel::HostStatus;
 using ase::kernel::KernelEmbeddedHost;
 using ase::kernel::KernelHostInput;
 using ase::kernel::KernelHostRecord;
+using ase::kernel::KernelHostUnit;
 
 namespace {
 
@@ -139,38 +155,43 @@ double record_value(const KernelHostRecord& record, const char* key) {
 }
 
 /**
- * The value of `key = value` in the bundle index text; empty when no line carries the key.
- * Lines starting with '#' are comments (the index writes a header line); a CR before the line
- * break is not part of the value.
+ * True for a finite, whole, non-negative value. The port carries places and codes as small whole
+ * numbers, which a float holds exactly - ase-math has the float floor.
  */
-std::string index_value(const std::string& text, const char* key) {
-    const std::string wanted(key);
-    std::size_t start = 0u;
-    while (start < text.size()) {
-        const std::size_t newline = text.find('\n', start);
-        const std::size_t end = newline == std::string::npos ? text.size() : newline;
-        const std::string line = text.substr(start, end - start);
-        start = end + 1u;
-        if (line.empty() || line[0] == '#' || line.compare(0u, wanted.size(), wanted) != 0) {
-            continue;
-        }
-        const std::size_t equals = line.find('=', wanted.size());
-        // Only blanks may stand between key and '=': anything else is a longer key that merely
-        // starts with `key`.
-        if (equals == std::string::npos || line.find_first_not_of(' ', wanted.size()) != equals) {
-            continue;
-        }
-        const std::size_t first = line.find_first_not_of(' ', equals + 1u);
-        if (first == std::string::npos) {
-            return std::string();
-        }
-        const std::size_t last = line.find_last_not_of(" \r");
-        return line.substr(first, last - first + 1u);
-    }
-    return std::string();
+bool whole(double value) {
+    return std::isfinite(value) && value >= 0.0 &&
+           ase::math::floor(static_cast<float>(value)) == static_cast<float>(value);
 }
 
-// ── self-test (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3) ──────────────────────────────────
+/** A whole number below `count` as a code; GODOT_CODE_UNKNOWN for anything else. */
+uint8_t code_of(double value, uint8_t count) {
+    if (!whole(value) || value >= static_cast<double>(count)) {
+        return GODOT_CODE_UNKNOWN;
+    }
+    return static_cast<uint8_t>(value);
+}
+
+/** The words of one index value, split at blanks. */
+std::vector<std::string> fields_of(const std::string& value) {
+    std::vector<std::string> fields;
+    std::string field;
+    for (const char c : value) {
+        if (c == ' ' || c == '\t') {
+            if (!field.empty()) {
+                fields.push_back(field);
+                field.clear();
+            }
+        } else {
+            field.push_back(c);
+        }
+    }
+    if (!field.empty()) {
+        fields.push_back(field);
+    }
+    return fields;
+}
+
+// THE SELF-TEST (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3)
 
 /** One number of a report line: fixed decimals; nan and inf stay words (ase-utils). */
 std::string decimal(double value) {
@@ -180,7 +201,7 @@ std::string decimal(double value) {
     return std::string(text);
 }
 
-/** A scenario's name in the report: the cases of the plan its actions check, each once. */
+/** A scenario's label in the report: the runs its actions check, each once. */
 std::string scenario_label(const toml::table& scenario) {
     std::vector<std::string> checks;
     const toml::array* actions = scenario[GODOT_SELFTEST_KEY_DO].as_array();
@@ -211,7 +232,7 @@ HostStatus snapshot_all(KernelEmbeddedHost& host, const std::string& port,
     uint32_t required = 0u;
     written = 0u;
     if (records.empty()) {
-        records.assign(1u, KernelHostRecord{});
+        records.assign(ase::kernel::HostRecordsMax, KernelHostRecord{});
     }
     HostStatus status = host.snapshot(port.c_str(), records.data(), static_cast<uint32_t>(records.size()),
                                       &written, &required);
@@ -243,43 +264,101 @@ void report_broken(const std::string& label, const char* step, const std::string
                      " result=FAILED");
 }
 
+/** op of the table applied; `known` false for an op the form does not have. */
+bool holds(double actual, const std::string& op, double value, double tolerance, bool& known) {
+    known = true;
+    if (op == GODOT_SELFTEST_OP_EQ) {
+        return std::fabs(actual - value) <= tolerance;
+    }
+    if (op == GODOT_SELFTEST_OP_NE) {
+        return std::fabs(actual - value) > tolerance;
+    }
+    if (op == GODOT_SELFTEST_OP_LT) {
+        return actual < value;
+    }
+    if (op == GODOT_SELFTEST_OP_LE) {
+        return actual <= value;
+    }
+    if (op == GODOT_SELFTEST_OP_GT) {
+        return actual > value;
+    }
+    if (op == GODOT_SELFTEST_OP_GE) {
+        return actual >= value;
+    }
+    known = false;
+    return false;
+}
+
+/** The record of the patch on `place` in the last patch snapshot; nullptr when no record carries it. */
+const KernelHostRecord* record_at(const std::vector<KernelHostRecord>& records, uint32_t written, int64_t place) {
+    for (uint32_t i = 0u; i < written; ++i) {
+        if (record_value(records[i], GODOT_KEY_PLACE) == static_cast<double>(place)) {
+            return &records[i];
+        }
+    }
+    return nullptr;
+}
+
 /**
- * Configures the scenario's patches on a loaded host and starts it; false (reported) when a patch
- * is malformed or the host refuses it.
+ * The value an action names: a patch's (place) or the clock's (record = "clock"). NaN when the
+ * snapshot fails or carries no such record or key - every comparison with NaN fails, so a value
+ * that is not there is never a value that passes.
  */
-bool start_scenario(KernelEmbeddedHost& host, const toml::table& scenario, const VivariumStartConfig& config,
-                    const std::string& label, VivariumSelfTestResult& result, std::vector<std::string>& report) {
-    const toml::array* patches = scenario[GODOT_SELFTEST_KEY_PATCHES].as_array();
-    if (patches == nullptr || patches->empty()) {
-        report_broken(label, GODOT_STEP_CONFIGURE, "no patches", result, report);
-        return false;
-    }
-    for (const toml::node& node : *patches) {
-        const toml::table* patch = node.as_table();
-        const int64_t id = patch == nullptr ? -1 : (*patch)[GODOT_SELFTEST_KEY_ID].value_or(int64_t{-1});
-        const double nothing = std::nan("");
-        KernelHostInput input{};
-        if (patch == nullptr || id <= static_cast<int64_t>(GODOT_NO_OBJECT) || id > INT32_MAX ||
-            !put_value(input, GODOT_KEY_BIOMASS, (*patch)[GODOT_KEY_BIOMASS].value_or(nothing)) ||
-            !put_value(input, GODOT_KEY_MOISTURE, (*patch)[GODOT_KEY_MOISTURE].value_or(nothing)) ||
-            !put_value(input, GODOT_KEY_AGE, (*patch)[GODOT_KEY_AGE].value_or(nothing))) {
-            report_broken(label, GODOT_STEP_CONFIGURE, "patch without id or start values", result, report);
-            return false;
+double read_value(KernelEmbeddedHost& host, const VivariumStartConfig& config, const toml::table& spec,
+                  VivariumSelfTestState& state) {
+    const std::string key = spec[GODOT_SELFTEST_KEY_KEY].value_or(std::string());
+    uint32_t written = 0u;
+    if (spec[GODOT_SELFTEST_KEY_RECORD].value_or(std::string()) == GODOT_SELFTEST_RECORD_CLOCK) {
+        if (snapshot_all(host, config.clock_port, state.records, written) != ase::kernel::HostStatusOk ||
+            written != 1u) {
+            return std::nan("");
         }
-        input.object_id = static_cast<uint32_t>(id);
-        const HostStatus status = host.configure(config.port.c_str(), config.op_create.c_str(), &input);
-        if (status != ase::kernel::HostStatusOk) {
-            report_broken(label, GODOT_STEP_CONFIGURE, GodotHostResourceManager::status_name(status), result,
-                          report);
-            return false;
-        }
+        return record_value(state.records[0], key.c_str());
     }
-    const HostStatus status = host.start();
-    if (status != ase::kernel::HostStatusOk) {
-        report_broken(label, GODOT_STEP_START, GodotHostResourceManager::status_name(status), result, report);
-        return false;
+    if (snapshot_all(host, config.patch_port, state.records, written) != ase::kernel::HostStatusOk) {
+        return std::nan("");
     }
-    return true;
+    const KernelHostRecord* record =
+        record_at(state.records, written, spec[GODOT_SELFTEST_KEY_PLACE].value_or(int64_t{-1}));
+    return record == nullptr ? std::nan("") : record_value(*record, key.c_str());
+}
+
+/** The object id of the patch on `place`; GODOT_NO_OBJECT when the snapshot carries none. */
+uint32_t object_at(KernelEmbeddedHost& host, const VivariumStartConfig& config, int64_t place,
+                   VivariumSelfTestState& state) {
+    uint32_t written = 0u;
+    if (snapshot_all(host, config.patch_port, state.records, written) != ase::kernel::HostStatusOk) {
+        return GODOT_NO_OBJECT;
+    }
+    const KernelHostRecord* record = record_at(state.records, written, place);
+    return record == nullptr ? GODOT_NO_OBJECT : record->object_id;
+}
+
+/** value of an action plus the remembered value its `plus` refers to; NaN for an unknown one. */
+double target_of(const toml::table& spec, const VivariumSelfTestState& state) {
+    double value = spec[GODOT_SELFTEST_KEY_VALUE].value_or(std::nan(""));
+    const std::string plus = spec[GODOT_SELFTEST_KEY_PLUS].value_or(std::string());
+    if (!plus.empty()) {
+        const auto found = state.remembered.find(plus);
+        value = found == state.remembered.end() ? std::nan("") : value + found->second;
+    }
+    return value;
+}
+
+HostStatus pour(KernelEmbeddedHost& host, const VivariumStartConfig& config, uint32_t object_id, double amount_mm) {
+    KernelHostInput input{};
+    input.object_id = object_id;
+    if (!put_value(input, GODOT_KEY_AMOUNT_MM, amount_mm)) {
+        return ase::kernel::HostStatusCapacity;
+    }
+    return host.submit(config.patch_port.c_str(), config.op_irrigate.c_str(), &input);
+}
+
+/** One frame of real time - exactly one ordinary tick. false when the host refuses the frame. */
+bool frame(KernelEmbeddedHost& host, const VivariumSelfTestState& state) {
+    uint32_t steps = 0u;
+    double backlog = 0.0;
+    return host.advance(state.frame_s, 1u, &steps, &backlog) == ase::kernel::HostStatusOk && steps == 1u;
 }
 
 /**
@@ -288,158 +367,169 @@ bool start_scenario(KernelEmbeddedHost& host, const toml::table& scenario, const
  * one wrong value never hides the next.
  */
 bool run_action(KernelEmbeddedHost& host, const toml::table& action, const VivariumStartConfig& config,
-                double tolerance, double tick, const std::string& label, std::vector<KernelHostRecord>& records,
-                VivariumSelfTestResult& result, std::vector<std::string>& report) {
-    const double nothing = std::nan("");
+                const std::string& label, VivariumSelfTestState& state, VivariumSelfTestResult& result,
+                std::vector<std::string>& report) {
     const std::string check = action[GODOT_SELFTEST_KEY_CHECK].value_or(std::string());
+    if (!check.empty()) {
+        state.checked.push_back(check);
+    }
 
-    if (const toml::node* seconds_node = action.get(GODOT_SELFTEST_KEY_SECONDS)) {
-        const double seconds = seconds_node->value_or(nothing);
-        const double ticks = seconds / tick;
-        const double whole = static_cast<double>(ase::math::round(static_cast<float>(ticks)));
-        if (!(seconds > 0.0) || !(std::fabs(ticks - whole) <= GODOT_SELFTEST_TICK_EXACT)) {
-            report_broken(label, GODOT_SELFTEST_KEY_SECONDS, "not a whole number of ticks: " + decimal(seconds),
-                          result, report);
+    if (const toml::node* frames = action.get(GODOT_SELFTEST_KEY_FRAMES)) {
+        const int64_t count = frames->value_or(int64_t{-1});
+        if (count <= 0) {
+            report_broken(label, GODOT_SELFTEST_KEY_FRAMES, "needs a positive count", result, report);
             return false;
         }
-        for (double done = 0.0; done < whole; done += 1.0) {
-            const HostStatus status = host.tick(static_cast<float>(tick));
-            if (status != ase::kernel::HostStatusOk) {
-                report_broken(label, GODOT_STEP_TICK, GodotHostResourceManager::status_name(status), result,
-                              report);
+        for (int64_t i = 0; i < count; ++i) {
+            if (!frame(host, state)) {
+                report_broken(label, GODOT_STEP_ADVANCE, "a frame was refused", result, report);
                 return false;
             }
         }
         return true;
     }
 
-    if (const toml::table* irrigate = action[GODOT_SELFTEST_KEY_IRRIGATE].as_table()) {
-        const int64_t id = (*irrigate)[GODOT_SELFTEST_KEY_ID].value_or(int64_t{-1});
-        const toml::node* amount = irrigate->get(GODOT_KEY_AMOUNT);
-        const std::string expected = (*irrigate)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
-        KernelHostInput input{};
-        if (id < 0 || id > INT32_MAX || amount == nullptr || !amount->is_number() || expected.empty() ||
-            !put_value(input, GODOT_KEY_AMOUNT, amount->value_or(nothing))) {
-            report_broken(label, GODOT_SELFTEST_KEY_IRRIGATE, "needs id, amount and status", result, report);
+    if (const toml::table* keep = action[GODOT_SELFTEST_KEY_REMEMBER].as_table()) {
+        const std::string as = (*keep)[GODOT_SELFTEST_KEY_AS].value_or(std::string());
+        const double value = read_value(host, config, *keep, state);
+        if (as.empty() || !std::isfinite(value)) {
+            report_broken(label, GODOT_SELFTEST_KEY_REMEMBER, "needs `as` and a value the snapshot carries", result,
+                          report);
             return false;
         }
-        input.object_id = static_cast<uint32_t>(id);
-        const std::string actual = GodotHostResourceManager::status_name(
-            host.submit(config.port.c_str(), config.op_irrigate.c_str(), &input));
-        report_check(check, "target=" + std::to_string(id) + " action=irrigate amount=" +
-                                decimal(amount->value_or(nothing)),
-                     actual, expected, actual == expected, result, report);
+        state.remembered[as] = value;
+        return true;
+    }
+
+    if (const toml::table* water = action[GODOT_SELFTEST_KEY_IRRIGATE].as_table()) {
+        const toml::node* amount = water->get(GODOT_SELFTEST_KEY_AMOUNT);
+        const std::string expected = (*water)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
+        uint32_t object_id = GODOT_NO_OBJECT;
+        std::string target;
+        if (const toml::node* place = water->get(GODOT_SELFTEST_KEY_PLACE)) {
+            const int64_t at = place->value_or(int64_t{-1});
+            object_id = object_at(host, config, at, state);
+            target = "place=" + std::to_string(at);
+        } else {
+            const int64_t named = (*water)[GODOT_SELFTEST_KEY_OBJECT].value_or(int64_t{-1});
+            object_id = named < 0 || named > static_cast<int64_t>(UINT32_MAX) ? GODOT_NO_OBJECT
+                                                                              : static_cast<uint32_t>(named);
+            target = "object=" + std::to_string(named);
+        }
+        if (amount == nullptr || !amount->is_number() || expected.empty() ||
+            (object_id == GODOT_NO_OBJECT && water->get(GODOT_SELFTEST_KEY_OBJECT) == nullptr)) {
+            report_broken(label, GODOT_SELFTEST_KEY_IRRIGATE, "needs a patch or object, amount_mm and status", result,
+                          report);
+            return false;
+        }
+        const double amount_mm = amount->value_or(std::nan(""));
+        const std::string actual = GodotHostResourceManager::status_name(pour(host, config, object_id, amount_mm));
+        report_check(check, target + " action=irrigate amount_mm=" + decimal(amount_mm), actual, expected,
+                     actual == expected, result, report);
+        return true;
+    }
+
+    if (const toml::table* wait = action[GODOT_SELFTEST_KEY_WAIT].as_table()) {
+        const int64_t bound = (*wait)[GODOT_SELFTEST_KEY_MAX_FRAMES].value_or(int64_t{0});
+        const std::string op = (*wait)[GODOT_SELFTEST_KEY_OP].value_or(std::string());
+        const std::string key = (*wait)[GODOT_SELFTEST_KEY_KEY].value_or(std::string());
+        const double value = target_of(*wait, state);
+        bool known = true;
+        bool reached = holds(read_value(host, config, *wait, state), op, value, state.tolerance, known);
+        if (bound <= 0 || !known || !std::isfinite(value)) {
+            report_broken(label, GODOT_SELFTEST_KEY_WAIT, "needs max_frames, a known op and a value", result, report);
+            return false;
+        }
+        int64_t frames = 0;
+        for (; frames < bound && !reached; ++frames) {
+            if (!frame(host, state)) {
+                report_broken(label, GODOT_STEP_ADVANCE, "a frame was refused", result, report);
+                return false;
+            }
+            reached = holds(read_value(host, config, *wait, state), op, value, state.tolerance, known);
+        }
+        report_check(check, "wait key=" + key + " frames=" + std::to_string(frames),
+                     reached ? "reached" : "not reached", op + " " + decimal(value) + " within " +
+                     std::to_string(bound) + " frames", reached, result, report);
+        return true;
+    }
+
+    if (const toml::table* catch_up = action[GODOT_SELFTEST_KEY_CATCH_UP].as_table()) {
+        const double seconds = (*catch_up)[GODOT_SELFTEST_KEY_SECONDS].value_or(std::nan(""));
+        const int64_t max_steps = (*catch_up)[GODOT_SELFTEST_KEY_MAX_STEPS].value_or(int64_t{0});
+        const int64_t expected = (*catch_up)[GODOT_SELFTEST_KEY_STEPS].value_or(int64_t{-1});
+        if (!(seconds > 0.0) || max_steps <= 0 || max_steps > static_cast<int64_t>(UINT32_MAX) || expected < 0) {
+            report_broken(label, GODOT_SELFTEST_KEY_CATCH_UP, "needs seconds, max_steps and steps", result, report);
+            return false;
+        }
+        uint32_t steps = 0u;
+        double backlog = 0.0;
+        if (host.advance(seconds, static_cast<uint32_t>(max_steps), &steps, &backlog) != ase::kernel::HostStatusOk) {
+            report_broken(label, GODOT_STEP_ADVANCE, "the catch-up was refused", result, report);
+            return false;
+        }
+        int64_t total = steps;
+        bool bounded = steps <= static_cast<uint32_t>(max_steps);
+        // the backlog drains over later calls, each a bounded number of ordinary ticks
+        for (int64_t call = 0; backlog > 0.0 && call <= expected; ++call) {
+            if (host.advance(0.0, static_cast<uint32_t>(max_steps), &steps, &backlog) != ase::kernel::HostStatusOk) {
+                report_broken(label, GODOT_STEP_ADVANCE, "the catch-up was refused", result, report);
+                return false;
+            }
+            bounded = bounded && steps <= static_cast<uint32_t>(max_steps);
+            total += steps;
+        }
+        report_check(check, "catch_up seconds=" + decimal(seconds) + " max_steps=" + std::to_string(max_steps),
+                     std::to_string(total) + (bounded && backlog == 0.0 ? "" : " unbounded"),
+                     std::to_string(expected), total == expected && bounded && backlog == 0.0, result, report);
         return true;
     }
 
     if (const toml::table* expect = action[GODOT_SELFTEST_KEY_EXPECT].as_table()) {
-        const int64_t id = (*expect)[GODOT_SELFTEST_KEY_ID].value_or(int64_t{-1});
-        uint32_t written = 0u;
-        const HostStatus status = snapshot_all(host, config.port, records, written);
-        if (id < 0 || status != ase::kernel::HostStatusOk) {
-            report_broken(label, GODOT_STEP_SNAPSHOT,
-                          id < 0 ? std::string("expect needs an id") : GodotHostResourceManager::status_name(status),
-                          result, report);
+        const std::string op = (*expect)[GODOT_SELFTEST_KEY_OP].value_or(std::string());
+        const std::string key = (*expect)[GODOT_SELFTEST_KEY_KEY].value_or(std::string());
+        const double actual = read_value(host, config, *expect, state);
+        const double value = target_of(*expect, state);
+        bool known = true;
+        const bool ok = holds(actual, op, value, state.tolerance, known);
+        if (!known) {
+            report_broken(label, GODOT_SELFTEST_KEY_EXPECT, "unknown op " + op, result, report);
             return false;
         }
-        const KernelHostRecord* record = nullptr;
-        for (uint32_t i = 0u; i < written; ++i) {
-            if (records[i].object_id == static_cast<uint32_t>(id)) {
-                record = &records[i];
-            }
-        }
-        for (auto&& [key, value] : *expect) {
-            const std::string name(key.str());
-            if (name == GODOT_SELFTEST_KEY_ID) {
-                continue;
-            }
-            const double wanted = value.value_or(nothing);
-            const double actual = record == nullptr ? nothing : record_value(*record, name.c_str());
-            const bool ok = std::isfinite(wanted) && std::isfinite(actual) && std::fabs(actual - wanted) <= tolerance;
-            report_check(check, "target=" + std::to_string(id) + " key=" + name, decimal(actual), decimal(wanted),
-                         ok, result, report);
-        }
+        const std::string subject =
+            (*expect)[GODOT_SELFTEST_KEY_RECORD].value_or(std::string()) == GODOT_SELFTEST_RECORD_CLOCK
+                ? std::string("clock")
+                : "place=" + std::to_string((*expect)[GODOT_SELFTEST_KEY_PLACE].value_or(int64_t{-1}));
+        report_check(check, subject + " key=" + key, decimal(actual), op + " " + decimal(value), ok, result, report);
         return true;
     }
 
-    if (const toml::node* count = action.get(GODOT_SELFTEST_KEY_RECORDS)) {
-        const int64_t expected = count->value_or(int64_t{-1});
+    if (const toml::table* count = action[GODOT_SELFTEST_KEY_RECORDS].as_table()) {
+        const std::string record = (*count)[GODOT_SELFTEST_KEY_RECORD].value_or(std::string());
+        const int64_t expected = (*count)[GODOT_SELFTEST_KEY_COUNT].value_or(int64_t{-1});
         uint32_t written = 0u;
-        const HostStatus status = snapshot_all(host, config.port, records, written);
+        const std::string& port = record == GODOT_SELFTEST_RECORD_CLOCK ? config.clock_port : config.patch_port;
+        const HostStatus status = snapshot_all(host, port, state.records, written);
         if (expected < 0 || status != ase::kernel::HostStatusOk) {
             report_broken(label, GODOT_STEP_SNAPSHOT,
                           expected < 0 ? std::string("records needs a count") : GodotHostResourceManager::status_name(status),
                           result, report);
             return false;
         }
-        report_check(check, "records", std::to_string(written), std::to_string(expected),
+        report_check(check, "records=" + record, std::to_string(written), std::to_string(expected),
                      static_cast<int64_t>(written) == expected, result, report);
         return true;
     }
 
-    report_broken(label, GODOT_SELFTEST_KEY_DO, "an action names none of seconds, irrigate, expect, records",
+    report_broken(label, GODOT_SELFTEST_KEY_DO,
+                  "an action names none of frames, remember, irrigate, wait, catch_up, expect, records",
                   result, report);
     return false;
 }
 
-/**
- * One scenario on a test host of its own: create it (no log file - the game host's file must not
- * rotate - and this manager's sink), load the stage's plugin, configure, start, run the actions
- * in order, stop. The host is destroyed when this function returns, before the next scenario
- * creates its own: never two simulations at once.
- */
-void run_scenario(const toml::table& scenario, const VivariumStartConfig& config, const std::string& library,
-                  const std::string& manifest, double tolerance, double tick, GodotHostResourceManager* sink,
-                  VivariumSelfTestResult& result, std::vector<std::string>& report) {
-    const std::string label = scenario_label(scenario);
-    std::unique_ptr<KernelEmbeddedHost> host;
-    HostStatus status = KernelEmbeddedHost::create(host, &queue_host_line, sink, nullptr);
-    if (status != ase::kernel::HostStatusOk) {
-        report_broken(label, GODOT_STEP_CREATE, GodotHostResourceManager::status_name(status), result, report);
-        return;
-    }
-    status = host->load_plugin(library.c_str(), manifest.data(), static_cast<uint32_t>(manifest.size()));
-    if (status != ase::kernel::HostStatusOk) {
-        // A failed load has torn the host down already; its lines name the cause.
-        report_broken(label, GODOT_STEP_LOAD, GodotHostResourceManager::status_name(status), result, report);
-        return;
-    }
-    if (!start_scenario(*host, scenario, config, label, result, report)) {
-        (void)host->stop();
-        return;
-    }
-    const toml::array* actions = scenario[GODOT_SELFTEST_KEY_DO].as_array();
-    if (actions == nullptr) {
-        report_broken(label, GODOT_SELFTEST_KEY_DO, "no actions", result, report);
-        (void)host->stop();
-        return;
-    }
-    std::vector<KernelHostRecord> records;
-    for (const toml::node& node : *actions) {
-        const toml::table* action = node.as_table();
-        if (action == nullptr) {
-            report_broken(label, GODOT_SELFTEST_KEY_DO, "an action is no table", result, report);
-            (void)host->stop();
-            return;
-        }
-        if (!run_action(*host, *action, config, tolerance, tick, label, records, result, report)) {
-            (void)host->stop();
-            return;
-        }
-    }
-    status = host->stop();
-    if (status != ase::kernel::HostStatusOk) {
-        report_broken(label, "stop", GodotHostResourceManager::status_name(status), result, report);
-        return;
-    }
-    result.cases += 1u;
-}
-
 }  // anonymous namespace
 
-// =============================================================================
 // LIFETIME
-// =============================================================================
 
 GodotHostResourceManager::GodotHostResourceManager()
     : failure_step_(GODOT_STEP_NONE), failure_status_(ase::kernel::HostStatusOk) {}
@@ -448,9 +538,60 @@ GodotHostResourceManager::~GodotHostResourceManager() {
     clear_all();
 }
 
-// =============================================================================
+// THE BUNDLE INDEX
+
+bool GodotHostResourceManager::parse_index(const std::string& text, VivariumBundleInfo& out) {
+    out = VivariumBundleInfo{};
+    const std::string separator(GODOT_BUNDLE_SEPARATOR);
+    std::size_t start = 0u;
+    while (start < text.size()) {
+        const std::size_t newline = text.find('\n', start);
+        const std::size_t end = newline == std::string::npos ? text.size() : newline;
+        std::string line = text.substr(start, end - start);
+        start = end + 1u;
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+            line.pop_back();
+        }
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        const std::size_t at = line.find(separator);
+        if (at == std::string::npos) {
+            out = VivariumBundleInfo{};
+            return false;
+        }
+        const std::string key = line.substr(0u, at);
+        const std::string value = line.substr(at + separator.size());
+        if (key == GODOT_BUNDLE_KEY_DATA_ROOT) {
+            out.data_root = value;
+        } else if (key == GODOT_BUNDLE_KEY_UNIT) {
+            const std::vector<std::string> fields = fields_of(value);
+            if (fields.size() != GODOT_BUNDLE_UNIT_FIELDS) {
+                out = VivariumBundleInfo{};
+                return false;
+            }
+            VivariumBundleUnit unit;
+            unit.unit = fields[0];
+            unit.library = fields[1];
+            unit.manifest = fields[2];
+            unit.version = fields[3];
+            unit.api_version = fields[4];
+            out.units.push_back(unit);
+        } else if (key == GODOT_BUNDLE_KEY_DATA) {
+            out.data.push_back(value);
+        } else {
+            out = VivariumBundleInfo{};
+            return false;
+        }
+    }
+    if (out.data_root.empty() || out.units.empty()) {
+        out = VivariumBundleInfo{};
+        return false;
+    }
+    return true;
+}
+
 // FACTORY
-// =============================================================================
 
 HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     // Reiniciar runs the same teardown as _exit_tree: the old host, its views and its bundle go
@@ -459,14 +600,17 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     config_ = config;
     failure_step_ = GODOT_STEP_NONE;
     failure_status_ = ase::kernel::HostStatusOk;
-    simulation_seconds_ = 0.0;
+    elapsed_in_s_ = 0.0;
+    backlog_s_ = 0.0;
     tick_count_ = 0u;
+    last_steps_ = 0u;
 
-    // A configuration the host could never run is refused before a host exists: a zero cap
-    // would turn every frame into a refused tick, an empty name into a NotFound three steps on.
-    if (config_.read_stage == nullptr || config_.port.empty() || config_.op_create.empty() ||
-        config_.op_irrigate.empty() || !std::isfinite(config_.tick_max_seconds) ||
-        config_.tick_max_seconds <= 0.0f || !std::isfinite(config_.irrigate_amount)) {
+    // A configuration the host could never run is refused before a host exists: no catch-up
+    // steps would turn every frame into a refused advance, an empty name into a NotFound later.
+    if (config_.read_stage == nullptr || config_.files_dir.empty() || config_.files_dir[0] != '/' ||
+        config_.patch_port.empty() || config_.clock_port.empty() || config_.op_irrigate.empty() ||
+        !std::isfinite(config_.irrigate_amount_mm) || !(config_.irrigate_amount_mm > 0.0) ||
+        config_.catch_up_steps == 0u) {
         return fail(GODOT_STEP_CONFIG, ase::kernel::HostStatusInvalidArgument);
     }
 
@@ -480,35 +624,17 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     if (status != ase::kernel::HostStatusOk) {
         return fail(GODOT_STEP_BUNDLE, status);
     }
-
-    std::string manifest;
-    if (!config_.read_stage(bundle_.manifest.c_str(), manifest, config_.read_stage_user) || manifest.empty()) {
-        return fail(GODOT_STEP_MANIFEST, ase::kernel::HostStatusNotFound);
-    }
-
-    const std::string library = plugin_library();
-    status = host_->load_plugin(library.c_str(), manifest.data(),
-                                static_cast<uint32_t>(manifest.size()));
+    status = read_manifests();
     if (status != ase::kernel::HostStatusOk) {
-        return fail(GODOT_STEP_LOAD, status);
+        return fail(GODOT_STEP_MANIFEST, status);
+    }
+    status = load_set(*host_);
+    if (status != ase::kernel::HostStatusOk) {
+        return fail(failure_step_ == GODOT_STEP_NONE ? GODOT_STEP_LOAD : failure_step_, status);
     }
 
-    if (!host_->has_port(config_.port.c_str())) {
+    if (!host_->has_port(config_.patch_port.c_str()) || !host_->has_port(config_.clock_port.c_str())) {
         return fail(GODOT_STEP_PORT, ase::kernel::HostStatusNotFound);
-    }
-
-    for (const VivariumPatchStart& patch : config_.patches) {
-        KernelHostInput input{};
-        input.object_id = patch.object_id;
-        if (!put_value(input, GODOT_KEY_BIOMASS, config_.start_biomass) ||
-            !put_value(input, GODOT_KEY_MOISTURE, patch.moisture) ||
-            !put_value(input, GODOT_KEY_AGE, config_.start_age_seconds)) {
-            return fail(GODOT_STEP_CONFIGURE, ase::kernel::HostStatusCapacity);
-        }
-        status = host_->configure(config_.port.c_str(), config_.op_create.c_str(), &input);
-        if (status != ase::kernel::HostStatusOk) {
-            return fail(GODOT_STEP_CONFIGURE, status);
-        }
     }
 
     status = host_->start();
@@ -516,8 +642,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
         return fail(GODOT_STEP_START, status);
     }
 
-    // One record per configured patch; never zero, so the buffer always has an address.
-    records_.assign(config_.patches.empty() ? 1u : config_.patches.size(), KernelHostRecord{});
+    records_.assign(ase::kernel::HostRecordsMax, KernelHostRecord{});
     status = read_snapshot();
     if (status != ase::kernel::HostStatusOk) {
         return fail(GODOT_STEP_SNAPSHOT, status);
@@ -529,10 +654,12 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     failure_step_ = step;
     failure_status_ = status;
     patches_.clear();
+    places_.clear();
+    clock_ = VivariumClockView{};
     if (!host_) {
         return status;  // no host, no logger: the node shows and prints the failure itself
     }
-    // The host stays, STOPPED: its plugin is unloaded, but its logger still carries this line.
+    // The host stays, STOPPED: its units are unloaded, but its logger still carries this line.
     (void)host_->stop();
     std::string line = "boot or run failed at ";
     line += step;
@@ -550,27 +677,60 @@ HostStatus GodotHostResourceManager::read_bundle() {
     if (!config_.read_stage(GODOT_BUNDLE_INDEX, index, config_.read_stage_user) || index.empty()) {
         return ase::kernel::HostStatusNotFound;
     }
-    bundle_.library = index_value(index, GODOT_BUNDLE_KEY_LIBRARY);
-    bundle_.manifest = index_value(index, GODOT_BUNDLE_KEY_MANIFEST);
-    bundle_.plugin = index_value(index, GODOT_BUNDLE_KEY_PLUGIN);
-    bundle_.version = index_value(index, GODOT_BUNDLE_KEY_VERSION);
-    bundle_.api_version = index_value(index, GODOT_BUNDLE_KEY_API);
-    if (bundle_.library.empty() || bundle_.manifest.empty() || bundle_.plugin.empty() ||
-        bundle_.version.empty() || bundle_.api_version.empty()) {
+    if (!parse_index(index, bundle_)) {
         return ase::kernel::HostStatusInvalidArgument;
     }
     return ase::kernel::HostStatusOk;
 }
 
-std::string GodotHostResourceManager::plugin_library() const {
-    // No directory: the libraries of an APK lie in its native library directory, which the app's
-    // linker namespace searches by file name - the bare name is the whole address there.
-    return config_.library_dir.empty() ? bundle_.library : config_.library_dir + "/" + bundle_.library;
+HostStatus GodotHostResourceManager::read_manifests() {
+    manifests_.clear();
+    for (const VivariumBundleUnit& unit : bundle_.units) {
+        std::string manifest;
+        if (!config_.read_stage(unit.manifest.c_str(), manifest, config_.read_stage_user) || manifest.empty()) {
+            manifests_.clear();
+            return ase::kernel::HostStatusNotFound;
+        }
+        manifests_.push_back(manifest);
+    }
+    return ase::kernel::HostStatusOk;
 }
 
-// =============================================================================
+HostStatus GodotHostResourceManager::load_set(KernelEmbeddedHost& host) {
+    // THE DATA ROOT FIRST: every unit finds it in the App's context from its on_load on.
+    const std::string data_root = config_.files_dir + "/" + bundle_.data_root;
+    HostStatus status = host.set_data_root(data_root.c_str());
+    if (status != ase::kernel::HostStatusOk) {
+        failure_step_ = GODOT_STEP_DATA_ROOT;
+        return status;
+    }
+    // The paths must outlive the call; KernelHostUnit only points at them.
+    std::vector<std::string> paths;
+    paths.reserve(bundle_.units.size());
+    std::vector<KernelHostUnit> units;
+    units.reserve(bundle_.units.size());
+    for (size_t i = 0; i < bundle_.units.size() && i < manifests_.size(); ++i) {
+        paths.push_back(library_path(bundle_.units[i].library));
+        KernelHostUnit unit;
+        unit.library_path = paths.back().c_str();
+        unit.manifest_text = manifests_[i].c_str();
+        unit.manifest_length = static_cast<uint32_t>(manifests_[i].size());
+        units.push_back(unit);
+    }
+    status = host.load_units(units.data(), static_cast<uint32_t>(units.size()));
+    if (status != ase::kernel::HostStatusOk) {
+        failure_step_ = GODOT_STEP_LOAD;
+    }
+    return status;
+}
+
+std::string GodotHostResourceManager::library_path(const std::string& library) const {
+    // No directory: the libraries of an APK lie in its native library directory, which the app's
+    // linker namespace searches by file name - the bare name is the whole address there.
+    return config_.library_dir.empty() ? library : config_.library_dir + "/" + library;
+}
+
 // SELF-TEST
-// =============================================================================
 
 VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartConfig& config,
                                                            const std::string& table,
@@ -583,20 +743,15 @@ VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartCo
         return result;
     }
     config_ = config;
-    if (config_.read_stage == nullptr || config_.port.empty() || config_.op_create.empty() ||
-        config_.op_irrigate.empty()) {
-        report_broken("-", GODOT_STEP_CONFIG, "no stage reader, port or operation", result, report);
+    if (config_.read_stage == nullptr || config_.files_dir.empty() || config_.patch_port.empty() ||
+        config_.clock_port.empty() || config_.op_irrigate.empty()) {
+        report_broken("-", GODOT_STEP_CONFIG, "no stage reader, files directory, port or operation", result, report);
         return result;
     }
-    if (read_bundle() != ase::kernel::HostStatusOk) {
-        report_broken("-", GODOT_STEP_BUNDLE, "bundle index not readable", result, report);
+    if (read_bundle() != ase::kernel::HostStatusOk || read_manifests() != ase::kernel::HostStatusOk) {
+        report_broken("-", GODOT_STEP_BUNDLE, "bundle index or a manifest not readable", result, report);
         bundle_ = VivariumBundleInfo{};
-        return result;
-    }
-    std::string manifest;
-    if (!config_.read_stage(bundle_.manifest.c_str(), manifest, config_.read_stage_user) || manifest.empty()) {
-        report_broken("-", GODOT_STEP_MANIFEST, bundle_.manifest + " not readable", result, report);
-        bundle_ = VivariumBundleInfo{};
+        manifests_.clear();
         return result;
     }
 
@@ -609,54 +764,135 @@ VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartCo
                           std::string(error.description()),
                       result, report);
         bundle_ = VivariumBundleInfo{};
+        manifests_.clear();
         return result;
     }
     const double tolerance = root[GODOT_SELFTEST_KEY_TOLERANCE].value_or(std::nan(""));
-    const double tick = root[GODOT_SELFTEST_KEY_TICK].value_or(std::nan(""));
+    const double frame_s = root[GODOT_SELFTEST_KEY_FRAME].value_or(std::nan(""));
+    const toml::array* runs = root[GODOT_SELFTEST_KEY_RUNS].as_array();
     const toml::array* cases = root[GODOT_SELFTEST_KEY_CASE].as_array();
-    if (!(tolerance >= 0.0) || !(tick > 0.0) || cases == nullptr || cases->empty()) {
-        report_broken("-", GODOT_SELFTEST_KEY_CASE, "table needs tolerance, tick_seconds and cases", result, report);
+    if (!(tolerance >= 0.0) || !(frame_s > 0.0) || runs == nullptr || cases == nullptr || cases->empty()) {
+        report_broken("-", GODOT_SELFTEST_KEY_CASE, "table needs tolerance, frame_seconds, runs and cases", result,
+                      report);
         bundle_ = VivariumBundleInfo{};
+        manifests_.clear();
         return result;
     }
 
-    const std::string library = plugin_library();
-    for (const toml::node& entry : *cases) {
-        const toml::table* scenario = entry.as_table();
-        if (scenario == nullptr) {
-            report_broken("?", GODOT_SELFTEST_KEY_CASE, "a case is no table", result, report);
-            continue;
+    // ONE TEST HOST FOR THE WHOLE TABLE: created, loaded and started once, every scenario in the
+    // table's order on it, stopped and destroyed after the last one - before the game host exists.
+    // No log file - the game host's file must not rotate - and this manager's sink. A host that
+    // cannot start is one error of its own; the runs it would have checked are reported below.
+    std::vector<std::string> checked;
+    std::unique_ptr<KernelEmbeddedHost> host;
+    HostStatus status = KernelEmbeddedHost::create(host, &queue_host_line, this, nullptr);
+    bool ready = status == ase::kernel::HostStatusOk;
+    if (!ready) {
+        report_broken("-", GODOT_STEP_CREATE, status_name(status), result, report);
+    }
+    if (ready) {
+        failure_step_ = GODOT_STEP_NONE;
+        status = load_set(*host);
+        ready = status == ase::kernel::HostStatusOk;
+        if (!ready) {
+            // A failed load has torn the host down already; its lines name the cause.
+            report_broken("-", failure_step_, status_name(status), result, report);
+            failure_step_ = GODOT_STEP_NONE;
         }
-        run_scenario(*scenario, config_, library, manifest, tolerance, tick, this, result, report);
+    }
+    if (ready) {
+        status = host->start();
+        ready = status == ase::kernel::HostStatusOk;
+        if (!ready) {
+            report_broken("-", GODOT_STEP_START, status_name(status), result, report);
+            (void)host->stop();
+        }
+    }
+
+    if (ready) {
+        for (const toml::node& entry : *cases) {
+            const toml::table* scenario = entry.as_table();
+            if (scenario == nullptr) {
+                report_broken("?", GODOT_SELFTEST_KEY_CASE, "a case is no table", result, report);
+                continue;
+            }
+            const std::string label = scenario_label(*scenario);
+            const toml::array* actions = (*scenario)[GODOT_SELFTEST_KEY_DO].as_array();
+            if (actions == nullptr) {
+                report_broken(label, GODOT_SELFTEST_KEY_DO, "no actions", result, report);
+                continue;
+            }
+            VivariumSelfTestState state;
+            state.tolerance = tolerance;
+            state.frame_s = frame_s;
+            bool complete = true;
+            for (const toml::node& node : *actions) {
+                const toml::table* action = node.as_table();
+                if (action == nullptr) {
+                    report_broken(label, GODOT_SELFTEST_KEY_DO, "an action is no table", result, report);
+                    complete = false;
+                    break;
+                }
+                if (!run_action(*host, *action, config_, label, state, result, report)) {
+                    complete = false;
+                    break;
+                }
+            }
+            checked.insert(checked.end(), state.checked.begin(), state.checked.end());
+            if (complete) {
+                result.cases += 1u;
+            }
+        }
+        status = host->stop();
+        if (status != ase::kernel::HostStatusOk) {
+            report_broken("-", GODOT_STEP_STOP, status_name(status), result, report);
+        }
+    }
+    host.reset();
+
+    // Every run the table claims must be checked by one of its actions - a run nobody checked is
+    // an error, never a run that passed.
+    for (const toml::node& node : *runs) {
+        const std::string run = node.value_or(std::string());
+        bool found = false;
+        for (const std::string& check : checked) {
+            found = found || check == run;
+        }
+        if (!found) {
+            result.errors += 1u;
+            report.push_back("selftest run=" + run + " result=FAILED cause=no action checks it");
+        }
+    }
+    std::string set;
+    for (const VivariumBundleUnit& unit : bundle_.units) {
+        set += (set.empty() ? "" : ",") + unit.unit + "@" + unit.version;
     }
     report.push_back("selftest end cases=" + std::to_string(result.cases) + " checks=" +
-                     std::to_string(result.checks) + " errors=" + std::to_string(result.errors) +
-                     " plugin=" + bundle_.plugin + "@" + bundle_.version);
+                     std::to_string(result.checks) + " errors=" + std::to_string(result.errors) + " set=" + set);
     // The manager leaves as it came: no host, no bundle - boot() reads its own.
     bundle_ = VivariumBundleInfo{};
+    manifests_.clear();
     return result;
 }
 
-// =============================================================================
 // RUNNING
-// =============================================================================
 
-HostStatus GodotHostResourceManager::advance(float dt) {
+HostStatus GodotHostResourceManager::advance(double elapsed_s) {
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
-    // Capped only when it IS a number: NaN and infinity reach the host unchanged and are refused
-    // there with its own warning - capping them would turn a broken frame into a valid tick.
-    // Longer stalls slow the prototype down; there is no catch-up loop beside the scheduler.
-    const float step = (std::isfinite(dt) && dt > config_.tick_max_seconds)
-                           ? config_.tick_max_seconds
-                           : dt;
-    const HostStatus status = host_->tick(step);
+    // Never capped, never dropped: NaN and infinity reach the host unchanged and are refused there
+    // with its own warning; a long frame is the background time, and the host catches it up.
+    uint32_t steps = 0u;
+    double backlog = 0.0;
+    const HostStatus status = host_->advance(elapsed_s, config_.catch_up_steps, &steps, &backlog);
     if (status != ase::kernel::HostStatusOk) {
-        return status;  // this frame is dropped; the host said why
+        return status;  // this frame is refused; the host said why
     }
-    simulation_seconds_ += static_cast<double>(step);
-    tick_count_ += 1u;
+    elapsed_in_s_ += elapsed_s;
+    backlog_s_ = backlog;
+    last_steps_ = steps;
+    tick_count_ += steps;
 
     const HostStatus read = read_snapshot();
     if (read != ase::kernel::HostStatusOk) {
@@ -667,45 +903,64 @@ HostStatus GodotHostResourceManager::advance(float dt) {
 
 HostStatus GodotHostResourceManager::read_snapshot() {
     uint32_t written = 0u;
-    uint32_t required = 0u;
-    HostStatus status = host_->snapshot(config_.port.c_str(), records_.data(),
-                                        static_cast<uint32_t>(records_.size()), &written,
-                                        &required);
-    if (status == ase::kernel::HostStatusCapacity) {
-        // The plugin holds more patches than were configured: grow once to its own answer.
-        records_.assign(required, KernelHostRecord{});
-        status = host_->snapshot(config_.port.c_str(), records_.data(),
-                                 static_cast<uint32_t>(records_.size()), &written, &required);
-    }
+    HostStatus status = snapshot_all(*host_, config_.patch_port, records_, written);
     if (status != ase::kernel::HostStatusOk) {
         return status;
     }
-
     patches_.clear();
+    places_.clear();
     for (uint32_t i = 0u; i < written; ++i) {
         const KernelHostRecord& record = records_[i];
         VivariumPatchView view;
         view.object_id = record.object_id;
-        view.biomass = record_value(record, GODOT_KEY_BIOMASS);
-        view.moisture = record_value(record, GODOT_KEY_MOISTURE);
-        view.age_seconds = record_value(record, GODOT_KEY_AGE);
-        const double seed = record_value(record, GODOT_KEY_SEED);
-        const double sprout = record_value(record, GODOT_KEY_SPROUT);
-        const double mature = record_value(record, GODOT_KEY_MATURE);
-        const double dead = record_value(record, GODOT_KEY_DEAD);
-        // A record that does not carry the port contract is a broken port, not a value to draw.
-        if (!std::isfinite(view.biomass) || !std::isfinite(view.moisture) ||
-            !std::isfinite(view.age_seconds) || !std::isfinite(seed) || !std::isfinite(sprout) ||
-            !std::isfinite(mature) || !std::isfinite(dead)) {
+        const double place = record_value(record, GODOT_KEY_PLACE);
+        const double stage = record_value(record, GODOT_KEY_STAGE);
+        const double condition = record_value(record, GODOT_KEY_CONDITION);
+        view.coverage = record_value(record, GODOT_KEY_COVERAGE);
+        view.soil_mm = record_value(record, GODOT_KEY_SOIL_MM);
+        view.soil_rel = record_value(record, GODOT_KEY_SOIL_REL);
+        view.capacity_mm = record_value(record, GODOT_KEY_CAPACITY_MM);
+        // THE PORT CONTRACT IS THE PLACE. ase-pl-flora writes a key only while the input row behind
+        // it stands (FloraHostPtchExptSystem: a key stands only while its row stands, never a zero
+        // the modules did not publish), so before the first runs of the modules a record carries
+        // its place and nothing else. A missing value is NOT MEASURED YET: a code stays unknown, a
+        // number stays NaN, which share() draws as nothing. A record without a whole place is a
+        // broken port, not a value to draw.
+        if (!whole(place)) {
             patches_.clear();
+            places_.clear();
             return ase::kernel::HostStatusInvalidArgument;
         }
-        view.seed = seed >= GODOT_SNAPSHOT_FLAG_SET;
-        view.sprout = sprout >= GODOT_SNAPSHOT_FLAG_SET;
-        view.mature = mature >= GODOT_SNAPSHOT_FLAG_SET;
-        view.dead = dead >= GODOT_SNAPSHOT_FLAG_SET;
+        view.place = static_cast<uint32_t>(place);
+        view.stage = code_of(stage, GODOT_STAGE_COUNT);
+        view.condition = code_of(condition, GODOT_COND_COUNT);
         patches_[view.object_id] = view;
+        places_[view.place] = view.object_id;
     }
+
+    std::vector<KernelHostRecord> clock_records(1u);
+    status = snapshot_all(*host_, config_.clock_port, clock_records, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    // The clock port publishes an empty set until the clock row of the plugin stands
+    // (FloraHostClkExptSystem): the clock is not known yet, and nothing is broken. Two clocks are.
+    if (written == 0u) {
+        clock_ = VivariumClockView{};
+        return ase::kernel::HostStatusOk;
+    }
+    if (written != 1u) {
+        return ase::kernel::HostStatusInvalidArgument;
+    }
+    VivariumClockView clock;
+    clock.elapsed_s = record_value(clock_records[0], GODOT_KEY_ELAPSED);
+    clock.day = record_value(clock_records[0], GODOT_KEY_DAY);
+    clock.hour = record_value(clock_records[0], GODOT_KEY_HOUR);
+    if (!std::isfinite(clock.elapsed_s) || !std::isfinite(clock.day) || !std::isfinite(clock.hour)) {
+        return ase::kernel::HostStatusInvalidArgument;
+    }
+    clock.known = true;
+    clock_ = clock;
     return ase::kernel::HostStatusOk;
 }
 
@@ -715,10 +970,10 @@ HostStatus GodotHostResourceManager::irrigate(uint32_t object_id) {
     }
     KernelHostInput input{};
     input.object_id = object_id;
-    if (!put_value(input, GODOT_KEY_AMOUNT, config_.irrigate_amount)) {
+    if (!put_value(input, GODOT_KEY_AMOUNT_MM, config_.irrigate_amount_mm)) {
         return ase::kernel::HostStatusCapacity;
     }
-    return host_->submit(config_.port.c_str(), config_.op_irrigate.c_str(), &input);
+    return host_->submit(config_.patch_port.c_str(), config_.op_irrigate.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::note(const char* text) {
@@ -728,13 +983,16 @@ HostStatus GodotHostResourceManager::note(const char* text) {
     return host_->note(GODOT_LOG_SOURCE, text);
 }
 
-// =============================================================================
-// PATCH VIEWS
-// =============================================================================
+// VIEWS
 
 const VivariumPatchView* GodotHostResourceManager::get_patch(uint32_t object_id) const {
     const auto found = patches_.find(object_id);
     return found == patches_.end() ? nullptr : &found->second;
+}
+
+const VivariumPatchView* GodotHostResourceManager::get_patch_at(uint32_t place) const {
+    const auto found = places_.find(place);
+    return found == places_.end() ? nullptr : get_patch(found->second);
 }
 
 bool GodotHostResourceManager::has_patch(uint32_t object_id) const {
@@ -745,9 +1003,11 @@ uint32_t GodotHostResourceManager::patch_count() const {
     return static_cast<uint32_t>(patches_.size());
 }
 
-// =============================================================================
+const VivariumClockView& GodotHostResourceManager::get_clock() const {
+    return clock_;
+}
+
 // LOG LINES
-// =============================================================================
 
 void GodotHostResourceManager::store_log_line(const char* line, uint32_t len, int level) {
     if (line == nullptr) {
@@ -782,9 +1042,7 @@ uint32_t GodotHostResourceManager::remove_log_lines(std::vector<std::string>& ou
     return moved;
 }
 
-// =============================================================================
 // STATE AND MEASUREMENT
-// =============================================================================
 
 bool GodotHostResourceManager::running() const {
     return host_ && host_->state() == ase::kernel::HostStateRunning;
@@ -807,15 +1065,27 @@ const VivariumBundleInfo& GodotHostResourceManager::get_bundle() const {
 }
 
 double GodotHostResourceManager::simulation_seconds() const {
-    return simulation_seconds_;
+    return elapsed_in_s_ - backlog_s_;
 }
 
 uint64_t GodotHostResourceManager::tick_count() const {
     return tick_count_;
 }
 
+uint32_t GodotHostResourceManager::last_steps() const {
+    return last_steps_;
+}
+
+double GodotHostResourceManager::backlog_seconds() const {
+    return backlog_s_;
+}
+
 uint32_t GodotHostResourceManager::system_count() const {
     return host_ ? host_->system_count() : 0u;
+}
+
+uint32_t GodotHostResourceManager::unit_count() const {
+    return host_ ? host_->unit_count() : 0u;
 }
 
 bool GodotHostResourceManager::read_pss_kib(uint64_t& out) const {
@@ -875,21 +1145,22 @@ const char* GodotHostResourceManager::status_name(HostStatus status) {
     return "Unknown";
 }
 
-// =============================================================================
 // BULK CLEANUP
-// =============================================================================
 
 void GodotHostResourceManager::clear_all() {
-    // Stop BEFORE clearing: the host runs the binding Phase 00 teardown (App shutdown, ports
-    // unregistered, App destroyed, dlclose) and releases its logger last. Lines it still writes
-    // stay in log_lines_ for the node to print.
+    // Stop BEFORE clearing: the host runs the binding teardown (App shutdown, ports released,
+    // App destroyed, dlclose in reverse load order) and releases its logger last. Lines it still
+    // writes stay in log_lines_ for the node to print.
     if (host_) {
         (void)host_->stop();
         host_.reset();
     }
     patches_.clear();
+    places_.clear();
+    clock_ = VivariumClockView{};
     records_.clear();
     bundle_ = VivariumBundleInfo{};
+    manifests_.clear();
 }
 
 }  // namespace ase::adp::godot

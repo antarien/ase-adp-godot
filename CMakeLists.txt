@@ -11,15 +11,15 @@ ASE GODOT ADAPTER BUILD CONFIGURATION
              ase::adp::godot::vivarium_library_init (PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.2).
 
              Built inside the embedded closure of clients/avt-client-android: it binds godot::cpp
-             and ase::kernel-embedded - never the vegetation plugin, never a plugin header. The
-             host part (GodotHostResourceManager) is a separate static library WITHOUT any Godot
-             type, so its tests run without a Godot process.
+             and ase::kernel-embedded - never a unit of the set the host loads, never a module or
+             plugin header. The host part (GodotHostResourceManager) is a separate static library
+             WITHOUT any Godot type, so its tests run without a Godot process.
 
 @module      ase-adp-godot
 @layer       adapter (3rd-party isolation, consumed by L5 clients)
 @design      DSGN_021
 @created     2026-10-05
-@modified    2026-10-05
+@modified    2026-10-07
 ]]
 
 # Parse local VERSION (SSOT) if not building from root
@@ -72,7 +72,7 @@ target_link_libraries(ase-adp-godot-host
         ase::kernel-embedded   # host facade and port contract
     PRIVATE
         ase::fileio            # /proc/self/smaps_rollup for the PSS of acceptance A10 (header-only, L0)
-        ase::math              # round of the self-test's tick count (header-only, L0)
+        ase::math              # floor of the whole-number test of a record's place and codes (header-only, L0)
         ase::utils             # str_copy / str_equal for the port keys, number text (header-only, L0)
         tomlplusplus::tomlplusplus  # the self-test table config/vivarium_selftest.toml (header-only)
 )
@@ -106,6 +106,7 @@ target_link_libraries(ase-adp-godot
     PRIVATE
         ase::adp::godot-host
         ase::math              # sqrt / floor of the drawing (header-only, L0)
+        ase::utils             # boot_nanos: the real time of a frame, a suspend of the device included (header-only, L0)
         godot::cpp
 )
 
