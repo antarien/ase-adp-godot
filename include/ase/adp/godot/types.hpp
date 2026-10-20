@@ -19,9 +19,11 @@
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
+ * @usecase     usecase:100387 - view the plant
+ * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-07
- * @version     00.00.03.00003
+ * @modified    2026-10-18
+ * @version     00.00.07.00011
  *
  * WHY THE PORT KEYS ARE WRITTEN A SECOND TIME
  *
@@ -35,6 +37,7 @@
  * ABBREVIATIONS USED IN THIS ADAPTER:
  *   adp   adapter   third-party isolation module
  *   avt   Antares Vivarium, the client this adapter draws for
+ *   tmpl  template  an organ template of ase-render-data
  *
  * ECS TYPES COMPLIANCE
  *
@@ -66,6 +69,303 @@ constexpr const char* GODOT_KEY_AMOUNT_MM = "amount_mm";      // irrigate reques
 constexpr const char* GODOT_KEY_ELAPSED = "elapsed_s";        // clock record: game time, seconds (TIM_ELAPSED_GAME)
 constexpr const char* GODOT_KEY_DAY = "day";                  // clock record: game day (TIM_DAY_COUNT)
 constexpr const char* GODOT_KEY_HOUR = "hour";                // clock record: hour of the game day (TIM_CURRENT_HOUR)
+constexpr const char* GODOT_KEY_SOIL = "soil";                // patch record and lay request: ground code (GODOT_SOIL_*)
+constexpr const char* GODOT_KEY_SPECIES = "species";          // lay request: catalog id of the species (KernelEmbeddedHost::name_id)
+constexpr const char* GODOT_KEY_SEED = "seed";                // lay request: seed of the plant
+constexpr const char* GODOT_KEY_BODY = "body";                // organ record: object id of the patch the plant stands on
+constexpr const char* GODOT_KEY_ORDER = "order";              // organ record: branching order of its axis (stem 0)
+constexpr const char* GODOT_KEY_X = "x";                      // organ record: metres east of the stem base; patch record: the stem base, world metres east; corner record: place on the unit
+constexpr const char* GODOT_KEY_Y = "y";                      // organ record: metres above the ground at the stem base; patch record: the stem base, world metres up (TRN_FLAT_HGT); corner record: place along the unit
+constexpr const char* GODOT_KEY_Z = "z";                      // organ record: metres north of the stem base; patch record: the stem base, world metres north; corner record: place on the unit
+// An organ record carries the organ's frame in place of a direction: the unit quaternion ase-render-data
+// builds from the direction and roll of ase-phytomer or ase-radix (hub_plnt_part_quat_comp.hpp). It turns
+// the plant frame (y up) into the organ's: local y along the organ, local x along its roll axis.
+constexpr const char* GODOT_KEY_QX = "qx";                    // organ record: frame, vector part, east share
+constexpr const char* GODOT_KEY_QY = "qy";                    // organ record: frame, vector part, upward share
+constexpr const char* GODOT_KEY_QZ = "qz";                    // organ record: frame, vector part, north share
+constexpr const char* GODOT_KEY_QW = "qw";                    // organ record: frame, scalar part
+constexpr const char* GODOT_KEY_LENGTH = "length";            // organ record: length, metres (leaf: edge of the equal square)
+constexpr const char* GODOT_KEY_RADIUS = "radius";            // organ record: radius, metres (internode and root segment, else 0)
+constexpr const char* GODOT_KEY_BARK = "bark";                // segment record only: share of the stem-base bark at the middle of the internode, 0 white to 1 base bark (usecase:100395)
+constexpr double GODOT_BARK_WHITE = 0.0;                      // share of the stem-base bark of the white bark, the lower end of its range
+constexpr double GODOT_BARK_BASE = 1.0;                       // share of the stem-base bark of the base bark whole, the upper end of its range
+// The bark tiling of an internode (03.11 step 2, the material data of a section; usecase:100395), one record per
+// internode with lenticels on the tile port, its object id the internode; ase-render-data computed all three.
+constexpr const char* GODOT_KEY_TILE_AROUND = "around";       // tile record: tiles of the white bark around the tube
+constexpr const char* GODOT_KEY_TILE_ALONG = "along";         // tile record: tiles of the white bark along the tube
+constexpr const char* GODOT_KEY_TILE_BASE = "base";           // tile record: tiles of the stem-base bark per tile of the white bark
+constexpr double GODOT_TILE_NONE = 1.0;                       // tiling of an internode without a tile record: the scale of the material itself
+
+/**
+ * The organ ports of ase-pl-flora (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.3): one port per organ class,
+ * one record per organ, its object id the organ. The class is the index of every per-class store of
+ * the adapter; its word names the port in the start configuration ("ports") and the record in the
+ * self-test table - the same word in both places.
+ */
+constexpr uint32_t GODOT_ORGAN_SEGMENT = 0u;                  // internodes of every shoot
+constexpr uint32_t GODOT_ORGAN_LEAF = 1u;                     // leaves
+constexpr uint32_t GODOT_ORGAN_MALE = 2u;                     // male catkins
+constexpr uint32_t GODOT_ORGAN_FEMALE = 3u;                   // female catkins
+constexpr uint32_t GODOT_ORGAN_FRUIT = 4u;                    // fruit stands
+constexpr uint32_t GODOT_ORGAN_ROOT = 5u;                     // root segments of every root
+constexpr uint32_t GODOT_ORGAN_COUNT = 6u;                    // organ classes
+constexpr const char* GODOT_ORGAN_WORD_SEGMENT = "segment";   // word of GODOT_ORGAN_SEGMENT
+constexpr const char* GODOT_ORGAN_WORD_LEAF = "leaf";         // word of GODOT_ORGAN_LEAF
+constexpr const char* GODOT_ORGAN_WORD_MALE = "male";         // word of GODOT_ORGAN_MALE
+constexpr const char* GODOT_ORGAN_WORD_FEMALE = "female";     // word of GODOT_ORGAN_FEMALE
+constexpr const char* GODOT_ORGAN_WORD_FRUIT = "fruit";       // word of GODOT_ORGAN_FRUIT
+constexpr const char* GODOT_ORGAN_WORD_ROOT = "root";         // word of GODOT_ORGAN_ROOT
+constexpr const char* GODOT_ORGAN_SCHEDULE = "Dissemination"; // schedule in which ase-phytomer and ase-radix change the organ rows
+constexpr uint32_t GODOT_ORGAN_READS_PER_RUN = 2u;            // organ reads after a new run: that frame, and the next, in which the plugin's sync system (Reception) and export (Production) carry the run's rows to the ports
+
+/**
+ * The instance ports of ase-pl-flora (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2, build form of the
+ * instance matrix): one port per DRAWN organ class - every class before the root, which lies in the
+ * ground and is not drawn (03.1 point 4) - one record per organ, its object id the organ, the twelve
+ * values of its plant-local 3x4 in the row order of MultiMesh::set_buffer. ase-render-data computes them;
+ * the view copies them. The start configuration names the port under "<word>_instance".
+ */
+constexpr uint32_t GODOT_DRAWN_COUNT = 5u;                    // organ classes the view draws: GODOT_ORGAN_SEGMENT up to GODOT_ORGAN_FRUIT
+constexpr const char* GODOT_INSTANCE_SUFFIX = "_instance";    // start configuration: ports.<word>_instance names the instance port of a class
+constexpr uint32_t GODOT_INSTANCE_VALUES = 12u;               // values of one instance record: three rows of basis and origin
+constexpr uint32_t GODOT_INSTANCE_CUSTOM_VALUES = 4u;         // custom data of one instance on the MultiMesh buffer after its twelve values: r = share of the stem-base bark, g b = tiles of the white bark around and along, a = tiles of the base bark per white tile
+constexpr const char* GODOT_KEY_M00 = "m00";                  // instance record, row 0 (east): the template's x axis
+constexpr const char* GODOT_KEY_M01 = "m01";                  // instance record, row 0 (east): the template's y axis
+constexpr const char* GODOT_KEY_M02 = "m02";                  // instance record, row 0 (east): the template's z axis
+constexpr const char* GODOT_KEY_M03 = "m03";                  // instance record, row 0 (east): the origin, metres
+constexpr const char* GODOT_KEY_M10 = "m10";                  // instance record, row 1 (up): the template's x axis
+constexpr const char* GODOT_KEY_M11 = "m11";                  // instance record, row 1 (up): the template's y axis
+constexpr const char* GODOT_KEY_M12 = "m12";                  // instance record, row 1 (up): the template's z axis
+constexpr const char* GODOT_KEY_M13 = "m13";                  // instance record, row 1 (up): the origin, metres
+constexpr const char* GODOT_KEY_M20 = "m20";                  // instance record, row 2 (north): the template's x axis
+constexpr const char* GODOT_KEY_M21 = "m21";                  // instance record, row 2 (north): the template's y axis
+constexpr const char* GODOT_KEY_M22 = "m22";                  // instance record, row 2 (north): the template's z axis
+constexpr const char* GODOT_KEY_M23 = "m23";                  // instance record, row 2 (north): the origin, metres
+
+/**
+ * The ground of the scene (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8): where a patch lies, the measured
+ * square of terrain and the brook are data of the start configuration; ase-pl-flora takes them on its
+ * scene, ground and brook ports and shows the measured heights on its terrain port, one record per
+ * sample, its object id the sample. World positions are metres, x east, z north - the same keys as
+ * the organ records, here in the world instead of plant-local. The adapter computes none of it.
+ */
+constexpr const char* GODOT_KEY_HALF = "half_m";              // lay requests: half edge of a patch or ground square, half width of a bed; patch record: half edge
+constexpr const char* GODOT_KEY_STEP = "step_m";              // ground lay request: distance of two terrain samples, metres
+constexpr const char* GODOT_KEY_END_X = "end_x";              // brook lay request: east end of the bed, world metres
+constexpr const char* GODOT_KEY_END_Z = "end_z";              // brook lay request: north end of the bed, world metres
+constexpr const char* GODOT_KEY_DEPTH = "depth_m";            // brook lay request: depth of the bed below the ground, metres
+constexpr const char* GODOT_KEY_BASE = "base_m3_s";           // brook lay request: base flow of the brook without rain, m3/s (ase-hydro)
+constexpr const char* GODOT_KEY_CATCHMENT = "catchment_m2";   // brook lay request: area whose rain runs into the brook, m2 (ase-hydro)
+constexpr const char* GODOT_KEY_HEIGHT = "height";            // terrain record: ground height at the sample, metres
+constexpr const char* GODOT_KEY_NX = "nx";                    // terrain record: unit normal of the ground, east share (ase-render-data); corner record: its normal, x share
+constexpr const char* GODOT_KEY_NY = "ny";                    // terrain record: unit normal of the ground, upward share; corner record: its normal, y share
+constexpr const char* GODOT_KEY_NZ = "nz";                    // terrain record: unit normal of the ground, north share; corner record: its normal, z share
+constexpr const char* GODOT_KEY_U = "u";                      // terrain record: texture coordinate, world metres east; corner record: around or across, 0..1
+constexpr const char* GODOT_KEY_V = "v";                      // terrain record: texture coordinate, world metres north; corner record: along, 0..1
+constexpr const char* GODOT_KEY_SW = "sw";                    // ground cell record: object id of the south-west corner sample
+constexpr const char* GODOT_KEY_SE = "se";                    // ground cell record: object id of the south-east corner sample
+constexpr const char* GODOT_KEY_NE = "ne";                    // ground cell record: object id of the north-east corner sample
+constexpr const char* GODOT_KEY_NW = "nw";                    // ground cell record: object id of the north-west corner sample
+constexpr const char* GODOT_TERRAIN_SCHEDULE = "Dissemination"; // schedule in which ase-terrain publishes changed sample heights
+constexpr uint32_t GODOT_TERRAIN_READS_PER_RUN = 2u;          // terrain reads after a new run: that frame and the next, as for the organs
+
+/**
+ * The organ templates (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2, usecase:101011 lay out organ templates):
+ * ase-render-data builds the fine and the coarse cylinder and the unit leaf on the unit, ase-pl-flora lays
+ * their corners on one port and their triangles on another, each record with the code of its template. The
+ * codes and keys are the plugin's (ase-pl-flora types.hpp, FLORA_HOST_TMPL_*, FLORA_HOST_KEY_*), repeated
+ * here because the adapter reads the port and never links the plugin. A corner record carries the code,
+ * its index and x, y, z, nx, ny, nz, u, v; a triangle record the code and three corner indices, clockwise
+ * seen from outside. The adapter builds no ring and decides no winding.
+ */
+constexpr const char* GODOT_KEY_TEMPLATE = "template";        // template records: the code of the template, GODOT_TMPL_*
+constexpr const char* GODOT_KEY_INDEX = "index";              // corner record: its place in the template, named by the triangles
+constexpr const char* GODOT_KEY_CORNER_A = "a";               // triangle record: index of its first corner
+constexpr const char* GODOT_KEY_CORNER_B = "b";               // triangle record: index of its second corner
+constexpr const char* GODOT_KEY_CORNER_C = "c";               // triangle record: index of its third corner
+constexpr uint32_t GODOT_TMPL_FINE = 0u;                      // template code: the fine cylinder, the internodes up to the shown orders
+constexpr uint32_t GODOT_TMPL_CORS = 1u;                      // template code: the coarse cylinder, the internodes above them
+constexpr uint32_t GODOT_TMPL_LEAF = 2u;                      // template code: the unit leaf, the stand-in of a leaf or a seed whose template file is missing
+constexpr uint32_t GODOT_TMPL_COUNT = 3u;                     // template codes the ports carry
+
+/**
+ * The sky and the light of the scene (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3): ase-pl-sky
+ * lays four records on its scene port every frame (SkyHostScneExptSystem), one per object id below.
+ * The sun record carries the unit direction TOWARDS the sun in the world frame of the organ records
+ * (x east, y up, z north) - a directional light shines along its negative; colours are shares 0..1.
+ * The ids and keys are the plugin's (ase-pl-sky types.hpp, SKY_HOST_*), repeated here because the
+ * adapter reads the port and never links the plugin. The adapter computes none of the light.
+ */
+constexpr uint32_t GODOT_SKY_RECORD_SUN = 1u;                 // sky record object id: the sun - direction towards it, colour, strength
+constexpr uint32_t GODOT_SKY_RECORD_AMBIENT = 2u;             // sky record object id: the ambient light - colour, strength
+constexpr uint32_t GODOT_SKY_RECORD_BACKGROUND = 3u;          // sky record object id: the background of the sky - colour
+constexpr uint32_t GODOT_SKY_RECORD_FOG = 4u;                 // sky record object id: the fog - colour, near and far distance
+constexpr uint32_t GODOT_SKY_RECORD_COUNT = 4u;               // records of one sky publication: sun, ambient, background, fog
+constexpr const char* GODOT_KEY_R = "r";                      // sky records: red share of the colour, 0..1
+constexpr const char* GODOT_KEY_G = "g";                      // sky records: green share of the colour, 0..1
+constexpr const char* GODOT_KEY_B = "b";                      // sky records: blue share of the colour, 0..1
+constexpr const char* GODOT_KEY_INTENSITY = "intensity";      // sun and ambient record: strength of the light
+constexpr const char* GODOT_KEY_NEAR = "near";                // fog record: distance where the fog begins, metres
+constexpr const char* GODOT_KEY_FAR = "far";                  // fog record: distance where the fog is full, metres
+
+/**
+ * Plant geometry (godot_plant_geometry.hpp): the template, ground and instance records go unchanged into the
+ * arrays the instances are drawn with - no organ and no template is computed here.
+ */
+constexpr float GODOT_GEOMETRY_EPSILON = 1.0e-6f;   // a length or extent shorter than this counts as none
+constexpr float GODOT_GEOMETRY_UPRIGHT = 0.99f;     // |up share| above which a direction counts as upright: its frame is taken against east, not against up
+constexpr double GODOT_ORDER_EVERY = -1.0;          // split order below the stem's (0): every organ of a class lies above it
+
+/**
+ * The 3D scene of the care view (godot_plant_scene.hpp, PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 point 2):
+ * the names of its nodes and the keys of the "view" section of the start configuration - the near
+ * view and the visible orders by frame time (03.6, V8) are numbers of that section. Every plant stands as
+ * one node per body (GODOT_PLANT_BODY_PREFIX and the patch's object id) under GODOT_PLANT_BODIES, its six
+ * instance nodes under it.
+ */
+constexpr const char* GODOT_PLANT_SCENE_ROOT = "PlantScene";      // name of the scene's root node
+constexpr const char* GODOT_PLANT_CAMERA = "PlantCamera";         // the camera of the near view
+constexpr const char* GODOT_PLANT_SUN = "PlantSun";               // the directional light the sun of the sky port sets
+constexpr const char* GODOT_PLANT_ENVIRONMENT = "PlantEnvironment";  // sky colour, ambient light and fog of the sky port
+constexpr const char* GODOT_PLANT_GROUND = "PlantGround";         // the ground from the terrain samples
+constexpr const char* GODOT_PLANT_BODIES = "PlantBodies";         // the node the plants stand under, one child per body
+constexpr const char* GODOT_PLANT_BODY_PREFIX = "PlantBody";      // name of a plant's node: this and the object id of its patch
+constexpr const char* GODOT_PLANT_TUBES = "PlantTubes";           // the internodes up to the shown orders, on the fine cylinder
+constexpr const char* GODOT_PLANT_TWIGS = "PlantTwigs";           // the internodes above them, on the coarse cylinder
+constexpr const char* GODOT_PLANT_LEAVES = "PlantLeaves";         // the leaves as instances
+constexpr const char* GODOT_PLANT_MALE = "PlantMale";             // the male catkins as instances
+constexpr const char* GODOT_PLANT_FEMALE = "PlantFemale";         // the female catkins as instances
+constexpr const char* GODOT_PLANT_FRUIT = "PlantFruit";           // the fruit stands as instances
+constexpr const char* GODOT_PLANT_SEEDS = "PlantSeeds";           // the seed bodies of ase-physics as instances, in world places (seed port)
+constexpr const char* GODOT_VIEW_KEY = "view";                    // start configuration: the section of the 3D scene
+constexpr const char* GODOT_VIEW_KEY_DISTANCE = "camera_distance_m";  // view: metres from the focused stem base to the camera, along the ground
+constexpr const char* GODOT_VIEW_KEY_HEIGHT = "camera_height_m";  // view: metres of the camera above the focused stem base
+constexpr const char* GODOT_VIEW_KEY_LOOK = "camera_look_m";      // view: metres above the stem base the camera looks at
+constexpr const char* GODOT_VIEW_KEY_FOV = "camera_fov_deg";      // view: vertical field of view, degrees
+constexpr const char* GODOT_VIEW_KEY_BUDGET = "frame_budget_ms";  // view: frame time the scene may take (OrderBudget)
+constexpr const char* GODOT_VIEW_KEY_HEADROOM = "headroom";       // view: share of the budget below which a frame is calm
+constexpr const char* GODOT_VIEW_KEY_CEILING = "order_ceiling";   // view: most orders ever drawn on the fine cylinder
+constexpr const char* GODOT_VIEW_KEY_START = "order_start";       // view: orders drawn on the fine cylinder at the start
+constexpr const char* GODOT_VIEW_KEY_CALM = "calm_frames";        // view: calm frames in a row that give one order more
+constexpr const char* GODOT_VIEW_KEY_OVER = "over_frames";        // view: over frames in a row that take one order back
+constexpr const char* GODOT_VIEW_KEY_PICK = "pick_px";            // view: logical pixels around a tap within which the middle of an internode is hit (cutting mode, 03.10 step 9)
+constexpr float GODOT_TUBE_MID = 0.5f;                            // middle of the unit tube template (y from 0 to 1): where a tap picks an internode
+constexpr double GODOT_MS_PER_SECOND = 1000.0;                    // the order budget takes frame times in milliseconds
+constexpr const char* GODOT_ROLE_BARK = "bark_white";             // material role of the white bark of the tubes and twigs
+constexpr const char* GODOT_ROLE_BARK_BASE = "bark_base";         // material role of the stem-base bark, mixed in by the share each internode carries
+constexpr const char* GODOT_ROLE_LEAF = "leaf";                   // template role of a leaf
+constexpr const char* GODOT_ROLE_MALE = "male";                   // template role of a male catkin
+constexpr const char* GODOT_ROLE_FEMALE = "female";               // template role of a female catkin
+constexpr const char* GODOT_ROLE_FRUIT = "fruit";                 // template role of a fruit stand
+constexpr const char* GODOT_ROLE_NUTLET = "nutlet";               // template role of a winged nutlet, built in metres (ase-assgen birch_nutlet)
+/**
+ * The stand-in of a seed while the nutlet template is missing: the unit leaf at the width of a birch nutlet with
+ * both wings, ϑ OTL/NUT/WIDTH of DSGN_024 (ONWInit 0.004 m; BSBI Plant Crib: "total width of nutlet with wings
+ * 3-5 mm"). A bound template carries its own size and is drawn at scale one.
+ */
+constexpr float GODOT_NUTLET_STAND_IN_M = 0.004f;                 // m - width the stand-in leaf of a seed is drawn at
+
+/**
+ * Asset binding (godot_asset_binding.hpp, PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.2).
+ */
+constexpr uint32_t GODOT_SHA256_HEX_DIGITS = 64u;                            // hex digits of one SHA-256 checksum
+constexpr const char* GODOT_ASSET_MISSING = "asset missing ";               // boot line of a name without its asset, the name follows
+constexpr const char* GODOT_ASSETS_PATH = "res://config/vivarium_assets.json";  // asset list of the play stages, staged beside the start configuration
+constexpr const char* GODOT_ASSETS_KEY_MANIFEST = "manifest";               // asset list: res:// path of the manifest of the asset set
+constexpr const char* GODOT_ASSETS_KEY_ROOT = "asset_root";                 // asset list: res:// directory the manifest's files lie in
+constexpr const char* GODOT_ASSETS_KEY_STAGES = "stages";                   // asset list: one entry per play stage
+constexpr const char* GODOT_ASSETS_KEY_STAGE = "stage";                     // stage entry: the play stage it lists
+constexpr const char* GODOT_ASSETS_KEY_MATERIALS = "materials";             // stage entry: role → material of the list
+constexpr const char* GODOT_ASSETS_KEY_TEMPLATES = "templates";             // stage entry: role → organ template of the list
+constexpr const char* GODOT_ASSETS_KEY_ENTRIES = "assets";                  // manifest: its entries (ase-web-curator scripts/export-avt-assets.cjs)
+constexpr const char* GODOT_ASSETS_KEY_ASSET = "name";                      // manifest entry: which asset of the list it delivers
+constexpr const char* GODOT_ASSETS_KEY_FILE = "file";                       // manifest entry: its file below the asset root
+constexpr const char* GODOT_ASSETS_KEY_SHA256 = "sha256";                   // manifest entry: SHA-256 of that file
+constexpr const char* GODOT_ASSETS_COMMENT = "_";                           // a key of the list starting with it is a comment, never a role
+constexpr const char* GODOT_ROLE_GROUND_MEADOW = "ground_meadow";           // material role of meadow soil (GODOT_SOIL_MEADOW)
+constexpr const char* GODOT_ROLE_GROUND_FOREST = "ground_forest";           // material role of forest floor (GODOT_SOIL_FOREST)
+constexpr uint32_t GODOT_COLOR_ASSET_MISSING = 0xFF00FFFFu;                 // error material: one magenta for every role whose asset is missing
+constexpr const char* GODOT_SHADER_SOIL_REL = "soil_rel";                   // instance uniform of the ground material: soil water over field capacity of the focused patch, 0..1
+constexpr const char* GODOT_SHADER_CONDITION = "condition";                 // instance uniform of the leaf material: GODOT_COND_* of the plant's patch
+
+/**
+ * The bark of the internodes (usecase:100395 age the bark, DSGN_024): one material for the tubes and
+ * twigs that mixes the white bark with the stem-base bark by the share each instance carries in its
+ * custom data (INSTANCE_CUSTOM.r, GODOT_INSTANCE_CUSTOM_VALUES). Its uniforms take the colour, the
+ * albedo, normal and roughness textures, the roughness and the UV scale of the two bound materials
+ * (GODOT_ROLE_BARK, GODOT_ROLE_BARK_BASE); a texture a material lacks samples white, a flat normal or
+ * full roughness. The tiling of the section stands in the rest of the custom data (INSTANCE_CUSTOM.gba,
+ * computed by ase-render-data): the texture coordinates of the unit cylinder are multiplied by the tiles of
+ * the white bark around and along the tube, and those of the base bark once more by its tiles per white
+ * tile. An internode without a tile record carries GODOT_TILE_NONE, the scale of the material itself.
+ */
+constexpr const char* GODOT_BARK_SHADER_CODE =
+    "shader_type spatial;\n"
+    "uniform vec4 white_color : source_color = vec4(1.0);\n"
+    "uniform sampler2D white_albedo : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;\n"
+    "uniform sampler2D white_normal : hint_normal, filter_linear_mipmap, repeat_enable;\n"
+    "uniform sampler2D white_rough : hint_default_white, filter_linear_mipmap, repeat_enable;\n"
+    "uniform float white_roughness = 1.0;\n"
+    "uniform vec2 white_uv = vec2(1.0);\n"
+    "uniform vec4 base_color : source_color = vec4(1.0);\n"
+    "uniform sampler2D base_albedo : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;\n"
+    "uniform sampler2D base_normal : hint_normal, filter_linear_mipmap, repeat_enable;\n"
+    "uniform sampler2D base_rough : hint_default_white, filter_linear_mipmap, repeat_enable;\n"
+    "uniform float base_roughness = 1.0;\n"
+    "uniform vec2 base_uv = vec2(1.0);\n"
+    "varying float base_share;\n"
+    "varying vec3 tiles;\n"
+    "void vertex() {\n"
+    "    base_share = clamp(INSTANCE_CUSTOM.r, 0.0, 1.0);\n"
+    "    tiles = INSTANCE_CUSTOM.gba;\n"
+    "}\n"
+    "void fragment() {\n"
+    "    vec2 uw = UV * tiles.xy * white_uv;\n"
+    "    vec2 ub = UV * tiles.xy * tiles.z * base_uv;\n"
+    "    vec3 white = texture(white_albedo, uw).rgb * white_color.rgb;\n"
+    "    vec3 base = texture(base_albedo, ub).rgb * base_color.rgb;\n"
+    "    ALBEDO = mix(white, base, base_share);\n"
+    "    NORMAL_MAP = mix(texture(white_normal, uw).rgb, texture(base_normal, ub).rgb, base_share);\n"
+    "    ROUGHNESS = mix(texture(white_rough, uw).r * white_roughness, texture(base_rough, ub).r * base_roughness,\n"
+    "                    base_share);\n"
+    "}\n";
+constexpr const char* GODOT_BARK_WHITE_COLOR = "white_color";        // bark shader uniform: albedo colour of the white bark
+constexpr const char* GODOT_BARK_WHITE_ALBEDO = "white_albedo";      // bark shader uniform: albedo texture of the white bark
+constexpr const char* GODOT_BARK_WHITE_NORMAL = "white_normal";      // bark shader uniform: normal texture of the white bark
+constexpr const char* GODOT_BARK_WHITE_ROUGH = "white_rough";        // bark shader uniform: roughness texture of the white bark
+constexpr const char* GODOT_BARK_WHITE_ROUGHNESS = "white_roughness";  // bark shader uniform: roughness of the white bark
+constexpr const char* GODOT_BARK_WHITE_UV = "white_uv";              // bark shader uniform: UV scale of the white bark
+constexpr const char* GODOT_BARK_BASE_COLOR = "base_color";          // bark shader uniform: albedo colour of the stem-base bark
+constexpr const char* GODOT_BARK_BASE_ALBEDO = "base_albedo";        // bark shader uniform: albedo texture of the stem-base bark
+constexpr const char* GODOT_BARK_BASE_NORMAL = "base_normal";        // bark shader uniform: normal texture of the stem-base bark
+constexpr const char* GODOT_BARK_BASE_ROUGH = "base_rough";          // bark shader uniform: roughness texture of the stem-base bark
+constexpr const char* GODOT_BARK_BASE_ROUGHNESS = "base_roughness";  // bark shader uniform: roughness of the stem-base bark
+constexpr const char* GODOT_BARK_BASE_UV = "base_uv";                // bark shader uniform: UV scale of the stem-base bark
+
+/**
+ * Asset showcase (godot_asset_showcase.hpp, PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7).
+ */
+constexpr const char* GODOT_SHOWCASE_LINE = "asset showcase";   // first words of the showcase's log line
+constexpr const char* GODOT_SHOWCASE_ROOT = "AssetShowcase";    // name of the showcase's root node
+constexpr const char* GODOT_SHOWCASE_SUN = "ShowcaseSun";       // name of the light the sun of the host sets
+constexpr float GODOT_SHOWCASE_SPACING = 1.5f;                  // metres between two slots of one row
+constexpr float GODOT_SHOWCASE_SLOT = 1.0f;                     // metres a template is scaled to along its largest extent
+constexpr float GODOT_SHOWCASE_SPHERE_RADIUS = 0.5f;            // metres: radius of the sphere a material is shown on
+constexpr float GODOT_SHOWCASE_PLANE_ROW = 1.5f;                // z of the row of planes; the spheres stand at z 0
+constexpr float GODOT_SHOWCASE_TEMPLATE_ROW = 3.0f;             // z of the row of organ templates
+constexpr float GODOT_SHOWCASE_FOV_DEGREES = 60.0f;             // horizontal field of view the showcase camera keeps
+constexpr float GODOT_SHOWCASE_HALF_FOV_TAN = 0.57735027f;      // tan of half of GODOT_SHOWCASE_FOV_DEGREES
+constexpr float GODOT_SHOWCASE_CAMERA_HEIGHT_SHARE = 0.6f;      // camera height as a share of its distance: a view from above at about 31 degrees
+
+/**
+ * The ground of a patch: the code the lay request carries and the patch record returns
+ * (ase-pl-flora FLORA_SOIL_*), and the word the start configuration names it by.
+ */
+constexpr uint8_t GODOT_SOIL_MEADOW = 0;                      // meadow soil
+constexpr uint8_t GODOT_SOIL_FOREST = 1;                      // forest floor
+constexpr uint8_t GODOT_SOIL_COUNT = 2;                       // grounds the view has a material for
+constexpr const char* GODOT_SOIL_WORD_MEADOW = "meadow";      // word of GODOT_SOIL_MEADOW in the start configuration
+constexpr const char* GODOT_SOIL_WORD_FOREST = "forest";      // word of GODOT_SOIL_FOREST in the start configuration
 
 /**
  * The codes the patch record carries - those of ase-plant (PLANT_STAGE_*, PLANT_COND_*), forwarded
@@ -140,8 +440,15 @@ constexpr const char* GODOT_SELFTEST_KEY_STEPS = "steps";            // catch_up
 constexpr const char* GODOT_SELFTEST_KEY_AMOUNT = "amount_mm";       // irrigate: water poured, mm
 constexpr const char* GODOT_SELFTEST_KEY_STATUS = "status";          // irrigate: the expected HostStatus
 constexpr const char* GODOT_SELFTEST_KEY_COUNT = "count";            // records: the expected count
+constexpr const char* GODOT_SELFTEST_KEY_LAY = "lay";                // action: lay one patch through the scene port
+constexpr const char* GODOT_SELFTEST_KEY_SPECIES = "species";        // lay: catalog id text of the species
+constexpr const char* GODOT_SELFTEST_KEY_SEED = "seed";              // lay: seed of the plant
+constexpr const char* GODOT_SELFTEST_KEY_SOIL = "soil";              // lay: ground word (GODOT_SOIL_WORDS)
+constexpr const char* GODOT_SELFTEST_KEY_X = "x";                    // lay: centre of the patch, world metres east
+constexpr const char* GODOT_SELFTEST_KEY_Z = "z";                    // lay: centre of the patch, world metres north
+constexpr const char* GODOT_SELFTEST_KEY_HALF = "half_m";            // lay: half edge of the patch square, metres
 constexpr const char* GODOT_SELFTEST_RECORD_CLOCK = "clock";         // record: the clock port
-constexpr const char* GODOT_SELFTEST_RECORD_PATCH = "patch";         // record: the patch port
+constexpr const char* GODOT_SELFTEST_RECORD_PATCH = "patch";         // record: the patch port; an organ port by its GODOT_ORGAN_WORDS
 constexpr const char* GODOT_SELFTEST_OP_EQ = "eq";                   // |actual - value| <= tolerance
 constexpr const char* GODOT_SELFTEST_OP_NE = "ne";                   // |actual - value| > tolerance
 constexpr const char* GODOT_SELFTEST_OP_LT = "lt";                   // actual < value
@@ -166,6 +473,13 @@ constexpr const char* GODOT_PSS_SOURCE = "/proc/self/smaps_rollup";  // proporti
 constexpr const char* GODOT_PSS_KEY = "Pss:";                         // its line, value in kB
 
 /**
+ * Measurement line of one cycle (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.6, godot_cycle_measure.hpp):
+ * the organs of the organ ports per branching order, one count per order up to this many; an organ of
+ * a deeper order counts in the last one, which the line names as "<n>+".
+ */
+constexpr uint32_t GODOT_MEASURE_ORDERS = 16u;                       // orders counted one by one
+
+/**
  * Boot steps of GodotHostResourceManager::boot - the name a failure is reported under.
  */
 constexpr const char* GODOT_STEP_NONE = "";                // no failure recorded
@@ -177,6 +491,9 @@ constexpr const char* GODOT_STEP_DATA_ROOT = "data_root";  // KernelEmbeddedHost
 constexpr const char* GODOT_STEP_LOAD = "load_units";      // KernelEmbeddedHost::load_units
 constexpr const char* GODOT_STEP_PORT = "port";            // a configured port is not offered
 constexpr const char* GODOT_STEP_START = "start";          // KernelEmbeddedHost::start
+constexpr const char* GODOT_STEP_LAY = "lay";              // the lay request of a configured patch was refused
+constexpr const char* GODOT_STEP_GROUND = "ground";        // the lay request of the configured ground square was refused
+constexpr const char* GODOT_STEP_BROOK = "brook";          // the lay request of a configured brook was refused
 constexpr const char* GODOT_STEP_ADVANCE = "advance";      // KernelEmbeddedHost::advance
 constexpr const char* GODOT_STEP_SNAPSHOT = "snapshot";    // reading a port snapshot
 constexpr const char* GODOT_STEP_STOP = "stop";            // KernelEmbeddedHost::stop
@@ -220,6 +537,7 @@ constexpr uint32_t GODOT_HOOK_EXIT_HASH = 3218959716u;            // signature v
  * background arrives as one long frame and is caught up in ordinary ticks over the next frames.
  */
 constexpr double GODOT_CATCH_UP_NOTE_S = 1.0;   // a frame longer than this is a return from the background and gets one line
+constexpr uint32_t GODOT_SOWING_FIRST = 0u;      // the first sowing of a view: the seeds of the start configuration (godot_new_seed.hpp)
 constexpr uint64_t GODOT_WATER_WAIT_STEPS = 3u;  // Dissemination runs a pour may take to show in the soil water: plugin, hydro, balance, publish
 
 /**

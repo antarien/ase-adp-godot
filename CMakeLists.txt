@@ -49,15 +49,32 @@ foreach(_adp_godot_dep godot::cpp ase::kernel-embedded ase::fileio ase::utils as
     endif()
 endforeach()
 
-# ── Host part: one KernelEmbeddedHost behind a resource manager, and the placement of the view's
-#    layout on a surface of any aspect ratio - no Godot type in either, so both are tested without a
-#    Godot process ──
+# ── Host part: one KernelEmbeddedHost behind a resource manager, the placement of the view's layout
+#    on a surface of any aspect ratio, the plant geometry from the organ views and the template ports, the visible orders by
+#    frame time and the asset binding (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1, 03.2) - no Godot type
+#    in any of them, so all are tested without a Godot process ──
 add_library(ase-adp-godot-host STATIC
     src/godot_host_resource_manager.cpp
     src/godot_view_layout.cpp
+    src/godot_plant_geometry.cpp
+    src/godot_order_budget.cpp
+    src/godot_cycle_measure.cpp      # the measurement line of one cycle, also compiled into avt-headless (03.6)
+    src/godot_garden_return.cpp      # the return from the background and its catch-up (usecase:100390 return to the garden, 03.6)
+    src/godot_patch_focus.cpp        # the focused patch and the camera's near view onto it (usecase:100386 select a patch, 03.1)
+    src/godot_new_seed.cpp           # the seed of every sowing, a new one with every Reiniciar (usecase:100388 sow a new seed, 03.1)
+    src/godot_asset_binding.cpp
+    src/godot_asset_showcase.cpp     # the plan of the asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7)
 
     include/ase/adp/godot/godot_host_resource_manager.hpp
     include/ase/adp/godot/godot_view_layout.hpp
+    include/ase/adp/godot/godot_plant_geometry.hpp
+    include/ase/adp/godot/godot_order_budget.hpp
+    include/ase/adp/godot/godot_cycle_measure.hpp
+    include/ase/adp/godot/godot_garden_return.hpp
+    include/ase/adp/godot/godot_patch_focus.hpp
+    include/ase/adp/godot/godot_new_seed.hpp
+    include/ase/adp/godot/godot_asset_binding.hpp
+    include/ase/adp/godot/godot_asset_showcase.hpp
     include/ase/adp/godot/types.hpp
 )
 add_library(ase::adp::godot-host ALIAS ase-adp-godot-host)
@@ -89,10 +106,32 @@ endif()
 # ── GDExtension library loaded by Godot ─────────────────────────────────────
 add_library(ase-adp-godot SHARED
     src/godot_registration.cpp   # GDExtension entry vivarium_library_init + class binding
-    src/godot_vivarium_node.cpp  # VivariumView: tick, input, drawing, lifecycle
+    src/godot_vivarium_node.cpp  # VivariumView: lifecycle, host boot, frame, log
+    src/godot_vivarium_config.cpp       # VivariumView: start configuration, stage, modes, view section
+    src/godot_vivarium_host_config.cpp  # VivariumView: ports, operations, patches, ground, brooks
+    src/godot_vivarium_layout.cpp       # VivariumView: logical surface, bands, places, buttons, texts
+    src/godot_vivarium_assets.cpp       # VivariumView: asset list of the play stage and its manifest (03.2)
+    src/godot_vivarium_input.cpp        # VivariumView: taps and the selection of a patch
+    src/godot_vivarium_water.cpp        # VivariumView: Regar, the pour to the patch port
+    src/godot_vivarium_prune.cpp        # VivariumView: cutting mode, the internode under the finger, the cut
+    src/godot_vivarium_draw.cpp         # VivariumView: placement on the visible surface and the canvas
+    src/godot_vivarium_scene.cpp        # VivariumView: what a frame fills of the 3D scene (03.1)
+    src/godot_vivarium_measure.cpp      # VivariumView: self-test and measurement modes (02.3)
+    src/godot_config_read.cpp           # readers of one key of the start configuration
+    src/godot_view_support.cpp          # text conversion, font and editor check of the view
+    src/godot_asset_loader.cpp   # the one loader of bound asset files: GLTFDocument, template mesh, material (03.2)
+    src/godot_asset_showcase_scene.cpp  # the asset showcase in Godot: sphere, plane, model (04.7)
+    src/godot_plant_scene.cpp    # the 3D scene of the care view: camera, sun, sky, ground, tubes, instances (03.1)
+    src/godot_plant_look.cpp     # the materials and organ template files of that scene, bound once (03.2)
 
     include/ase/adp/godot/godot_registration.hpp
     include/ase/adp/godot/godot_vivarium_node.hpp
+    include/ase/adp/godot/godot_asset_loader.hpp
+    include/ase/adp/godot/godot_asset_showcase_scene.hpp
+    include/ase/adp/godot/godot_plant_scene.hpp
+    include/ase/adp/godot/godot_plant_look.hpp
+    include/ase/adp/godot/godot_config_read.hpp
+    include/ase/adp/godot/godot_view_support.hpp
 )
 add_library(ase::adp::godot ALIAS ase-adp-godot)
 

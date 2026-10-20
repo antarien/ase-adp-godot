@@ -3,16 +3,18 @@
  *
  * @file        godot_host_resource_manager.cpp
  * @brief       GodotHostResourceManager - External resource manager for the embedded ASE host of AseVivariumView
- * @description Flyweight Pattern implementation for unique_ptr<KernelEmbeddedHost> and the patch
- *              and clock views copied out of its port snapshots.
+ * @description Flyweight Pattern implementation for unique_ptr<KernelEmbeddedHost> and the patch,
+ *              clock, organ and template views read out of its port snapshots.
  *              The node stores ONLY uint32_t object ids, the manager owns everything behind them.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
+ * @usecase     usecase:100364 - host the engine embedded
+ * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-07
- * @version     00.00.03.00003 [seed]
+ * @modified    2026-10-18
+ * @version     00.00.04.00006 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -36,9 +38,9 @@
  *   against the real bundle.
  *
  * WHAT IT NEVER DOES:
- *   It writes no simulation value back and computes nothing a module computes. The views are
- *   copies of what the ports reported after the last advance; stage and condition are the codes
- *   of ase-plant as the plugin forwards them.
+ *   It writes no simulation value back and computes nothing a module computes. The views hold
+ *   what the ports reported after the last advance; stage and condition are the codes of
+ *   ase-plant as the plugin forwards them.
  *
  * NO PAUSE (PLAN 01.3 point 4):
  *   advance() hands the host the real time the frame took, uncapped. The host ticks it in
@@ -109,6 +111,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #if defined(__ANDROID__)
@@ -169,6 +172,385 @@ uint8_t code_of(double value, uint8_t count) {
         return GODOT_CODE_UNKNOWN;
     }
     return static_cast<uint8_t>(value);
+}
+
+/**
+ * THE ORGAN CLASSES, a fixed mapping of this file: the word of each class, index = GODOT_ORGAN_*.
+ * The same words name the ports in the start configuration and the records in the self-test table.
+ */
+constexpr const char* kOrganWords[GODOT_ORGAN_COUNT] = {
+    GODOT_ORGAN_WORD_SEGMENT, GODOT_ORGAN_WORD_LEAF,  GODOT_ORGAN_WORD_MALE,
+    GODOT_ORGAN_WORD_FEMALE,  GODOT_ORGAN_WORD_FRUIT, GODOT_ORGAN_WORD_ROOT};
+
+/** The organ class a word names; GODOT_ORGAN_COUNT for a word that names none. */
+uint32_t organ_class_of(const std::string& word) {
+    for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
+        if (word == kOrganWords[c]) {
+            return c;
+        }
+    }
+    return GODOT_ORGAN_COUNT;
+}
+
+/**
+ * The bark of a segment record into its view (usecase:100395 age the bark). false for a record without
+ * GODOT_KEY_BARK or with a share outside GODOT_BARK_WHITE..GODOT_BARK_BASE: the segment port writes it for
+ * every internode as its twelfth value (FloraHostSegmExptSystem), so a gap is a broken port - never an
+ * internode drawn in a bark nobody computed.
+ */
+bool segment_bark_of(const KernelHostRecord& record, VivariumOrganView& out) {
+    const double bark = record_value(record, GODOT_KEY_BARK);
+    if (!std::isfinite(bark) || bark < GODOT_BARK_WHITE || bark > GODOT_BARK_BASE) {
+        return false;
+    }
+    out.bark = bark;
+    return true;
+}
+
+/**
+ * The bark tiling of a tile record into the view of its internode (03.11 step 2, the material data of a
+ * section). false for a record without one of the three keys or with a count that is no positive finite
+ * number: the tile port writes all three for every internode it names (FloraHostTileExptSystem), so a gap is
+ * a broken port - never a bark stretched by a tiling nobody computed.
+ */
+bool segment_tile_of(const KernelHostRecord& record, VivariumOrganView& out) {
+    const double around = record_value(record, GODOT_KEY_TILE_AROUND);
+    const double along = record_value(record, GODOT_KEY_TILE_ALONG);
+    const double base = record_value(record, GODOT_KEY_TILE_BASE);
+    if (!std::isfinite(around) || !std::isfinite(along) || !std::isfinite(base) || around <= 0.0 ||
+        along <= 0.0 || base <= 0.0) {
+        return false;
+    }
+    out.tile_around = around;
+    out.tile_along = along;
+    out.tile_base = base;
+    return true;
+}
+
+/**
+ * One organ record as a view. false for a record that misses a key or carries a value that is no
+ * finite number: the organ port writes all eleven keys of every organ (ase-pl-flora, the organ export
+ * systems), so a gap is a broken port - never an organ drawn at the origin.
+ */
+bool organ_view_of(const KernelHostRecord& record, VivariumOrganView& out) {
+    out = VivariumOrganView{};
+    out.object_id = record.object_id;
+    const double body = record_value(record, GODOT_KEY_BODY);
+    out.order = record_value(record, GODOT_KEY_ORDER);
+    out.x = record_value(record, GODOT_KEY_X);
+    out.y = record_value(record, GODOT_KEY_Y);
+    out.z = record_value(record, GODOT_KEY_Z);
+    out.qx = record_value(record, GODOT_KEY_QX);
+    out.qy = record_value(record, GODOT_KEY_QY);
+    out.qz = record_value(record, GODOT_KEY_QZ);
+    out.qw = record_value(record, GODOT_KEY_QW);
+    out.length = record_value(record, GODOT_KEY_LENGTH);
+    out.radius = record_value(record, GODOT_KEY_RADIUS);
+    if (!whole(body) || body > static_cast<double>(UINT32_MAX) || !std::isfinite(out.order) ||
+        !std::isfinite(out.x) || !std::isfinite(out.y) || !std::isfinite(out.z) || !std::isfinite(out.qx) ||
+        !std::isfinite(out.qy) || !std::isfinite(out.qz) || !std::isfinite(out.qw) ||
+        !std::isfinite(out.length) || !std::isfinite(out.radius)) {
+        return false;
+    }
+    out.body = static_cast<uint32_t>(body);
+    return true;
+}
+
+/**
+ * THE KEYS OF AN INSTANCE RECORD, a fixed mapping of this file, in the row order of MultiMesh::set_buffer
+ * and of VivariumInstanceView::rows.
+ */
+constexpr const char* kInstanceKeys[GODOT_INSTANCE_VALUES] = {
+    GODOT_KEY_M00, GODOT_KEY_M01, GODOT_KEY_M02, GODOT_KEY_M03, GODOT_KEY_M10, GODOT_KEY_M11,
+    GODOT_KEY_M12, GODOT_KEY_M13, GODOT_KEY_M20, GODOT_KEY_M21, GODOT_KEY_M22, GODOT_KEY_M23};
+
+/**
+ * One instance record as a view. false for a record that misses a key or carries a value that is no
+ * finite number: the instance port writes all twelve keys of every organ (ase-pl-flora, the instance
+ * export systems), so a gap is a broken port - never an instance drawn collapsed at the origin.
+ */
+bool instance_view_of(const KernelHostRecord& record, VivariumInstanceView& out) {
+    out = VivariumInstanceView{};
+    out.object_id = record.object_id;
+    for (uint32_t v = 0u; v < GODOT_INSTANCE_VALUES; ++v) {
+        const double value = record_value(record, kInstanceKeys[v]);
+        if (!std::isfinite(value)) {
+            return false;
+        }
+        out.rows[v] = static_cast<float>(value);
+    }
+    return true;
+}
+
+/**
+ * One terrain record as a view. false for a record that misses a key or carries a value that is no
+ * finite number: the terrain port writes all nine keys of every sample - place and height of
+ * ase-terrain, normal and texture coordinates of ase-render-data (ase-pl-flora,
+ * FloraHostTernExptSystem) - so a gap is a broken port, never ground drawn at height zero or lit
+ * with a normal the view chose.
+ */
+bool terrain_view_of(const KernelHostRecord& record, VivariumTerrainView& out) {
+    out = VivariumTerrainView{};
+    out.object_id = record.object_id;
+    const double body = record_value(record, GODOT_KEY_BODY);
+    out.x = record_value(record, GODOT_KEY_X);
+    out.z = record_value(record, GODOT_KEY_Z);
+    out.height = record_value(record, GODOT_KEY_HEIGHT);
+    out.nx = record_value(record, GODOT_KEY_NX);
+    out.ny = record_value(record, GODOT_KEY_NY);
+    out.nz = record_value(record, GODOT_KEY_NZ);
+    out.u = record_value(record, GODOT_KEY_U);
+    out.v = record_value(record, GODOT_KEY_V);
+    if (!whole(body) || body > static_cast<double>(UINT32_MAX) || !std::isfinite(out.x) ||
+        !std::isfinite(out.z) || !std::isfinite(out.height) || !std::isfinite(out.nx) ||
+        !std::isfinite(out.ny) || !std::isfinite(out.nz) || !std::isfinite(out.u) || !std::isfinite(out.v)) {
+        return false;
+    }
+    out.body = static_cast<uint32_t>(body);
+    return true;
+}
+
+/**
+ * One ground cell record as a view. false for a record that misses a key or names no whole object id:
+ * the ground cell port writes the body and all four corners of every cell (ase-pl-flora,
+ * FloraHostGrndCellExptSystem).
+ */
+bool ground_cell_view_of(const KernelHostRecord& record, VivariumGroundCellView& out) {
+    out = VivariumGroundCellView{};
+    out.object_id = record.object_id;
+    const double ids[5] = {record_value(record, GODOT_KEY_BODY), record_value(record, GODOT_KEY_SW),
+                           record_value(record, GODOT_KEY_SE), record_value(record, GODOT_KEY_NE),
+                           record_value(record, GODOT_KEY_NW)};
+    for (const double id : ids) {
+        if (!whole(id) || id > static_cast<double>(UINT32_MAX)) {
+            return false;
+        }
+    }
+    out.body = static_cast<uint32_t>(ids[0]);
+    out.sw = static_cast<uint32_t>(ids[1]);
+    out.se = static_cast<uint32_t>(ids[2]);
+    out.ne = static_cast<uint32_t>(ids[3]);
+    out.nw = static_cast<uint32_t>(ids[4]);
+    return true;
+}
+
+/**
+ * One template corner record as a view (usecase:101011 lay out organ templates). false for a record that
+ * misses a key, names no known template code or no whole index, or carries a place, normal or texture
+ * coordinate that is no finite number: the corner port writes all ten keys of every corner (ase-pl-flora,
+ * FloraHostTmplVtxExptSystem), so a gap is a broken port - never a corner drawn at the origin.
+ */
+bool template_corner_view_of(const KernelHostRecord& record, VivariumTemplateCornerView& out) {
+    out = VivariumTemplateCornerView{};
+    out.object_id = record.object_id;
+    const double code = record_value(record, GODOT_KEY_TEMPLATE);
+    const double index = record_value(record, GODOT_KEY_INDEX);
+    out.x = record_value(record, GODOT_KEY_X);
+    out.y = record_value(record, GODOT_KEY_Y);
+    out.z = record_value(record, GODOT_KEY_Z);
+    out.nx = record_value(record, GODOT_KEY_NX);
+    out.ny = record_value(record, GODOT_KEY_NY);
+    out.nz = record_value(record, GODOT_KEY_NZ);
+    out.u = record_value(record, GODOT_KEY_U);
+    out.v = record_value(record, GODOT_KEY_V);
+    if (!whole(code) || code >= static_cast<double>(GODOT_TMPL_COUNT) || !whole(index) ||
+        index > static_cast<double>(UINT32_MAX) || !std::isfinite(out.x) || !std::isfinite(out.y) ||
+        !std::isfinite(out.z) || !std::isfinite(out.nx) || !std::isfinite(out.ny) || !std::isfinite(out.nz) ||
+        !std::isfinite(out.u) || !std::isfinite(out.v)) {
+        return false;
+    }
+    out.code = static_cast<uint32_t>(code);
+    out.index = static_cast<uint32_t>(index);
+    return true;
+}
+
+/**
+ * One template triangle record as a view. false for a record that misses a key, names no known template
+ * code or a corner index that is no whole number: the triangle port writes the code and all three corners of
+ * every triangle (ase-pl-flora, FloraHostTmplTriExptSystem).
+ */
+bool template_triangle_view_of(const KernelHostRecord& record, VivariumTemplateTriangleView& out) {
+    out = VivariumTemplateTriangleView{};
+    out.object_id = record.object_id;
+    const double code = record_value(record, GODOT_KEY_TEMPLATE);
+    const double corners[3] = {record_value(record, GODOT_KEY_CORNER_A), record_value(record, GODOT_KEY_CORNER_B),
+                               record_value(record, GODOT_KEY_CORNER_C)};
+    if (!whole(code) || code >= static_cast<double>(GODOT_TMPL_COUNT)) {
+        return false;
+    }
+    for (const double corner : corners) {
+        if (!whole(corner) || corner > static_cast<double>(UINT32_MAX)) {
+            return false;
+        }
+    }
+    out.code = static_cast<uint32_t>(code);
+    out.a = static_cast<uint32_t>(corners[0]);
+    out.b = static_cast<uint32_t>(corners[1]);
+    out.c = static_cast<uint32_t>(corners[2]);
+    return true;
+}
+
+/**
+ * One seed record as a view. false for a record that misses a key or carries a value that is no finite
+ * number: the seed port writes body, x, y and z of every seed (ase-pl-flora, FloraHostSeedExptSystem), so a
+ * gap is a broken port, never a seed drawn at the stem base.
+ */
+bool seed_view_of(const KernelHostRecord& record, VivariumSeedView& out) {
+    out = VivariumSeedView{};
+    out.object_id = record.object_id;
+    const double body = record_value(record, GODOT_KEY_BODY);
+    out.x = record_value(record, GODOT_KEY_X);
+    out.y = record_value(record, GODOT_KEY_Y);
+    out.z = record_value(record, GODOT_KEY_Z);
+    if (!whole(body) || body > static_cast<double>(UINT32_MAX) || !std::isfinite(out.x) ||
+        !std::isfinite(out.y) || !std::isfinite(out.z)) {
+        return false;
+    }
+    out.body = static_cast<uint32_t>(body);
+    return true;
+}
+
+/** The record of one object id among the first `written` records of a snapshot; nullptr when absent. */
+const KernelHostRecord* sky_record(const std::vector<KernelHostRecord>& records, uint32_t written, uint32_t id) {
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id == id) {
+            return &records[i];
+        }
+    }
+    return nullptr;
+}
+
+/**
+ * The four records of the sky port as one view. false for a set without one of the four records, a
+ * record that misses a key, or a value that is no finite number: ase-pl-sky lays all four records with
+ * all their keys in one publication (SkyHostScneExptSystem), so a gap is a broken port - never a scene
+ * lit from the origin or in black.
+ */
+bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written, VivariumSkyView& out) {
+    out = VivariumSkyView{};
+    const KernelHostRecord* sun = sky_record(records, written, GODOT_SKY_RECORD_SUN);
+    const KernelHostRecord* ambient = sky_record(records, written, GODOT_SKY_RECORD_AMBIENT);
+    const KernelHostRecord* background = sky_record(records, written, GODOT_SKY_RECORD_BACKGROUND);
+    const KernelHostRecord* fog = sky_record(records, written, GODOT_SKY_RECORD_FOG);
+    if (sun == nullptr || ambient == nullptr || background == nullptr || fog == nullptr) {
+        return false;
+    }
+    out.sun_x = record_value(*sun, GODOT_KEY_X);
+    out.sun_y = record_value(*sun, GODOT_KEY_Y);
+    out.sun_z = record_value(*sun, GODOT_KEY_Z);
+    out.sun_r = record_value(*sun, GODOT_KEY_R);
+    out.sun_g = record_value(*sun, GODOT_KEY_G);
+    out.sun_b = record_value(*sun, GODOT_KEY_B);
+    out.sun_intensity = record_value(*sun, GODOT_KEY_INTENSITY);
+    out.ambient_r = record_value(*ambient, GODOT_KEY_R);
+    out.ambient_g = record_value(*ambient, GODOT_KEY_G);
+    out.ambient_b = record_value(*ambient, GODOT_KEY_B);
+    out.ambient_intensity = record_value(*ambient, GODOT_KEY_INTENSITY);
+    out.background_r = record_value(*background, GODOT_KEY_R);
+    out.background_g = record_value(*background, GODOT_KEY_G);
+    out.background_b = record_value(*background, GODOT_KEY_B);
+    out.fog_r = record_value(*fog, GODOT_KEY_R);
+    out.fog_g = record_value(*fog, GODOT_KEY_G);
+    out.fog_b = record_value(*fog, GODOT_KEY_B);
+    out.fog_near = record_value(*fog, GODOT_KEY_NEAR);
+    out.fog_far = record_value(*fog, GODOT_KEY_FAR);
+    const double values[] = {out.sun_x,        out.sun_y,        out.sun_z,         out.sun_r,
+                             out.sun_g,        out.sun_b,        out.sun_intensity, out.ambient_r,
+                             out.ambient_g,    out.ambient_b,    out.ambient_intensity,
+                             out.background_r, out.background_g, out.background_b,  out.fog_r,
+                             out.fog_g,        out.fog_b,        out.fog_near,      out.fog_far};
+    for (const double value : values) {
+        if (!std::isfinite(value)) {
+            out = VivariumSkyView{};
+            return false;
+        }
+    }
+    out.known = true;
+    return true;
+}
+
+/**
+ * The ports and operations every host of the Vivarium needs: patch, clock, scene, ground, brook,
+ * terrain, ground cell, the six organ ports, the five instance ports, the sky port, the seed port, the
+ * tile port and the two template ports, irrigate, prune and lay - every port boot() asks the set for. An
+ * empty one would surface later as a NotFound of the first call, or as the port step of a boot that a
+ * configuration check could have refused before a host existed.
+ */
+bool ports_named(const VivariumStartConfig& config) {
+    bool named = !config.patch_port.empty() && !config.clock_port.empty() && !config.scene_port.empty() &&
+                 !config.ground_port.empty() && !config.brook_port.empty() && !config.terrain_port.empty() &&
+                 !config.ground_cell_port.empty() && !config.sky_port.empty() && !config.seed_port.empty() &&
+                 !config.tile_port.empty() && !config.template_corner_port.empty() &&
+                 !config.template_triangle_port.empty() &&
+                 !config.op_irrigate.empty() &&
+                 !config.op_prune.empty() && !config.op_lay.empty();
+    for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
+        named = named && !config.organ_ports[c].empty();
+    }
+    for (uint32_t c = 0u; c < GODOT_DRAWN_COUNT; ++c) {
+        named = named && !config.instance_ports[c].empty();
+    }
+    return named;
+}
+
+/**
+ * The patches of a start configuration the game host can lay: at least one, each with a species and
+ * a known ground, every place once. ase-pl-flora places what it is asked for; that a place names one
+ * patch is a property of the configuration and is checked where it is read, here.
+ */
+bool patches_layable(const std::vector<VivariumPatchSpec>& patches) {
+    if (patches.empty()) {
+        return false;
+    }
+    for (size_t i = 0u; i < patches.size(); ++i) {
+        if (patches[i].species.empty() || patches[i].soil >= GODOT_SOIL_COUNT) {
+            return false;
+        }
+        for (size_t j = i + 1u; j < patches.size(); ++j) {
+            if (patches[i].place == patches[j].place) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/** The lay request of one patch: place, species id, seed, ground and where it lies in the world. */
+KernelHostInput lay_input(const VivariumPatchSpec& patch) {
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_PLACE, static_cast<double>(patch.place));
+    (void)put_value(input, GODOT_KEY_SPECIES,
+                    static_cast<double>(KernelEmbeddedHost::name_id(patch.species.c_str())));
+    (void)put_value(input, GODOT_KEY_SEED, static_cast<double>(patch.seed));
+    (void)put_value(input, GODOT_KEY_SOIL, static_cast<double>(patch.soil));
+    (void)put_value(input, GODOT_KEY_X, patch.x);
+    (void)put_value(input, GODOT_KEY_Z, patch.z);
+    (void)put_value(input, GODOT_KEY_HALF, patch.half_m);
+    return input;
+}
+
+/** The lay request of the ground square: its centre, half edge and sample step. */
+KernelHostInput ground_input(const VivariumGroundSpec& ground) {
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_X, ground.x);
+    (void)put_value(input, GODOT_KEY_Z, ground.z);
+    (void)put_value(input, GODOT_KEY_HALF, ground.half_m);
+    (void)put_value(input, GODOT_KEY_STEP, ground.step_m);
+    return input;
+}
+
+/** The lay request of one brook: the two ends of its bed, its half width and depth, its water. */
+KernelHostInput brook_input(const VivariumBrookSpec& brook) {
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_X, brook.x);
+    (void)put_value(input, GODOT_KEY_Z, brook.z);
+    (void)put_value(input, GODOT_KEY_END_X, brook.end_x);
+    (void)put_value(input, GODOT_KEY_END_Z, brook.end_z);
+    (void)put_value(input, GODOT_KEY_HALF, brook.half_m);
+    (void)put_value(input, GODOT_KEY_DEPTH, brook.depth_m);
+    (void)put_value(input, GODOT_KEY_BASE, brook.base_m3_s);
+    (void)put_value(input, GODOT_KEY_CATCHMENT, brook.catchment_m2);
+    return input;
 }
 
 /** The words of one index value, split at blanks. */
@@ -505,24 +887,78 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
     }
 
     if (const toml::table* count = action[GODOT_SELFTEST_KEY_RECORDS].as_table()) {
+        // A count of the clock, the patch or an organ port, compared with op (eq when none is named).
+        // With max_frames the comparison is awaited frame by frame - the organs of a sprout reach
+        // their port a few frames after the stage that lets it sprout.
         const std::string record = (*count)[GODOT_SELFTEST_KEY_RECORD].value_or(std::string());
         const int64_t expected = (*count)[GODOT_SELFTEST_KEY_COUNT].value_or(int64_t{-1});
-        uint32_t written = 0u;
-        const std::string& port = record == GODOT_SELFTEST_RECORD_CLOCK ? config.clock_port : config.patch_port;
-        const HostStatus status = snapshot_all(host, port, state.records, written);
-        if (expected < 0 || status != ase::kernel::HostStatusOk) {
-            report_broken(label, GODOT_STEP_SNAPSHOT,
-                          expected < 0 ? std::string("records needs a count") : GodotHostResourceManager::status_name(status),
+        const std::string op = (*count)[GODOT_SELFTEST_KEY_OP].value_or(std::string(GODOT_SELFTEST_OP_EQ));
+        const int64_t bound = (*count)[GODOT_SELFTEST_KEY_MAX_FRAMES].value_or(int64_t{0});
+        const uint32_t organ_class = organ_class_of(record);
+        const std::string& port = record == GODOT_SELFTEST_RECORD_CLOCK   ? config.clock_port
+                                  : organ_class < GODOT_ORGAN_COUNT        ? config.organ_ports[organ_class]
+                                                                           : config.patch_port;
+        bool known = true;
+        (void)holds(0.0, op, 0.0, 0.0, known);
+        if (expected < 0 || !known || bound < 0) {
+            report_broken(label, GODOT_SELFTEST_KEY_RECORDS, "records needs a count, a known op and no negative bound",
                           result, report);
             return false;
         }
-        report_check(check, "records=" + record, std::to_string(written), std::to_string(expected),
-                     static_cast<int64_t>(written) == expected, result, report);
+        uint32_t written = 0u;
+        HostStatus status = snapshot_all(host, port, state.records, written);
+        bool reached = status == ase::kernel::HostStatusOk &&
+                       holds(static_cast<double>(written), op, static_cast<double>(expected), 0.0, known);
+        int64_t frames = 0;
+        for (; frames < bound && !reached && status == ase::kernel::HostStatusOk; ++frames) {
+            if (!frame(host, state)) {
+                report_broken(label, GODOT_STEP_ADVANCE, "a frame was refused", result, report);
+                return false;
+            }
+            status = snapshot_all(host, port, state.records, written);
+            reached = status == ase::kernel::HostStatusOk &&
+                      holds(static_cast<double>(written), op, static_cast<double>(expected), 0.0, known);
+        }
+        if (status != ase::kernel::HostStatusOk) {
+            report_broken(label, GODOT_STEP_SNAPSHOT, GodotHostResourceManager::status_name(status), result, report);
+            return false;
+        }
+        report_check(check, "records=" + record + (bound > 0 ? " frames=" + std::to_string(frames) : std::string()),
+                     std::to_string(written), op + " " + std::to_string(expected), reached, result, report);
+        return true;
+    }
+
+    if (const toml::table* lay = action[GODOT_SELFTEST_KEY_LAY].as_table()) {
+        // One patch through the scene port, as the game host lays the patches of its configuration.
+        VivariumPatchSpec patch;
+        const int64_t place = (*lay)[GODOT_SELFTEST_KEY_PLACE].value_or(int64_t{-1});
+        const int64_t seed = (*lay)[GODOT_SELFTEST_KEY_SEED].value_or(int64_t{-1});
+        patch.species = (*lay)[GODOT_SELFTEST_KEY_SPECIES].value_or(std::string());
+        patch.soil = GodotHostResourceManager::soil_code((*lay)[GODOT_SELFTEST_KEY_SOIL].value_or(std::string()));
+        patch.x = (*lay)[GODOT_SELFTEST_KEY_X].value_or(std::nan(""));
+        patch.z = (*lay)[GODOT_SELFTEST_KEY_Z].value_or(std::nan(""));
+        patch.half_m = (*lay)[GODOT_SELFTEST_KEY_HALF].value_or(std::nan(""));
+        const std::string expected = (*lay)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
+        if (place < 0 || place > static_cast<int64_t>(UINT32_MAX) || seed < 0 ||
+            seed > static_cast<int64_t>(UINT32_MAX) || patch.species.empty() || patch.soil >= GODOT_SOIL_COUNT ||
+            !std::isfinite(patch.x) || !std::isfinite(patch.z) || !(patch.half_m > 0.0) || expected.empty()) {
+            report_broken(label, GODOT_SELFTEST_KEY_LAY,
+                          "needs place, species, seed, a known soil, x, z, a positive half_m and status", result,
+                          report);
+            return false;
+        }
+        patch.place = static_cast<uint32_t>(place);
+        patch.seed = static_cast<uint32_t>(seed);
+        const KernelHostInput input = lay_input(patch);
+        const std::string actual = GodotHostResourceManager::status_name(
+            host.submit(config.scene_port.c_str(), config.op_lay.c_str(), &input));
+        report_check(check, "place=" + std::to_string(place) + " action=lay species=" + patch.species, actual,
+                     expected, actual == expected, result, report);
         return true;
     }
 
     report_broken(label, GODOT_SELFTEST_KEY_DO,
-                  "an action names none of frames, remember, irrigate, wait, catch_up, expect, records",
+                  "an action names none of frames, remember, irrigate, wait, catch_up, expect, records, lay",
                   result, report);
     return false;
 }
@@ -591,6 +1027,20 @@ bool GodotHostResourceManager::parse_index(const std::string& text, VivariumBund
     return true;
 }
 
+uint8_t GodotHostResourceManager::soil_code(const std::string& word) {
+    if (word == GODOT_SOIL_WORD_MEADOW) {
+        return GODOT_SOIL_MEADOW;
+    }
+    if (word == GODOT_SOIL_WORD_FOREST) {
+        return GODOT_SOIL_FOREST;
+    }
+    return GODOT_CODE_UNKNOWN;
+}
+
+const char* GodotHostResourceManager::organ_word(uint32_t organ_class) {
+    return organ_class < GODOT_ORGAN_COUNT ? kOrganWords[organ_class] : "";
+}
+
 // FACTORY
 
 HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
@@ -608,7 +1058,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     // A configuration the host could never run is refused before a host exists: no catch-up
     // steps would turn every frame into a refused advance, an empty name into a NotFound later.
     if (config_.read_stage == nullptr || config_.files_dir.empty() || config_.files_dir[0] != '/' ||
-        config_.patch_port.empty() || config_.clock_port.empty() || config_.op_irrigate.empty() ||
+        !ports_named(config_) || !patches_layable(config_.patches) ||
         !std::isfinite(config_.irrigate_amount_mm) || !(config_.irrigate_amount_mm > 0.0) ||
         config_.catch_up_steps == 0u) {
         return fail(GODOT_STEP_CONFIG, ase::kernel::HostStatusInvalidArgument);
@@ -633,13 +1083,43 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
         return fail(failure_step_ == GODOT_STEP_NONE ? GODOT_STEP_LOAD : failure_step_, status);
     }
 
-    if (!host_->has_port(config_.patch_port.c_str()) || !host_->has_port(config_.clock_port.c_str())) {
+    bool offered = host_->has_port(config_.patch_port.c_str()) && host_->has_port(config_.clock_port.c_str()) &&
+                   host_->has_port(config_.scene_port.c_str()) && host_->has_port(config_.ground_port.c_str()) &&
+                   host_->has_port(config_.brook_port.c_str()) && host_->has_port(config_.terrain_port.c_str()) &&
+                   host_->has_port(config_.ground_cell_port.c_str()) && host_->has_port(config_.sky_port.c_str()) &&
+                   host_->has_port(config_.seed_port.c_str()) && host_->has_port(config_.tile_port.c_str()) &&
+                   host_->has_port(config_.template_corner_port.c_str()) &&
+                   host_->has_port(config_.template_triangle_port.c_str());
+    for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
+        offered = offered && host_->has_port(config_.organ_ports[c].c_str());
+    }
+    for (uint32_t c = 0u; c < GODOT_DRAWN_COUNT; ++c) {
+        offered = offered && host_->has_port(config_.instance_ports[c].c_str());
+    }
+    if (!offered) {
         return fail(GODOT_STEP_PORT, ase::kernel::HostStatusNotFound);
     }
 
     status = host_->start();
     if (status != ase::kernel::HostStatusOk) {
         return fail(GODOT_STEP_START, status);
+    }
+
+    // THE PATCHES OF THE START CONFIGURATION: with a host present ase-pl-flora lays none of its own
+    // and takes these requests in its next Reception run; the patch port shows them from then on.
+    status = lay_patches();
+    if (status != ase::kernel::HostStatusOk) {
+        return fail(GODOT_STEP_LAY, status);
+    }
+    // THE GROUND OF THE SCENE (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8): the measured square and the
+    // brooks, each on its own port; ase-terrain shapes and measures them, the terrain port shows them.
+    status = lay_ground();
+    if (status != ase::kernel::HostStatusOk) {
+        return fail(GODOT_STEP_GROUND, status);
+    }
+    status = lay_brooks();
+    if (status != ase::kernel::HostStatusOk) {
+        return fail(GODOT_STEP_BROOK, status);
     }
 
     records_.assign(ase::kernel::HostRecordsMax, KernelHostRecord{});
@@ -650,12 +1130,54 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     return ase::kernel::HostStatusOk;
 }
 
+HostStatus GodotHostResourceManager::lay_ground() {
+    const KernelHostInput input = ground_input(config_.ground);
+    return host_->submit(config_.ground_port.c_str(), config_.op_lay.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::lay_brooks() {
+    for (const VivariumBrookSpec& brook : config_.brooks) {
+        const KernelHostInput input = brook_input(brook);
+        const HostStatus status = host_->submit(config_.brook_port.c_str(), config_.op_lay.c_str(), &input);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::lay_patches() {
+    for (const VivariumPatchSpec& patch : config_.patches) {
+        const KernelHostInput input = lay_input(patch);
+        const HostStatus status = host_->submit(config_.scene_port.c_str(), config_.op_lay.c_str(), &input);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+    }
+    return ase::kernel::HostStatusOk;
+}
+
 HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     failure_step_ = step;
     failure_status_ = status;
     patches_.clear();
     places_.clear();
     clock_ = VivariumClockView{};
+    for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
+        organs_[c].clear();
+    }
+    for (uint32_t c = 0u; c < GODOT_DRAWN_COUNT; ++c) {
+        instances_[c].clear();
+    }
+    organ_generation_ += 1u;
+    terrain_.clear();
+    ground_cells_.clear();
+    terrain_generation_ += 1u;
+    template_corners_.clear();
+    template_triangles_.clear();
+    template_generation_ += 1u;
+    sky_ = VivariumSkyView{};
+    seeds_.clear();
     if (!host_) {
         return status;  // no host, no logger: the node shows and prints the failure itself
     }
@@ -743,8 +1265,9 @@ VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartCo
         return result;
     }
     config_ = config;
-    if (config_.read_stage == nullptr || config_.files_dir.empty() || config_.patch_port.empty() ||
-        config_.clock_port.empty() || config_.op_irrigate.empty()) {
+    // The table lays its own patches (action lay): the self-test needs the ports and operations of a
+    // game host, never its configured patches.
+    if (config_.read_stage == nullptr || config_.files_dir.empty() || !ports_named(config_)) {
         report_broken("-", GODOT_STEP_CONFIG, "no stage reader, files directory, port or operation", result, report);
         return result;
     }
@@ -920,6 +1443,10 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         view.soil_mm = record_value(record, GODOT_KEY_SOIL_MM);
         view.soil_rel = record_value(record, GODOT_KEY_SOIL_REL);
         view.capacity_mm = record_value(record, GODOT_KEY_CAPACITY_MM);
+        // the stem base: x and z from the lay request, y once ase-terrain levelled the disc (03.11)
+        view.x = record_value(record, GODOT_KEY_X);
+        view.y = record_value(record, GODOT_KEY_Y);
+        view.z = record_value(record, GODOT_KEY_Z);
         // THE PORT CONTRACT IS THE PLACE. ase-pl-flora writes a key only while the input row behind
         // it stands (FloraHostPtchExptSystem: a key stands only while its row stands, never a zero
         // the modules did not publish), so before the first runs of the modules a record carries
@@ -934,6 +1461,7 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         view.place = static_cast<uint32_t>(place);
         view.stage = code_of(stage, GODOT_STAGE_COUNT);
         view.condition = code_of(condition, GODOT_COND_COUNT);
+        view.soil = code_of(record_value(record, GODOT_KEY_SOIL), GODOT_SOIL_COUNT);
         patches_[view.object_id] = view;
         places_[view.place] = view.object_id;
     }
@@ -961,6 +1489,256 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     }
     clock.known = true;
     clock_ = clock;
+    const HostStatus organs = read_organs();
+    if (organs != ase::kernel::HostStatusOk) {
+        return organs;
+    }
+    const HostStatus terrain = read_terrain();
+    if (terrain != ase::kernel::HostStatusOk) {
+        return terrain;
+    }
+    const HostStatus templates = read_templates();
+    if (templates != ase::kernel::HostStatusOk) {
+        return templates;
+    }
+    const HostStatus sky = read_sky();
+    if (sky != ase::kernel::HostStatusOk) {
+        return sky;
+    }
+    return read_seeds();
+}
+
+HostStatus GodotHostResourceManager::read_organs() {
+    // THE ORGANS CHANGE ONLY IN ONE SCHEDULE. ase-phytomer and ase-radix write their organ rows in
+    // GODOT_ORGAN_SCHEDULE; the plugin's sync system reads them in the Reception and the plugin lays them
+    // on the ports in the Production of the frame after. So a new run owes two reads - this frame and the
+    // next - and a frame without one reuses the views instead of reading thousands of records again.
+    uint64_t runs = 0u;
+    const HostStatus counted = host_->schedule_runs(GODOT_ORGAN_SCHEDULE, &runs);
+    if (counted != ase::kernel::HostStatusOk) {
+        return counted;
+    }
+    if (runs != organ_runs_ || organ_generation_ == 0u) {
+        organ_runs_ = runs;
+        organ_reads_due_ = GODOT_ORGAN_READS_PER_RUN;
+    }
+    if (organ_reads_due_ == 0u) {
+        return ase::kernel::HostStatusOk;
+    }
+    organ_reads_due_ -= 1u;
+    for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
+        uint32_t written = 0u;
+        const HostStatus status = snapshot_all(*host_, config_.organ_ports[c], organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        organs_[c].clear();
+        organs_[c].reserve(written);
+        for (uint32_t i = 0u; i < written; ++i) {
+            VivariumOrganView view;
+            if (!organ_view_of(organ_records_[i], view)) {
+                organs_[c].clear();
+                return ase::kernel::HostStatusInvalidArgument;
+            }
+            // the segment port carries the bark of every internode as its twelfth value
+            if (c == GODOT_ORGAN_SEGMENT && !segment_bark_of(organ_records_[i], view)) {
+                organs_[c].clear();
+                return ase::kernel::HostStatusInvalidArgument;
+            }
+            organs_[c].push_back(view);
+        }
+    }
+    // The bark tiling of the internodes, from the same Production run: one record per internode with
+    // lenticels, its object id the internode; an internode without one keeps GODOT_TILE_NONE.
+    {
+        uint32_t written = 0u;
+        const HostStatus status = snapshot_all(*host_, config_.tile_port, organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        std::vector<VivariumOrganView>& segments = organs_[GODOT_ORGAN_SEGMENT];
+        std::unordered_map<uint32_t, std::size_t> segment_at;
+        segment_at.reserve(segments.size());
+        for (std::size_t s = 0u; s < segments.size(); ++s) {
+            segment_at.emplace(segments[s].object_id, s);
+        }
+        for (uint32_t i = 0u; i < written; ++i) {
+            const auto found = segment_at.find(organ_records_[i].object_id);
+            if (found == segment_at.end()) {
+                continue;  // the internode left the segment port in the same run; its tiling has nothing to scale
+            }
+            if (!segment_tile_of(organ_records_[i], segments[found->second])) {
+                return ase::kernel::HostStatusInvalidArgument;
+            }
+        }
+    }
+    // The instances of every drawn class, from the same Production run as the organs they belong to.
+    for (uint32_t c = 0u; c < GODOT_DRAWN_COUNT; ++c) {
+        uint32_t written = 0u;
+        const HostStatus status = snapshot_all(*host_, config_.instance_ports[c], organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        instances_[c].clear();
+        instances_[c].reserve(written);
+        for (uint32_t i = 0u; i < written; ++i) {
+            VivariumInstanceView view;
+            if (!instance_view_of(organ_records_[i], view)) {
+                instances_[c].clear();
+                return ase::kernel::HostStatusInvalidArgument;
+            }
+            instances_[c].push_back(view);
+        }
+    }
+    organ_generation_ += 1u;
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_terrain() {
+    // THE HEIGHTS CHANGE ONLY IN ONE SCHEDULE. ase-terrain publishes changed samples in
+    // GODOT_TERRAIN_SCHEDULE; the plugin's sync system reads them in the Reception and the plugin lays them
+    // on the port in the Production of the frame after - the same two reads per run as the organs. The organ
+    // buffer is reused: both reads run one after the other in the same snapshot.
+    uint64_t runs = 0u;
+    const HostStatus counted = host_->schedule_runs(GODOT_TERRAIN_SCHEDULE, &runs);
+    if (counted != ase::kernel::HostStatusOk) {
+        return counted;
+    }
+    if (runs != terrain_runs_ || terrain_generation_ == 0u) {
+        terrain_runs_ = runs;
+        terrain_reads_due_ = GODOT_TERRAIN_READS_PER_RUN;
+    }
+    if (terrain_reads_due_ == 0u) {
+        return ase::kernel::HostStatusOk;
+    }
+    terrain_reads_due_ -= 1u;
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.terrain_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    terrain_.clear();
+    terrain_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumTerrainView view;
+        if (!terrain_view_of(organ_records_[i], view)) {
+            terrain_.clear();
+            return ase::kernel::HostStatusInvalidArgument;
+        }
+        terrain_.push_back(view);
+    }
+    // the cells of the same ground, from the same snapshot: ase-render-data lays both in one Observation
+    const HostStatus cells = snapshot_all(*host_, config_.ground_cell_port, organ_records_, written);
+    if (cells != ase::kernel::HostStatusOk) {
+        terrain_.clear();
+        return cells;
+    }
+    ground_cells_.clear();
+    ground_cells_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumGroundCellView view;
+        if (!ground_cell_view_of(organ_records_[i], view)) {
+            terrain_.clear();
+            ground_cells_.clear();
+            return ase::kernel::HostStatusInvalidArgument;
+        }
+        ground_cells_.push_back(view);
+    }
+    terrain_generation_ += 1u;
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_templates() {
+    // THE TEMPLATES ARE BUILT ONCE (usecase:101011 lay out organ templates). ase-render-data builds the fine
+    // and the coarse cylinder and the unit leaf in the Initialization of its host and keeps their rows; the
+    // plugin lays them on its two template ports in every Production run. So both ports are read with every
+    // snapshot until each carries a set, and not again while this host runs. Until the plugin's first
+    // Production run both sets are empty: the templates are not known yet, and nothing is broken.
+    if (!template_corners_.empty() && !template_triangles_.empty()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    HostStatus status = snapshot_all(*host_, config_.template_corner_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumTemplateCornerView> corners;
+    corners.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumTemplateCornerView view;
+        if (!template_corner_view_of(organ_records_[i], view)) {
+            return ase::kernel::HostStatusInvalidArgument;
+        }
+        corners.push_back(view);
+    }
+    status = snapshot_all(*host_, config_.template_triangle_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumTemplateTriangleView> triangles;
+    triangles.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumTemplateTriangleView view;
+        if (!template_triangle_view_of(organ_records_[i], view)) {
+            return ase::kernel::HostStatusInvalidArgument;
+        }
+        triangles.push_back(view);
+    }
+    if (corners.empty() || triangles.empty()) {
+        return ase::kernel::HostStatusOk;
+    }
+    template_corners_ = std::move(corners);
+    template_triangles_ = std::move(triangles);
+    template_generation_ += 1u;
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_sky() {
+    // THE SKY IS READ EVERY SNAPSHOT. ase-pl-sky lays its four records in every Production run
+    // (SkyHostScneExptSystem), a handful of numbers - no schedule count saves anything here. Until the
+    // plugin's light pipeline has run once the port publishes an empty set: the sky is not known yet,
+    // and nothing is broken. A set that is not the four records of one sky is.
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.sky_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written == 0u) {
+        sky_ = VivariumSkyView{};
+        return ase::kernel::HostStatusOk;
+    }
+    if (written != GODOT_SKY_RECORD_COUNT) {
+        sky_ = VivariumSkyView{};
+        return ase::kernel::HostStatusInvalidArgument;
+    }
+    VivariumSkyView sky;
+    if (!sky_view_of(organ_records_, written, sky)) {
+        sky_ = VivariumSkyView{};
+        return ase::kernel::HostStatusInvalidArgument;
+    }
+    sky_ = sky;
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_seeds() {
+    // THE SEEDS ARE READ EVERY SNAPSHOT. ase-physics moves a flying seed in every kinetic step and the plugin
+    // lays the port anew in every Production run (FloraHostSeedExptSystem); no schedule count saves a read of
+    // a set that changes every frame. An empty set is a scene without a shattered fruit stand, nothing broken.
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.seed_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    seeds_.clear();
+    seeds_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumSeedView view;
+        if (!seed_view_of(organ_records_[i], view)) {
+            seeds_.clear();
+            return ase::kernel::HostStatusInvalidArgument;
+        }
+        seeds_.push_back(view);
+    }
     return ase::kernel::HostStatusOk;
 }
 
@@ -974,6 +1752,17 @@ HostStatus GodotHostResourceManager::irrigate(uint32_t object_id) {
         return ase::kernel::HostStatusCapacity;
     }
     return host_->submit(config_.patch_port.c_str(), config_.op_irrigate.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::prune(uint32_t object_id) {
+    // The cut names only the internode: which branch it sits on and what falls with it is
+    // ase-phytomer's. The request goes on the port the internode is laid out on.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    input.object_id = object_id;
+    return host_->submit(config_.organ_ports[GODOT_ORGAN_SEGMENT].c_str(), config_.op_prune.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::note(const char* text) {
@@ -1005,6 +1794,51 @@ uint32_t GodotHostResourceManager::patch_count() const {
 
 const VivariumClockView& GodotHostResourceManager::get_clock() const {
     return clock_;
+}
+
+const std::vector<VivariumOrganView>& GodotHostResourceManager::get_organs(uint32_t organ_class) const {
+    // An unknown class answers the empty set no_organs_: never an index past the store.
+    return organ_class < GODOT_ORGAN_COUNT ? organs_[organ_class] : no_organs_;
+}
+
+const std::vector<VivariumInstanceView>& GodotHostResourceManager::get_instances(uint32_t organ_class) const {
+    return organ_class < GODOT_DRAWN_COUNT ? instances_[organ_class] : no_instances_;
+}
+
+uint64_t GodotHostResourceManager::organ_generation() const {
+    return organ_generation_;
+}
+
+const std::vector<VivariumTerrainView>& GodotHostResourceManager::get_terrain() const {
+    return terrain_;
+}
+
+const std::vector<VivariumGroundCellView>& GodotHostResourceManager::get_ground_cells() const {
+    return ground_cells_;
+}
+
+uint64_t GodotHostResourceManager::terrain_generation() const {
+    return terrain_generation_;
+}
+
+const std::vector<VivariumTemplateCornerView>& GodotHostResourceManager::get_template_corners() const {
+    return template_corners_;
+}
+
+const std::vector<VivariumTemplateTriangleView>& GodotHostResourceManager::get_template_triangles() const {
+    return template_triangles_;
+}
+
+uint64_t GodotHostResourceManager::template_generation() const {
+    return template_generation_;
+}
+
+const VivariumSkyView& GodotHostResourceManager::get_sky() const {
+    return sky_;
+}
+
+const std::vector<VivariumSeedView>& GodotHostResourceManager::get_seeds() const {
+    return seeds_;
 }
 
 // LOG LINES
@@ -1089,26 +1923,22 @@ uint32_t GodotHostResourceManager::unit_count() const {
 }
 
 bool GodotHostResourceManager::read_pss_kib(uint64_t& out) const {
-    out = 0u;
-    // smaps_rollup: a header line, then "Key:   value kB" lines. The key is matched at a line
-    // start - "SwapPss:" further down ends in the same four characters.
-    const std::string text = ase::fileio::read_text(GODOT_PSS_SOURCE);
-    const std::size_t at = text.find(std::string("\n") + GODOT_PSS_KEY);
-    if (at == std::string::npos) {
+    // ONE READER OF THE PSS: the cycle line of 03.6 (godot_cycle_measure.cpp) reads the same number
+    // headless on Linux, where this manager does not exist. Qualified, because this member carries
+    // the same name.
+    return ::ase::adp::godot::read_pss_kib(out);
+}
+
+bool GodotHostResourceManager::measure_begin(CycleMeasure& measure) const {
+    return host_ != nullptr && cycle_measure_begin(measure, *host_);
+}
+
+bool GodotHostResourceManager::measure_cycle(CycleMeasure& measure, std::string& line) {
+    if (host_ == nullptr) {
+        line = "cycle=" + std::to_string(measure.cycle + 1u) + " refused=no_host";
         return false;
     }
-    std::size_t digit = text.find_first_of("0123456789", at);
-    const std::size_t line_end = text.find('\n', at + 1u);
-    if (digit == std::string::npos || (line_end != std::string::npos && digit > line_end)) {
-        return false;
-    }
-    uint64_t value = 0u;
-    while (digit < text.size() && text[digit] >= '0' && text[digit] <= '9') {
-        value = value * 10u + static_cast<uint64_t>(text[digit] - '0');
-        digit += 1u;
-    }
-    out = value;
-    return true;
+    return cycle_measure_line(measure, *host_, line);
 }
 
 HostStatus GodotHostResourceManager::schedule_runs(const char* schedule, uint64_t* runs) const {
@@ -1159,6 +1989,26 @@ void GodotHostResourceManager::clear_all() {
     places_.clear();
     clock_ = VivariumClockView{};
     records_.clear();
+    for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
+        organs_[c].clear();
+    }
+    for (uint32_t c = 0u; c < GODOT_DRAWN_COUNT; ++c) {
+        instances_[c].clear();
+    }
+    organ_records_.clear();
+    organ_runs_ = 0u;
+    organ_reads_due_ = 0u;
+    organ_generation_ += 1u;  // the view drops the geometry of the old host
+    terrain_.clear();
+    ground_cells_.clear();
+    terrain_runs_ = 0u;
+    terrain_reads_due_ = 0u;
+    terrain_generation_ += 1u;  // and the ground of the old host
+    template_corners_.clear();
+    template_triangles_.clear();
+    template_generation_ += 1u;  // and its templates
+    sky_ = VivariumSkyView{};   // and its light
+    seeds_.clear();             // and its seeds
     bundle_ = VivariumBundleInfo{};
     manifests_.clear();
 }

@@ -25,10 +25,13 @@
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
+ * @design      DSGN_016
  * @category    ecs/module
+ * @usecase     usecase:100364 - host the engine embedded
+ * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-05
- * @version     00.00.01.00001
+ * @modified    2026-10-11
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_registration.hpp>
@@ -59,7 +62,7 @@ VivariumView* view_of(GDExtensionClassInstancePtr instance) {
     return static_cast<VivariumView*>(instance);
 }
 
-// ── the engine callbacks the view takes over, called by Godot with ptrcall arguments ──────
+// The engine callbacks the view takes over, called by Godot with ptrcall arguments.
 
 void call_ready(GDExtensionClassInstancePtr instance, const GDExtensionConstTypePtr* args,
                 GDExtensionTypePtr result) {

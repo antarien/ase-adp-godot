@@ -6,18 +6,20 @@
  * @file        godot_host_resource_manager.hpp
  * @brief       GodotHostResourceManager - External resource manager for the embedded ASE host of AseVivariumView
  * @description Holds the ONE std::unique_ptr<ase::kernel::KernelEmbeddedHost> of a Vivarium
- *              view, the start configuration it was booted with, the bundle it loaded, the copies
- *              of the last snapshots of the patch port and the clock port, and the queue of log
- *              lines the host's logging thread hands over. Lives OUTSIDE every ECS registry - the
+ *              view, the start configuration it was booted with, the bundle it loaded, the views
+ *              of the last snapshots of the patch, clock, organ and template ports, and the queue of
+ *              log lines the host's logging thread hands over. Lives OUTSIDE every ECS registry - the
  *              App inside the host keeps its own - and carries no Godot type, so its tests run
  *              against the real bundle without Godot.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
+ * @usecase     usecase:100364 - host the engine embedded
+ * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-07
- * @version     00.00.02.00002 [seed]
+ * @modified    2026-10-18
+ * @version     00.00.04.00006 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -63,6 +65,8 @@
  * [ ] NO inline implementations (prevents mass rebuilds!)
  */
 
+#include <ase/adp/godot/godot_cycle_measure.hpp>
+#include <ase/adp/godot/types.hpp>
 #include <ase/kernel/kernel_embedded_host.hpp>
 #include <ase/kernel/kernel_host_port.hpp>
 #include <ase/kernel/kernel_types.hpp>
@@ -85,6 +89,47 @@ namespace ase::adp::godot {
 using VivariumStageReadFn = bool (*)(const char* name, std::string& out, void* user);
 
 /**
+ * One patch of the start configuration (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS, "Fläche und Art"): the
+ * game host asks ase-pl-flora for it with one lay request on the scene port after its start.
+ */
+struct VivariumPatchSpec {
+    uint32_t    place = 0;     // where the view draws it; every place stands once
+    std::string species;       // catalog id of the species sown on it (modules/ase-plant/data/plant_species.json)
+    uint32_t    seed = 0;      // seed of the plant: the same seed grows the same plant
+    uint8_t     soil = 0;      // GODOT_SOIL_* ground the view draws
+    double      x = 0.0;       // centre of the patch, world metres east; ase-terrain levels the ground there
+    double      z = 0.0;       // centre of the patch, world metres north
+    double      half_m = 0.0;  // half edge of the patch square, metres; the levelled disc has this radius
+};
+
+/**
+ * The measured square of terrain the view draws as the ground of the scene (PLAN_ASE_VIVARIUM_PHASE_03_
+ * ASSETS 03.8): one lay request on the ground port of ase-pl-flora, which orders the samples at
+ * ase-terrain.
+ */
+struct VivariumGroundSpec {
+    double x = 0.0;       // centre of the square, world metres east
+    double z = 0.0;       // centre of the square, world metres north
+    double half_m = 0.0;  // half edge of the square, metres
+    double step_m = 0.0;  // distance of two samples, metres
+};
+
+/**
+ * One brook of the start configuration: one lay request on the brook port of ase-pl-flora, which has
+ * ase-terrain carve its bed and registers its water with ase-hydro.
+ */
+struct VivariumBrookSpec {
+    double x = 0.0;             // start of the bed, world metres east
+    double z = 0.0;             // start of the bed, world metres north
+    double end_x = 0.0;         // end of the bed, world metres east
+    double end_z = 0.0;         // end of the bed, world metres north
+    double half_m = 0.0;        // half width of the bed, metres
+    double depth_m = 0.0;       // depth of the bed below the ground, metres
+    double base_m3_s = 0.0;     // base flow without rain, m3/s; ase-hydro holds its bounds
+    double catchment_m2 = 0.0;  // area whose rain runs into the brook, m2
+};
+
+/**
  * Everything boot() and self_test() need. The node fills it from res://config/vivarium_start.json
  * and from the stage Godot loaded this library from; no value of it lives in a unit.
  */
@@ -96,13 +141,136 @@ struct VivariumStartConfig {
                                      // resolves it in the app's own namespace (Android, PLAN 02.1)
     std::string files_dir;           // ABSOLUTE directory of the stage on this device's file system:
                                      // the bundle's data root lies below it (the stage itself on a
-                                     // desktop, the copy of its data files where the stage is a package)
+                                     // desktop, the directory its data files are placed in where the
+                                     // stage is a package)
     std::string log_file;            // ABSOLUTE log file under user://, empty = callback only
     std::string patch_port;          // host port of the patches (ase-pl-flora: flora.patch.v1)
     std::string clock_port;          // host port of the game clock (ase-pl-flora: flora.clock.v1)
+    std::string scene_port;          // host port the patches are laid through (ase-pl-flora: flora.scene.v1)
+    std::string organ_ports[GODOT_ORGAN_COUNT];  // one host port per organ class, index = GODOT_ORGAN_*
+    std::string instance_ports[GODOT_DRAWN_COUNT];  // one instance port per drawn class, index = GODOT_ORGAN_* before the root
+    std::string ground_port;         // host port the ground square is laid through (ase-pl-flora: flora.ground.v1)
+    std::string brook_port;          // host port the brooks are laid through (ase-pl-flora: flora.brook.v1)
+    std::string terrain_port;        // host port of the terrain samples (ase-pl-flora: flora.terrain.v1)
+    std::string ground_cell_port;    // host port of the ground cells (ase-pl-flora: flora.ground.cell.v1)
+    std::string sky_port;            // host port of the sky and the light of the scene (ase-pl-sky: sky.scene.v1)
+    std::string seed_port;           // host port of the seed bodies of ase-physics (ase-pl-flora: flora.seed.v1)
+    std::string tile_port;           // host port of the bark tiling of the internodes (ase-pl-flora: flora.tile.v1)
+    std::string template_corner_port;    // host port of the corners of the organ templates (ase-pl-flora: flora.template.corner.v1)
+    std::string template_triangle_port;  // host port of the triangles of the organ templates (ase-pl-flora: flora.template.triangle.v1)
     std::string op_irrigate;         // submit operation that pours on one patch
+    std::string op_prune;            // submit operation that cuts the branch an internode sits on (03.10 step 9)
+    std::string op_lay;              // submit operation that lays one patch, the ground square or a brook
     double      irrigate_amount_mm = 0.0;  // water one press of Regar pours, mm
     uint32_t    catch_up_steps = 0u;       // most ticks one frame may run while the host catches up
+    std::vector<VivariumPatchSpec> patches;  // the patches the game host lays, every place once
+    VivariumGroundSpec ground;               // the square of terrain the view draws
+    std::vector<VivariumBrookSpec> brooks;   // the brooks the game host lays
+};
+
+/**
+ * One terrain sample as the last snapshot of the terrain port showed it - a copy: a vertex of the
+ * ground. Place and height are ase-terrain's, normal and texture coordinates ase-render-data's; the
+ * view takes all of them into the ground mesh and computes none of its own.
+ */
+struct VivariumTerrainView {
+    uint32_t object_id = 0;   // the sample, as the plugin names it on its port
+    uint32_t body = 0;        // the ground the sample belongs to
+    double   x = 0.0;         // world metres east
+    double   z = 0.0;         // world metres north
+    double   height = 0.0;    // ground height, metres
+    double   nx = 0.0;        // unit normal of the ground, east share
+    double   ny = 0.0;        // unit normal of the ground, upward share
+    double   nz = 0.0;        // unit normal of the ground, north share
+    double   u = 0.0;         // texture coordinate, world metres east
+    double   v = 0.0;         // texture coordinate, world metres north
+};
+
+/**
+ * One ground cell as the last snapshot of the ground cell port showed it - a copy. The four corners
+ * name terrain samples by their object id, in the order of the index buffer: the view draws the
+ * triangles (sw, se, ne) and (sw, ne, nw), Godot's front face looking up (ase-render-data,
+ * RenderDataGrndCellCalcSystem).
+ */
+struct VivariumGroundCellView {
+    uint32_t object_id = 0;   // the cell's south-west sample, as the plugin names it on its port
+    uint32_t body = 0;        // the ground the cell belongs to
+    uint32_t sw = 0;          // object id of the south-west corner sample
+    uint32_t se = 0;          // object id of the south-east corner sample
+    uint32_t ne = 0;          // object id of the north-east corner sample
+    uint32_t nw = 0;          // object id of the north-west corner sample
+};
+
+/**
+ * One corner of an organ template as the last snapshot of the template corner port showed it - a copy
+ * (usecase:101011 lay out organ templates). ase-render-data builds the corner on the unit - base at the
+ * origin, length 1 along +y - and the view takes its place, normal and texture coordinates into the
+ * template mesh of its code and computes none of them.
+ */
+struct VivariumTemplateCornerView {
+    uint32_t object_id = 0;   // the corner row, as the plugin names it on its port
+    uint32_t code = 0;        // GODOT_TMPL_* of the template it belongs to
+    uint32_t index = 0;       // its place in the template, named by the triangles
+    double   x = 0.0;         // place on the unit, across
+    double   y = 0.0;         // place on the unit, along the organ
+    double   z = 0.0;         // place on the unit, across
+    double   nx = 0.0;        // unit normal, x share
+    double   ny = 0.0;        // unit normal, y share
+    double   nz = 0.0;        // unit normal, z share
+    double   u = 0.0;         // texture coordinate around the ring or across the leaf
+    double   v = 0.0;         // texture coordinate along the organ
+};
+
+/**
+ * One triangle of an organ template as the last snapshot of the template triangle port showed it - a
+ * copy. Its three corners are indices of the corners of the same code, clockwise seen from outside -
+ * Godot's front face - in the order ase-render-data laid them; the view decides no winding.
+ */
+struct VivariumTemplateTriangleView {
+    uint32_t object_id = 0;   // the triangle row, as the plugin names it on its port
+    uint32_t code = 0;        // GODOT_TMPL_* of the template it belongs to
+    uint32_t a = 0;           // index of its first corner
+    uint32_t b = 0;           // index of its second corner
+    uint32_t c = 0;           // index of its third corner
+};
+
+/**
+ * One organ as the last snapshot of its port showed it - a copy, never a reference into the App. The
+ * place is plant-local (origin at the stem base on the ground, y up, x east, z north); body names the
+ * patch the view stands the plant on.
+ *
+ * Every organ carries its frame in place of a direction: the unit quaternion ase-render-data built
+ * from the roll of ase-phytomer (shoot) or ase-radix (root). It turns the plant frame into the organ's -
+ * local y along the organ, local x along its roll axis.
+ */
+struct VivariumOrganView {
+    uint32_t object_id = 0;   // the organ, as the plugin names it on its port
+    uint32_t body = 0;        // object id of the patch the plant stands on
+    double   order = 0.0;     // branching order of its axis (stem 0)
+    double   x = 0.0;         // metres east of the stem base
+    double   y = 0.0;         // metres above the ground at the stem base
+    double   z = 0.0;         // metres north of the stem base
+    double   qx = 0.0;        // frame, vector part, east share
+    double   qy = 0.0;        // frame, vector part, upward share
+    double   qz = 0.0;        // frame, vector part, north share
+    double   qw = 0.0;        // frame, scalar part
+    double   length = 0.0;    // metres (leaf: edge of the equal square; catkin and fruit stand: hang)
+    double   radius = 0.0;    // metres (internode and root segment; else 0)
+    double   bark = 0.0;      // share of the stem-base bark at its middle, 0..1 (internode, GODOT_KEY_BARK; else 0)
+    double   tile_around = GODOT_TILE_NONE;  // tiles of the white bark around the tube (internode, tile port; else none)
+    double   tile_along = GODOT_TILE_NONE;   // tiles of the white bark along the tube (internode, tile port; else none)
+    double   tile_base = GODOT_TILE_NONE;    // tiles of the stem-base bark per white tile (internode, tile port; else none)
+};
+
+/**
+ * One organ's instance as the last snapshot of its instance port showed it - a copy. The twelve values
+ * are the plant-local 3x4 ase-render-data computed, in the row order of MultiMesh::set_buffer for
+ * TRANSFORM_3D; the view hands them over unchanged and stands the plant at its patch as a scene node.
+ * The organ record of the same object id names body and order.
+ */
+struct VivariumInstanceView {
+    uint32_t object_id = 0;                    // the organ, as the plugin names it on its port
+    float    rows[GODOT_INSTANCE_VALUES] = {};  // row 0 (east), row 1 (up), row 2 (north): x, y, z axis and origin
 };
 
 /** One unit as the bundle index names it. */
@@ -151,9 +319,13 @@ struct VivariumPatchView {
     double   coverage = 0.0;    // covered share, 0..1
     uint8_t  stage = 0;         // GODOT_STAGE_* or GODOT_CODE_UNKNOWN
     uint8_t  condition = 0;     // GODOT_COND_* or GODOT_CODE_UNKNOWN
+    uint8_t  soil = 0;          // GODOT_SOIL_* ground or GODOT_CODE_UNKNOWN
     double   soil_mm = 0.0;     // soil water, mm
     double   soil_rel = 0.0;    // soil water over field capacity, 0..1
     double   capacity_mm = 0.0; // field capacity, mm
+    double   x = 0.0;           // stem base, world metres east: the centre of the patch square
+    double   y = 0.0;           // stem base, world metres up: the height ase-terrain levelled the patch to
+    double   z = 0.0;           // stem base, world metres north: the centre of the patch square
 };
 
 /** The game clock as the last snapshot showed it. */
@@ -162,6 +334,50 @@ struct VivariumClockView {
     double elapsed_s = 0.0;   // game time, seconds
     double day = 0.0;         // game day
     double hour = 0.0;        // hour of the game day
+};
+
+/**
+ * The sky and the light of the scene as the last snapshot of the sky port showed them - a copy
+ * (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3). ase-pl-sky computes all of it; the view sets its
+ * directional light, its environment and its fog from these numbers and computes none of its own.
+ * The sun direction points TOWARDS the sun in the world frame of the organ records (x east, y up,
+ * z north); a directional light shines along its negative. Colours are shares 0..1.
+ */
+struct VivariumSkyView {
+    bool   known = false;          // false until a snapshot carried all four records of the sky port
+    double sun_x = 0.0;            // unit direction towards the sun, east share
+    double sun_y = 0.0;            // unit direction towards the sun, upward share (the sine of its elevation)
+    double sun_z = 0.0;            // unit direction towards the sun, north share
+    double sun_r = 0.0;            // sunlight colour, red share
+    double sun_g = 0.0;            // sunlight colour, green share
+    double sun_b = 0.0;            // sunlight colour, blue share
+    double sun_intensity = 0.0;    // strength of the sunlight
+    double ambient_r = 0.0;        // ambient light colour, red share
+    double ambient_g = 0.0;        // ambient light colour, green share
+    double ambient_b = 0.0;        // ambient light colour, blue share
+    double ambient_intensity = 0.0; // strength of the ambient light
+    double background_r = 0.0;     // colour of the sky behind the scene, red share
+    double background_g = 0.0;     // colour of the sky behind the scene, green share
+    double background_b = 0.0;     // colour of the sky behind the scene, blue share
+    double fog_r = 0.0;            // fog colour, red share
+    double fog_g = 0.0;            // fog colour, green share
+    double fog_b = 0.0;            // fog colour, blue share
+    double fog_near = 0.0;         // distance where the fog begins, metres
+    double fog_far = 0.0;          // distance where the fog is full, metres
+};
+
+/**
+ * One seed body as the last snapshot of the seed port showed it - a copy (register N0173, usecase:100711
+ * publish the seed places). ase-physics moves the seed and sets it down on the ground; the place is
+ * plant-local like an organ's (origin at the stem base, y up, x east, z north), and body names the patch the
+ * plant stands on. The view draws the seed there and computes none of its flight.
+ */
+struct VivariumSeedView {
+    uint32_t object_id = 0;   // the seed body, as the plugin names it on its port
+    uint32_t body = 0;        // object id of the patch the plant stands on
+    double   x = 0.0;         // metres east of the stem base
+    double   y = 0.0;         // metres above the ground at the stem base
+    double   z = 0.0;         // metres north of the stem base
 };
 
 /**
@@ -194,6 +410,18 @@ public:
      * index this adapter does not understand is never half read.
      */
     [[nodiscard]] static bool parse_index(const std::string& text, VivariumBundleInfo& out);
+
+    /**
+     * The ground code a word of the start configuration names (GODOT_SOIL_WORD_*);
+     * GODOT_CODE_UNKNOWN for any other word. The one mapping of word to code - the node reads the
+     * configuration with it, the self-test its table.
+     */
+    [[nodiscard]] static uint8_t soil_code(const std::string& word);
+    /**
+     * The word of an organ class (GODOT_ORGAN_*): the key of its port in the start configuration and
+     * its record in the self-test table; "" for a number that is no class.
+     */
+    [[nodiscard]] static const char* organ_word(uint32_t organ_class);
 
     /**
      * FACTORY - one host per boot
@@ -241,11 +469,16 @@ public:
     ase::kernel::HostStatus advance(double elapsed_s);
     /** Pour irrigate_amount_mm on one patch; the plugin takes it in its next Reception run. */
     ase::kernel::HostStatus irrigate(uint32_t object_id);
+    /**
+     * Cut the branch the internode `object_id` sits on (03.10 step 9): a prune request on the segment
+     * port; the plugin files it in its next Reception run, ase-phytomer fells the branch.
+     */
+    ase::kernel::HostStatus prune(uint32_t object_id);
     /** One line of the view itself (boot line, action, measurement) through the host's logger. */
     ase::kernel::HostStatus note(const char* text);
 
     /**
-     * VIEWS - copies of the last snapshots
+     * VIEWS - the records of the last snapshots
      *
      * The pointers are valid until the next advance(), boot() or clear_all(): every snapshot
      * rebuilds the views. Hold the id or the place, never the pointer, across frames.
@@ -255,6 +488,54 @@ public:
     [[nodiscard]] bool has_patch(uint32_t object_id) const;
     [[nodiscard]] uint32_t patch_count() const;
     [[nodiscard]] const VivariumClockView& get_clock() const;
+    /**
+     * The organs of one class (GODOT_ORGAN_*) as their port showed them. The organ ports are read
+     * when a Dissemination run passed since the last read - the only schedule in which the modules
+     * change the organ rows - so a frame without one reuses the views. An unknown class answers
+     * an empty set.
+     */
+    [[nodiscard]] const std::vector<VivariumOrganView>& get_organs(uint32_t organ_class) const;
+    /**
+     * The instances of one drawn class (GODOT_ORGAN_* before the root) as their instance port showed
+     * them, read together with the organs. A class the view does not draw answers an empty set.
+     */
+    [[nodiscard]] const std::vector<VivariumInstanceView>& get_instances(uint32_t organ_class) const;
+    /** Grows by one every time the organ views were read anew; the view rebuilds its geometry then. */
+    [[nodiscard]] uint64_t organ_generation() const;
+    /**
+     * The terrain samples of the ground as the terrain port showed them. Read like the organs: when a
+     * GODOT_TERRAIN_SCHEDULE run passed since the last read, that frame and the next.
+     */
+    [[nodiscard]] const std::vector<VivariumTerrainView>& get_terrain() const;
+    /**
+     * The cells of the ground as the ground cell port showed them, read together with the terrain
+     * samples their corners name.
+     */
+    [[nodiscard]] const std::vector<VivariumGroundCellView>& get_ground_cells() const;
+    /** Grows by one every time the terrain views were read anew; the view rebuilds the ground then. */
+    [[nodiscard]] uint64_t terrain_generation() const;
+    /**
+     * The corners of the organ templates as the template corner port showed them, every code together
+     * (usecase:101011 lay out organ templates). ase-render-data builds the templates once when the host
+     * starts, so the ports are read with every snapshot until both carry a set, and not again until a
+     * new host boots.
+     */
+    [[nodiscard]] const std::vector<VivariumTemplateCornerView>& get_template_corners() const;
+    /** The triangles of the organ templates as the template triangle port showed them, read with the corners. */
+    [[nodiscard]] const std::vector<VivariumTemplateTriangleView>& get_template_triangles() const;
+    /** Grows by one every time the template views were read; the view rebuilds its plants then. */
+    [[nodiscard]] uint64_t template_generation() const;
+    /**
+     * The sky and the light of the scene as the sky port showed them, read with every snapshot: four
+     * records, a few numbers, and ase-pl-sky lays them anew every frame. known stays false until the
+     * plugin's light pipeline has written its state and the port carries all four records.
+     */
+    [[nodiscard]] const VivariumSkyView& get_sky() const;
+    /**
+     * The seed bodies as the seed port showed them, read with every snapshot: ase-physics moves them in
+     * every kinetic step, and a seed that came down keeps its place. Empty while no fruit stand shattered.
+     */
+    [[nodiscard]] const std::vector<VivariumSeedView>& get_seeds() const;
 
     /**
      * LOG LINES - any thread in, the node's thread out
@@ -294,6 +575,14 @@ public:
     [[nodiscard]] bool read_pss_kib(uint64_t& out) const;
 
     /**
+     * The measurement line of 03.6 on this manager's host (godot_cycle_measure.hpp): begin sets the
+     * cursors of every (unit, schedule) to the host's totals now, cycle writes the line of the cycle
+     * that just ended. Both answer false without a host; cycle then writes "refused=no_host".
+     */
+    [[nodiscard]] bool measure_begin(CycleMeasure& measure) const;
+    bool measure_cycle(CycleMeasure& measure, std::string& line);
+
+    /**
      * How often the host's App ran the named schedule - counted by its tick scheduler, never
      * derived here from simulated time. Answers like KernelEmbeddedHost::schedule_runs;
      * HostStatusInvalidState without a running host, which is then not asked at all. runs is 0
@@ -316,6 +605,14 @@ private:
     ase::kernel::HostStatus read_manifests();
     ase::kernel::HostStatus load_set(ase::kernel::KernelEmbeddedHost& host);
     ase::kernel::HostStatus read_snapshot();
+    ase::kernel::HostStatus read_organs();
+    ase::kernel::HostStatus read_terrain();
+    ase::kernel::HostStatus read_templates();
+    ase::kernel::HostStatus read_sky();
+    ase::kernel::HostStatus read_seeds();
+    ase::kernel::HostStatus lay_patches();
+    ase::kernel::HostStatus lay_ground();
+    ase::kernel::HostStatus lay_brooks();
     /** The string load_units takes for one library: its path under library_dir, or its bare name. */
     [[nodiscard]] std::string library_path(const std::string& library) const;
 
@@ -331,6 +628,24 @@ private:
     std::unordered_map<uint32_t, VivariumPatchView>  patches_;
     std::unordered_map<uint32_t, uint32_t>           places_;      // place → object id of the last snapshot
     VivariumClockView                                clock_;
+    std::vector<VivariumOrganView>                   organs_[GODOT_ORGAN_COUNT];  // index = GODOT_ORGAN_*
+    const std::vector<VivariumOrganView>             no_organs_;  // the answer for an unknown class: always empty
+    std::vector<VivariumInstanceView>                instances_[GODOT_DRAWN_COUNT];  // index = GODOT_ORGAN_* before the root
+    const std::vector<VivariumInstanceView>          no_instances_;  // the answer for a class not drawn: always empty
+    std::vector<ase::kernel::KernelHostRecord>       organ_records_;  // snapshot buffer of the organ ports
+    uint64_t                                         organ_generation_ = 0;
+    uint64_t                                         organ_runs_ = 0;  // GODOT_ORGAN_SCHEDULE runs at the last organ read
+    uint32_t                                         organ_reads_due_ = 0;  // reads still owed for the last new run
+    std::vector<VivariumTerrainView>                 terrain_;  // the samples of the ground, last read
+    std::vector<VivariumGroundCellView>              ground_cells_;  // the cells of the ground, read with the samples
+    uint64_t                                         terrain_generation_ = 0;
+    uint64_t                                         terrain_runs_ = 0;  // GODOT_TERRAIN_SCHEDULE runs at the last terrain read
+    uint32_t                                         terrain_reads_due_ = 0;  // reads still owed for the last new run
+    std::vector<VivariumTemplateCornerView>          template_corners_;    // the corners of the organ templates, every code
+    std::vector<VivariumTemplateTriangleView>        template_triangles_;  // the triangles of the organ templates, every code
+    uint64_t                                         template_generation_ = 0;
+    VivariumSkyView                                  sky_;      // the sky and the light of the scene, last read
+    std::vector<VivariumSeedView>                    seeds_;    // the seed bodies, last read
     const char*                                      failure_step_;
     ase::kernel::HostStatus                          failure_status_;
     double                                           elapsed_in_s_ = 0.0;

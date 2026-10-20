@@ -33,26 +33,63 @@
  *              they were placed for the last drawn frame.
  *
  *              WHAT THE VIEW NEVER DOES: it computes nothing a module computes, writes no
- *              simulation value back and shows no optimistic number. Every drawn value is the copy
+ *              simulation value back and shows no optimistic number. Every drawn value is the value
  *              the ports reported after the last advance.
+ *
+ *              THE CARE VIEW IS A 3D SCENE (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 point 2): once the
+ *              host booted, the view builds one scene under its Node2D (godot_plant_scene.hpp) - camera
+ *              on the near view of the "view" section, sun and sky from the sky port, the ground from
+ *              the terrain port, the plant from the instance and organ ports and the organ templates of
+ *              the template ports (usecase:101011 lay out organ templates), the line between fine and
+ *              coarse cylinder by the order budget of the frame time - and the canvas draws its bands
+ *              over it: the patches
+ *              as frames with label, soil water and selection, the buttons below.
+ *
+ *              THE ASSET SET IS BOUND BY NAME (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.2): with the
+ *              configuration the view reads the asset list of its play stage and the manifest of the
+ *              delivered set and binds every name (godot_asset_binding.hpp). Every boot writes one
+ *              `asset missing <name>` per missing name after the boot line, which counts them; a role
+ *              whose asset is missing is drawn in the error material. A missing manifest is not a
+ *              broken configuration but an undelivered set: every name is missing, and the view runs.
+ *
+ *              THE ASSET SHOWCASE (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7) runs on request only,
+ *              launched with the argument of modes.assets, beside the one game host - never a second
+ *              host. It shows every name of the bound list (godot_asset_showcase.hpp, ..._scene.hpp)
+ *              and reads the binding of the configuration; it binds nothing again.
  *
  *              THE EDITOR STAYS SIMULATION-FREE (L0): ready() returns when Engine::is_editor_hint,
  *              so importing or editing the scene starts no host and loads no unit.
  *
+ *              ONE CLASS, ITS BEHAVIOUR BY RESPONSIBILITY: the members below are defined in
+ *              godot_vivarium_node.cpp (lifecycle, boot, frame, log), godot_vivarium_config.cpp,
+ *              godot_vivarium_host_config.cpp, godot_vivarium_layout.cpp, godot_vivarium_assets.cpp (the
+ *              configuration), godot_vivarium_input.cpp (taps and the selection),
+ *              godot_vivarium_water.cpp (Regar), godot_vivarium_prune.cpp (the cutting mode),
+ *              godot_vivarium_draw.cpp (placement and canvas), godot_vivarium_scene.cpp (the 3D scene per
+ *              frame) and
+ *              godot_vivarium_measure.cpp (self-test and measurement).
+ *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
+ * @usecase     usecase:100387 - view the plant
+ * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-07
- * @version     00.00.02.00002
+ * @modified    2026-10-18
+ * @version     00.00.05.00003
  */
 
+#include <ase/adp/godot/godot_asset_binding.hpp>
+#include <ase/adp/godot/godot_garden_return.hpp>
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_order_budget.hpp>
+#include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_view_layout.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <godot_cpp/classes/input_event.hpp>
 #include <godot_cpp/classes/node2d.hpp>
+#include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/rect2.hpp>
@@ -61,6 +98,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ase::adp::godot {
@@ -82,6 +120,7 @@ struct VivariumLayout {
     ::godot::Vector2 note_at;
     std::vector<::godot::Rect2> place_rects;  // the rectangle of each place, index = place
     ::godot::Rect2   water_rect;
+    ::godot::Rect2   prune_rect;               // the button of the cutting mode (03.10 step 9)
     ::godot::Rect2   reset_rect;
 };
 
@@ -96,6 +135,7 @@ struct VivariumModes {
     ::godot::String measure_argument;        // measures host and frame times after a warm-up
     double          measure_warmup_seconds = 0.0;  // foreground seconds before the recording starts
     double          measure_record_seconds = 0.0;  // foreground seconds recorded
+    ::godot::String assets_argument;         // shows every asset of the list beside the game host (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7)
 };
 
 /**
@@ -116,6 +156,9 @@ struct VivariumMeasurement {
     bool                  pss_start_read = false;
     uint32_t              catch_ups = 0;        // returns from the background that fell into the recording
     uint32_t              boots_at_start = 0;   // host boots counted when the recording began
+    CycleMeasure          cycles;               // the line of one game day (03.6), cursors since the recording began
+    bool                  cycles_ready = false; // units, schedules and organ ports named, cursors set
+    double                cycle_day = -1.0;     // the game day the current cycle began on, -1 = clock not yet read
 };
 
 /** Every text the view draws, Brazilian Portuguese, from the same configuration. */
@@ -140,6 +183,7 @@ struct VivariumTexts {
     ::godot::String restart_note;
     ::godot::String error;
     ::godot::String water;
+    ::godot::String prune;
     ::godot::String reset;
     ::godot::String separator;   // between the parts of one line, e.g. "área 2 · Broto"
 };
@@ -178,16 +222,25 @@ private:
     bool load_stage();
     bool stage_data();
     bool load_host_config(const ::godot::Dictionary& root);
+    bool load_patches(const ::godot::Dictionary& root);
+    bool load_ground(const ::godot::Dictionary& root);
+    bool load_brooks(const ::godot::Dictionary& root);
     bool load_layout(const ::godot::Dictionary& root);
     bool load_places(const ::godot::Dictionary& root);
     bool load_bands(const ::godot::Dictionary& layout);
     bool load_texts(const ::godot::Dictionary& root);
     bool load_modes(const ::godot::Dictionary& root);
+    bool load_view(const ::godot::Dictionary& root);
+    bool load_assets(const ::godot::Dictionary& root);
+    bool load_asset_roles(const ::godot::Dictionary& stage, const char* section);
+    void load_asset_manifest(const ::godot::String& path, std::vector<VivariumAssetEntry>& out);
     bool fail_config(const char* key);
 
     [[nodiscard]] bool launched_with(const ::godot::String& argument) const;
     void run_self_test();
     void measure_frame(uint64_t frame_start_usec, uint64_t host_usec);
+    void begin_cycles();   // name units, schedules and organ ports for the cycle line, set its cursors
+    void measure_cycle();  // a new game day: the line of the day that ended (03.6)
     void report_measurement();
 
     void boot_host();
@@ -195,18 +248,25 @@ private:
     void tap(const ::godot::Vector2& at);
     void select(uint32_t place);
     void water();
+    void toggle_pruning();                 // the button Podar: the cutting mode on or off (03.10 step 9)
+    void prune(const ::godot::Vector2& at);  // in the cutting mode: cut the branch of the internode under the tap
     void announce_patches();
     void follow_stages();
     void follow_water();
-    void follow_catch_up(double elapsed_s);
+    void follow_scene(double elapsed_s);
+    void follow_catch_up(double elapsed_s, double now_s);  // the return to the garden (godot_garden_return.hpp)
     void drain_log();
     void note(const ::godot::String& line);
 
     [[nodiscard]] bool can_water() const;
+    [[nodiscard]] bool can_prune() const;
+    [[nodiscard]] uint32_t pick_segment(const ::godot::Vector2& at) const;  // the internode under a tap, GODOT_NO_OBJECT for none
     [[nodiscard]] ::godot::String stage_text(uint8_t stage) const;
     [[nodiscard]] ::godot::String patch_text(const VivariumPatchView& patch) const;
     [[nodiscard]] ::godot::String boot_line() const;
     [[nodiscard]] ::godot::String measure(uint32_t place) const;
+    [[nodiscard]] uint32_t ground_color(const VivariumPatchView* patch) const;
+    [[nodiscard]] ::godot::Ref<::godot::Material> ground_material() const;
 
     [[nodiscard]] ViewSurface surface() const;
     [[nodiscard]] ::godot::Rect2 placed(const ::godot::Rect2& rect) const;
@@ -228,6 +288,25 @@ private:
     VivariumMeasurement      measurement_;
     ViewSurface              drawn_surface_;   // the surface the last frame was placed on
     ViewPlacement            placement_;       // the layout's placement on that surface
+    uint32_t                 play_stage_ = 0;  // play stage whose asset names the view binds (play_stage)
+    ::godot::String          asset_root_;      // res:// directory of the manifest's files
+    std::unordered_map<std::string, std::string> asset_roles_;  // role the view draws with → asset name of that stage
+    std::vector<std::string> asset_names_;     // the stage's asset names in list order, materials first
+    ::godot::String          asset_manifest_;  // the manifest of the asset set: read, broken or absent
+    VivariumAssetBinding     assets_;          // bound files and missing names, bound at configuration
+    std::vector<std::string> asset_materials_;  // the stage's material names; every other name of asset_names_ is an organ template
+    ::godot::Node3D*         showcase_ = nullptr;  // root of the asset showcase (modes.assets), nullptr without its launch argument
+    ::godot::Node3D*         scene_ = nullptr;     // root of the 3D scene of the care view, built once the host booted (03.1)
+    PlantSceneCamera         scene_camera_;        // the near view (view.camera_*)
+    PlantSceneLook           scene_look_;         // materials and organ templates of the scene, bound once at the start (03.2)
+    OrderBudget              order_budget_;        // the line between fine and coarse cylinder by frame time (view, 03.6 V8)
+    std::unordered_map<uint32_t, PlantOrigin> scene_origins_;  // stem base per patch object, last placed
+    uint64_t                 scene_organs_ = 0;    // organ generation the plant was last filled from
+    uint64_t                 scene_terrain_ = 0;   // terrain generation the ground was last built from
+    uint64_t                 scene_templates_ = 0; // template generation the plant was last filled from (usecase:101011 lay out organ templates)
+    uint32_t                 scene_focus_ = GODOT_NO_PLACE;  // the place the camera last looked at
+    float                    pick_px_ = 0.0f;      // logical pixels around a tap that hit an internode's middle (view.pick_px)
+    bool                     pruning_ = false;     // the cutting mode is on: a tap in the scene cuts, it selects no place
     std::vector<std::string> selftest_report_;  // written through the game host once it is up
     uint32_t                 selftest_errors_ = 0;
     bool                     selftest_ran_ = false;
@@ -245,7 +324,7 @@ private:
     double                   water_pending_from_ = 0.0;              // its soil water when watered, mm
     uint64_t                 water_pending_steps_ = 0;               // Dissemination runs when watered
     int64_t                  last_frame_ns_ = 0;                     // the previous frame on the boot clock, 0 = none yet
-    bool                     catching_up_ = false;                   // a return from the background is being caught up
+    GardenReturn             garden_return_;                         // a return from the background and since when it is caught up
     bool                     configured_ = false;
 };
 

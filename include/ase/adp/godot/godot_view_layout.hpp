@@ -21,9 +21,11 @@
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
+ * @usecase     usecase:100387 - view the plant
+ * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-06
- * @modified    2026-10-06
- * @version     00.00.01.00001
+ * @modified    2026-10-12
+ * @version     00.00.01.00002
  */
 
 namespace ase::adp::godot {
