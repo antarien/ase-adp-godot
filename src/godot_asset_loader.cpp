@@ -15,7 +15,7 @@
  * @design      DSGN_024
  * @category    render/pipeline/stage
  * @usecase     usecase:6451 - load flora blueprints
- * @actor       Flora BDIEX Framework (FLOBDIEXFRW)
+ * @actor       Basic Flora Model Ressources (BFLOMR)
  * @created     2026-10-11
  * @modified    2026-10-22
  * @version     00.00.02.00002
