@@ -101,6 +101,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.tile");
     }
     start_.tile_port = utf8_of(text);
+    // The level requests of the player (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8 point 2): a port of their
+    // own, the patch port takes only pours.
+    if (!read_text(ports, "level", text)) {
+        return fail_config("ports.level");
+    }
+    start_.level_port = utf8_of(text);
     // One port per organ class, keyed by the class's word (GodotHostResourceManager::organ_word).
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         if (!read_text(ports, GodotHostResourceManager::organ_word(c), text)) {
@@ -129,6 +135,10 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("operations.prune");
     }
     start_.op_prune = utf8_of(text);
+    if (!read_text(operations, "level", text)) {
+        return fail_config("operations.level");
+    }
+    start_.op_level = utf8_of(text);
     if (!read_text(operations, "lay", text)) {
         return fail_config("operations.lay");
     }

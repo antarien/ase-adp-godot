@@ -156,10 +156,12 @@ struct VivariumStartConfig {
     std::string sky_port;            // host port of the sky and the light of the scene (ase-pl-sky: sky.scene.v1)
     std::string seed_port;           // host port of the seed bodies of ase-physics (ase-pl-flora: flora.seed.v1)
     std::string tile_port;           // host port of the bark tiling of the internodes (ase-pl-flora: flora.tile.v1)
+    std::string level_port;          // host port the player levels a patch through (ase-pl-flora: flora.level.v1)
     std::string template_corner_port;    // host port of the corners of the organ templates (ase-pl-flora: flora.template.corner.v1)
     std::string template_triangle_port;  // host port of the triangles of the organ templates (ase-pl-flora: flora.template.triangle.v1)
     std::string op_irrigate;         // submit operation that pours on one patch
     std::string op_prune;            // submit operation that cuts the branch an internode sits on (03.10 step 9)
+    std::string op_level;            // submit operation that levels the ground of one patch (03.8 point 2)
     std::string op_lay;              // submit operation that lays one patch, the ground square or a brook
     double      irrigate_amount_mm = 0.0;  // water one press of Regar pours, mm
     uint32_t    catch_up_steps = 0u;       // most ticks one frame may run while the host catches up
@@ -474,6 +476,11 @@ public:
      * port; the plugin files it in its next Reception run, ase-phytomer fells the branch.
      */
     ase::kernel::HostStatus prune(uint32_t object_id);
+    /**
+     * Level the ground of the patch `object_id` (03.8 point 2): a level request on the level port, no
+     * value; the plugin files it in its next Reception run, ase-terrain levels the disc of the patch.
+     */
+    ase::kernel::HostStatus level(uint32_t object_id);
     /** One line of the view itself (boot line, action, measurement) through the host's logger. */
     ase::kernel::HostStatus note(const char* text);
 
