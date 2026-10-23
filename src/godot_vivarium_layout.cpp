@@ -16,8 +16,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-21
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -66,6 +66,18 @@ bool VivariumView::load_places(const ::godot::Dictionary& root) {
     }
     if (layout_.place_rects.empty()) {
         return fail_config("places");
+    }
+    // ONE FRAME PER PATCH (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 point 2): announce_patches waits for a
+    // record on every place, so a place without a patch would hold back the patch lines and every stage
+    // event for the whole run, and the empty frame would stand over the scene. load_host_config has read
+    // the patches before the layout (load_config), so the two lists are held against each other here.
+    if (layout_.place_rects.size() != start_.patches.size()) {
+        return fail_config("places");
+    }
+    for (const VivariumPatchSpec& patch : start_.patches) {
+        if (patch.place >= layout_.place_rects.size()) {
+            return fail_config("places");
+        }
     }
     return true;
 }

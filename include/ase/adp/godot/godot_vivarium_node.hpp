@@ -75,8 +75,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-18
- * @version     00.00.05.00003
+ * @modified    2026-10-22
+ * @version     00.00.05.00004
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
@@ -260,7 +260,9 @@ private:
 
     [[nodiscard]] bool can_water() const;
     [[nodiscard]] bool can_prune() const;
-    [[nodiscard]] uint32_t pick_segment(const ::godot::Vector2& at) const;  // the internode under a tap, GODOT_NO_OBJECT for none
+    // the internode under a tap, GODOT_NO_OBJECT for none; `candidates` counts the internodes of the focused
+    // plant in front of the camera, `nearest_px` the distance of the closest of them from the tap
+    [[nodiscard]] uint32_t pick_segment(const ::godot::Vector2& at, uint32_t& candidates, float& nearest_px) const;
     [[nodiscard]] ::godot::String stage_text(uint8_t stage) const;
     [[nodiscard]] ::godot::String patch_text(const VivariumPatchView& patch) const;
     [[nodiscard]] ::godot::String boot_line() const;

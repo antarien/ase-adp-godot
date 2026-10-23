@@ -285,6 +285,9 @@ constexpr const char* GODOT_ASSETS_COMMENT = "_";                           // a
 constexpr const char* GODOT_ROLE_GROUND_MEADOW = "ground_meadow";           // material role of meadow soil (GODOT_SOIL_MEADOW)
 constexpr const char* GODOT_ROLE_GROUND_FOREST = "ground_forest";           // material role of forest floor (GODOT_SOIL_FOREST)
 constexpr uint32_t GODOT_COLOR_ASSET_MISSING = 0xFF00FFFFu;                 // error material: one magenta for every role whose asset is missing
+constexpr const char* GODOT_GLTF_KEY_IMAGES = "images";                     // glTF document: its image list, in the order GLTFState::get_images holds them
+constexpr const char* GODOT_GLTF_KEY_IMAGE = "name";                        // glTF image: which map of ase-assgen it is (assgen_kit.save_map)
+constexpr const char* GODOT_IMAGE_TRANSLUCENCY = "_translucency";           // glTF image ending of the light a thin organ lets through (leaf.py, fruit.py, grass.py), bound as backlight
 constexpr const char* GODOT_SHADER_SOIL_REL = "soil_rel";                   // instance uniform of the ground material: soil water over field capacity of the focused patch, 0..1
 constexpr const char* GODOT_SHADER_CONDITION = "condition";                 // instance uniform of the leaf material: GODOT_COND_* of the plant's patch
 

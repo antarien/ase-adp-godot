@@ -20,6 +20,10 @@
  *              scales y to the organ's length places it unchanged (03.11 step 2). The loader hands the
  *              mesh out as the file carries it and scales nothing.
  *
+ *              A THIN ORGAN LETS THE LIGHT THROUGH: a file whose image list carries a map ending in
+ *              GODOT_IMAGE_TRANSLUCENCY gets it bound as the backlight texture of its materials, so a
+ *              leaf transmits the sun in the app as it does in the curator's backlight view.
+ *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @design      DSGN_024
@@ -27,8 +31,8 @@
  * @usecase     usecase:6451 - load flora blueprints
  * @actor       Flora BDIEX Framework (FLOBDIEXFRW)
  * @created     2026-10-11
- * @modified    2026-10-11
- * @version     00.00.01.00001
+ * @modified    2026-10-22
+ * @version     00.00.02.00002
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
@@ -53,12 +57,13 @@ namespace ase::adp::godot {
 /** The error material of a name: a new lit surface in the colour asset_color gives a name the binding holds no file for. */
 ::godot::Ref<::godot::StandardMaterial3D> error_material(const VivariumAssetBinding& binding, const std::string& name);
 
-/** The material of a bound material asset - the first surface of its file - or the error material when its file or its surface is missing. */
+/** The material of a bound material asset - the first surface of its file, its translucency bound as backlight - or the error material when its file or its surface is missing. */
 ::godot::Ref<::godot::Material> bound_material(const VivariumAssetBinding& binding, const ::godot::String& asset_root,
                                                const std::string& name);
 
 /**
- * The mesh of a bound organ template - its surfaces with the materials of its file - or an empty reference
+ * The mesh of a bound organ template - its surfaces with the materials of its file, their translucency bound
+ * as backlight - or an empty reference
  * when the binding holds no file for the name, the file does not load or carries no mesh. The caller draws
  * an empty one as its stand-in shape in the error material.
  */

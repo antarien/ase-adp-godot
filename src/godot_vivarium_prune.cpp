@@ -15,8 +15,8 @@
  * @usecase     usecase:100365 - prune a branch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-22
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -50,12 +50,16 @@ void VivariumView::toggle_pruning() {
     node_->queue_redraw();
 }
 
-uint32_t VivariumView::pick_segment(const ::godot::Vector2& at) const {
+uint32_t VivariumView::pick_segment(const ::godot::Vector2& at, uint32_t& candidates, float& nearest_px) const {
     // THE INTERNODE UNDER THE FINGER. The middle of every internode of the focused plant goes through
     // the current camera onto the surface; the nearest within pick_px_ is hit. The view computes no
     // geometry of its own: the middle is the instance transform ase-render-data computed for the
     // organ, applied to the middle of the unit tube, beside the stem base the patch record carries -
-    // the same numbers the scene draws the internode with.
+    // the same numbers the scene draws the internode with. Every internode in front of the camera is
+    // counted and the closest distance kept, so a miss says whether there was nothing to hit or the
+    // tap lay too far from it.
+    candidates = 0u;
+    nearest_px = -1.0f;
     if (scene_ == nullptr) {
         return GODOT_NO_OBJECT;
     }
@@ -91,6 +95,10 @@ uint32_t VivariumView::pick_segment(const ::godot::Vector2& at) const {
             continue;
         }
         const float px = camera->unproject_position(middle).distance_to(at);
+        candidates += 1u;
+        if (nearest_px < 0.0f || px < nearest_px) {
+            nearest_px = px;
+        }
         if (px <= hit_px) {
             hit_px = px;
             hit = instance.object_id;
@@ -102,9 +110,13 @@ uint32_t VivariumView::pick_segment(const ::godot::Vector2& at) const {
 void VivariumView::prune(const ::godot::Vector2& at) {
     // The cut goes to the plugin; which branch falls is ase-phytomer's, and the view shows the shoot
     // without it once the organ port lays it out so - no optimistic removal here.
-    const uint32_t organ = pick_segment(at);
+    uint32_t candidates = 0u;
+    float nearest_px = -1.0f;
+    const uint32_t organ = pick_segment(at, candidates, nearest_px);
     if (organ == GODOT_NO_OBJECT) {
-        note("prune at " + ::godot::String::num(at.x, 0) + "," + ::godot::String::num(at.y, 0) + " result=none");
+        note("prune at " + ::godot::String::num(at.x, 0) + "," + ::godot::String::num(at.y, 0) +
+             " result=none candidates=" + ::godot::String::num_uint64(candidates) +
+             " nearest_px=" + ::godot::String::num(nearest_px, 1));
         return;
     }
     const HostStatus status = resources_.prune(organ);

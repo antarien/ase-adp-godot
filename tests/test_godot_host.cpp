@@ -150,7 +150,15 @@ TEST_CASE("the poured seed sprouts, and its shoot and root reach the organ ports
     // published in the run it sprouted (ase-phytomer, ase-radix: an unshown organ publishes at once),
     // read into the plugin's inputs and laid on the ports in the frame after. The bound is a few
     // Dissemination runs.
+    //
+    // ONE RUN OF THE ORGAN SCHEDULE FIRST, whether the shoot sprouted during the frames of L3 or does so
+    // here: the manager reads the organ ports anew after every run of that schedule, so one run lays a
+    // new generation either way. Without it the case measured where L3 stopped - a shoot already on the
+    // port left the walk below without a single frame and the generation unchanged (measured
+    // 2026-10-21 on v00.00.26: the shoot stood on the port at the start of the case, 20 > 20).
+    constexpr uint32_t kRunFrames = 4u;  // Dissemination runs once in four frames of a quarter second
     constexpr uint32_t kBoundFrames = 32u;
+    advance_frames(resources, kRunFrames);
     for (uint32_t frame = 0u; frame < kBoundFrames && resources.get_organs(GODOT_ORGAN_SEGMENT).empty(); ++frame) {
         advance_frames(resources, 1u);
     }

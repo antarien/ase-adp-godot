@@ -32,8 +32,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-21
+ * @version     00.00.02.00002
  */
 
 #include <doctest/doctest.h>
@@ -188,9 +188,16 @@ struct AdapterEnvironment {
     std::vector<std::string> boot_lines;
 };
 
+// The one environment of the run, never booted here: the boot belongs to environment(), the teardown
+// below reaches it without starting a host only to stop it.
+inline AdapterEnvironment& environment_storage() {
+    static AdapterEnvironment env;
+    return env;
+}
+
 // The one boot of the run.
 inline AdapterEnvironment& environment() {
-    static AdapterEnvironment env;
+    AdapterEnvironment& env = environment_storage();
     if (env.attempted) {
         return env;
     }
@@ -204,6 +211,37 @@ inline AdapterEnvironment& environment() {
     (void)env.resources.remove_log_lines(env.boot_lines);
     return env;
 }
+
+// THE HOST LEAVES WHEN THE RUN ENDS, NOT WHEN THE PROCESS DOES. The environment is a function-local
+// static built before the host exists; boot() builds the log resources of ase-log (its filter cache among
+// them), further function-local statics, after it. Statics end in reverse order of construction, so at
+// exit those end FIRST, and the manager's destructor - whose clear_all() stops the host, and the App logs
+// its shutdown sequence - would reach a cache that is gone (measured 2026-10-21: SIGSEGV in should_log_loc
+// from print_shutdown_sequence under ~AdapterEnvironment, after every case passed). doctest tells its
+// listeners when the last case is done, inside main and before any static ends; there the host is
+// stopped, and the destructor later finds nothing left to stop.
+struct AdapterEnvironmentTeardown : doctest::IReporter {
+    explicit AdapterEnvironmentTeardown(const doctest::ContextOptions& /*options*/) {}
+    void report_query(const doctest::QueryData& /*query*/) override {}
+    void test_run_start() override {}
+    void test_run_end(const doctest::TestRunStats& /*stats*/) override {
+        AdapterEnvironment& env = environment_storage();
+        if (env.attempted) {
+            env.resources.clear_all();
+        }
+    }
+    void test_case_start(const doctest::TestCaseData& /*test*/) override {}
+    void test_case_reenter(const doctest::TestCaseData& /*test*/) override {}
+    void test_case_end(const doctest::CurrentTestCaseStats& /*stats*/) override {}
+    void test_case_exception(const doctest::TestCaseException& /*exception*/) override {}
+    void subcase_start(const doctest::SubcaseSignature& /*signature*/) override {}
+    void subcase_end() override {}
+    void log_assert(const doctest::AssertData& /*data*/) override {}
+    void log_message(const doctest::MessageData& /*data*/) override {}
+    void test_case_skipped(const doctest::TestCaseData& /*test*/) override {}
+};
+
+DOCTEST_REGISTER_LISTENER("adapter_environment_teardown", 1, AdapterEnvironmentTeardown);
 
 // n frames of a quarter second each - one tick each, the scheduler's frame ceiling.
 inline void advance_frames(GodotHostResourceManager& resources, uint32_t frames) {
