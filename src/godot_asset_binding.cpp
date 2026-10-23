@@ -13,8 +13,8 @@
  * @usecase     usecase:100344 - verify assets in the package
  * @actor       Smartphone App Integration (SMARTAPP)
  * @created     2026-10-09
- * @modified    2026-10-18
- * @version     00.00.02.00002
+ * @modified    2026-10-23
+ * @version     00.00.03.00003
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
@@ -47,7 +47,9 @@ bool same_checksum(const std::string& a, const std::string& b) {
 }  // namespace
 
 VivariumAssetBinding bind_assets(const std::vector<std::string>& names,
-                                 const std::vector<VivariumAssetEntry>& manifest, VivariumHashFn hash, void* user) {
+                                 const std::vector<VivariumAssetEntry>& manifest,
+                                 const std::unordered_map<std::string, uint32_t>& stand_ins, VivariumHashFn hash,
+                                 void* user) {
     VivariumAssetBinding binding;
     std::unordered_map<std::string, bool> seen;
     for (const std::string& name : names) {
@@ -55,6 +57,10 @@ VivariumAssetBinding bind_assets(const std::vector<std::string>& names,
             continue;
         }
         seen[name] = true;
+        const auto colour = stand_ins.find(name);
+        if (colour != stand_ins.end()) {
+            binding.stand_ins[name] = colour->second;
+        }
         const VivariumAssetEntry* entry = nullptr;
         bool twice = false;
         for (const VivariumAssetEntry& candidate : manifest) {
@@ -79,7 +85,11 @@ std::string asset_missing_line(const std::string& name) {
 }
 
 uint32_t asset_color(const VivariumAssetBinding& binding, const std::string& name, uint32_t bound_color) {
-    return binding.files.count(name) != 0u ? bound_color : GODOT_COLOR_ASSET_MISSING;
+    if (binding.files.count(name) != 0u) {
+        return bound_color;
+    }
+    const auto colour = binding.stand_ins.find(name);
+    return colour == binding.stand_ins.end() ? GODOT_COLOR_ASSET_MISSING : colour->second;
 }
 
 }  // namespace ase::adp::godot

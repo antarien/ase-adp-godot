@@ -22,8 +22,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-18
- * @version     00.00.07.00011
+ * @modified    2026-10-23
+ * @version     00.00.08.00012
  *
  * WHY THE PORT KEYS ARE WRITTEN A SECOND TIME
  *
@@ -284,12 +284,64 @@ constexpr const char* GODOT_ASSETS_KEY_SHA256 = "sha256";                   // m
 constexpr const char* GODOT_ASSETS_COMMENT = "_";                           // a key of the list starting with it is a comment, never a role
 constexpr const char* GODOT_ROLE_GROUND_MEADOW = "ground_meadow";           // material role of meadow soil (GODOT_SOIL_MEADOW)
 constexpr const char* GODOT_ROLE_GROUND_FOREST = "ground_forest";           // material role of forest floor (GODOT_SOIL_FOREST)
-constexpr uint32_t GODOT_COLOR_ASSET_MISSING = 0xFF00FFFFu;                 // error material: one magenta for every role whose asset is missing
+constexpr uint32_t GODOT_COLOR_ASSET_MISSING = 0xFF00FFFFu;                 // signal colour of a name the asset list gives no stand-in colour
 constexpr const char* GODOT_GLTF_KEY_IMAGES = "images";                     // glTF document: its image list, in the order GLTFState::get_images holds them
 constexpr const char* GODOT_GLTF_KEY_IMAGE = "name";                        // glTF image: which map of ase-assgen it is (assgen_kit.save_map)
 constexpr const char* GODOT_IMAGE_TRANSLUCENCY = "_translucency";           // glTF image ending of the light a thin organ lets through (leaf.py, fruit.py, grass.py), bound as backlight
 constexpr const char* GODOT_SHADER_SOIL_REL = "soil_rel";                   // instance uniform of the ground material: soil water over field capacity of the focused patch, 0..1
 constexpr const char* GODOT_SHADER_CONDITION = "condition";                 // instance uniform of the leaf material: GODOT_COND_* of the plant's patch
+
+/**
+ * The stand-in material (godot_plant_look.cpp, operator order of 2026-10-23): a role whose file is missing is
+ * drawn in its GODOT_COLOR_STAND_IN_* colour through this shader, so the scene reads as meadow, bark and leaf
+ * before Phase 04 delivers a file. The ground darkens with the soil water of the focused patch
+ * (GODOT_SHADER_SOIL_REL, -1 while unknown), a leaf takes the wilted or the dead colour by the condition of
+ * its patch (GODOT_SHADER_CONDITION). Both faces are drawn: the stand-in leaf is a card without thickness.
+ */
+constexpr const char* GODOT_STAND_IN_SHADER_CODE =
+    "shader_type spatial;\n"
+    "render_mode cull_disabled;\n"
+    "uniform vec4 stand_in_color : source_color = vec4(1.0);\n"
+    "uniform vec4 wilted_color : source_color = vec4(1.0);\n"
+    "uniform vec4 dead_color : source_color = vec4(1.0);\n"
+    "uniform int wilted_code = 1;\n"
+    "uniform int dead_code = 2;\n"
+    "uniform float wet_shade = 1.0;\n"
+    "uniform float stand_in_roughness = 1.0;\n"
+    "instance uniform float soil_rel = -1.0;\n"
+    "instance uniform float condition = 0.0;\n"
+    "void fragment() {\n"
+    "    vec3 color = stand_in_color.rgb;\n"
+    "    if (soil_rel >= 0.0) {\n"
+    "        color *= mix(1.0, wet_shade, clamp(soil_rel, 0.0, 1.0));\n"
+    "    }\n"
+    "    int code = int(round(condition));\n"
+    "    if (code == dead_code) {\n"
+    "        color = dead_color.rgb;\n"
+    "    } else if (code == wilted_code) {\n"
+    "        color = wilted_color.rgb;\n"
+    "    }\n"
+    "    ALBEDO = color;\n"
+    "    ROUGHNESS = stand_in_roughness;\n"
+    "}\n";
+constexpr const char* GODOT_STAND_IN_COLOR = "stand_in_color";            // stand-in shader uniform: the colour of the name
+constexpr const char* GODOT_STAND_IN_WILTED = "wilted_color";             // stand-in shader uniform: colour of a wilted stand
+constexpr const char* GODOT_STAND_IN_DEAD = "dead_color";                 // stand-in shader uniform: colour of a dead stand
+constexpr const char* GODOT_STAND_IN_WILTED_CODE = "wilted_code";         // stand-in shader uniform: GODOT_COND_WILTED
+constexpr const char* GODOT_STAND_IN_DEAD_CODE = "dead_code";             // stand-in shader uniform: GODOT_COND_DEAD
+constexpr const char* GODOT_STAND_IN_WET = "wet_shade";                   // stand-in shader uniform: GODOT_STAND_IN_WET_SHADE
+constexpr const char* GODOT_STAND_IN_ROUGH = "stand_in_roughness";        // stand-in shader uniform: GODOT_STAND_IN_ROUGHNESS
+constexpr float GODOT_STAND_IN_WET_SHADE = 0.55f;                         // share of its colour the ground keeps at field capacity: wet earth is darker
+constexpr float GODOT_STAND_IN_ROUGHNESS = 0.9f;                          // roughness of every stand-in surface: matt, no texture to carry a sheen
+constexpr uint32_t GODOT_COLOR_STAND_IN_BARK = 0xE6E1D3FFu;               // stand-in of GODOT_ROLE_BARK: the white bark of the birch
+constexpr uint32_t GODOT_COLOR_STAND_IN_BARK_BASE = 0x3E3630FFu;          // stand-in of GODOT_ROLE_BARK_BASE: the dark cracked bark of the stem base
+constexpr uint32_t GODOT_COLOR_STAND_IN_MEADOW = 0x587A34FFu;             // stand-in of GODOT_ROLE_GROUND_MEADOW: grass over earth
+constexpr uint32_t GODOT_COLOR_STAND_IN_FOREST = 0x5B4632FFu;             // stand-in of GODOT_ROLE_GROUND_FOREST: leaf litter over earth
+constexpr uint32_t GODOT_COLOR_STAND_IN_LEAF = 0x5E8F32FFu;               // stand-in of GODOT_ROLE_LEAF: a fresh birch leaf
+constexpr uint32_t GODOT_COLOR_STAND_IN_MALE = 0xA38A4CFFu;               // stand-in of GODOT_ROLE_MALE: a male catkin
+constexpr uint32_t GODOT_COLOR_STAND_IN_FEMALE = 0x7D8C3FFFu;             // stand-in of GODOT_ROLE_FEMALE: a female catkin
+constexpr uint32_t GODOT_COLOR_STAND_IN_FRUIT = 0x8A6A3EFFu;              // stand-in of GODOT_ROLE_FRUIT: a ripe fruit stand
+constexpr uint32_t GODOT_COLOR_STAND_IN_NUTLET = 0x9C7A44FFu;             // stand-in of GODOT_ROLE_NUTLET: a winged nutlet
 
 /**
  * The bark of the internodes (usecase:100395 age the bark, DSGN_024): one material for the tubes and

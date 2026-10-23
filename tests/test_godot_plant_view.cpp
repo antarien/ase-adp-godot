@@ -24,8 +24,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-09
- * @modified    2026-10-18
- * @version     00.00.06.00004
+ * @modified    2026-10-23
+ * @version     00.00.07.00005
  */
 
 #include <doctest/doctest.h>
@@ -112,6 +112,9 @@ std::string hash_from_map(const std::string& file, void* user) {
 
 const std::string kSumA(64u, 'a');
 const std::string kSumB(64u, 'b');
+constexpr uint32_t kStandInLeaf = 0x5E8F32FFu;    // stand-in colour of the leaf in the test list
+constexpr uint32_t kStandInBark = 0xE6E1D3FFu;    // stand-in colour of the white bark in the test list
+constexpr uint32_t kStandInMeadow = 0x587A34FFu;  // stand-in colour of meadow soil in the test list
 
 }  // namespace
 
@@ -456,7 +459,11 @@ TEST_CASE("asset binding: a name binds only to a manifest file whose checksum ma
         {"ground/meadow_2.tres", kSumA}};
     const std::vector<std::string> names = {"birch_leaf", "birch_bark_white", "ground_meadow", "birch_bud",
                                             "birch_leaf"};
-    const VivariumAssetBinding binding = bind_assets(names, manifest, &hash_from_map, &sums);
+    // the stand-in colours of the stage: every listed name but birch_bud, and one name the stage does not list
+    const std::unordered_map<std::string, uint32_t> stand_ins = {
+        {"birch_leaf", kStandInLeaf}, {"birch_bark_white", kStandInBark}, {"ground_meadow", kStandInMeadow},
+        {"brook_stone", kStandInBark}};
+    const VivariumAssetBinding binding = bind_assets(names, manifest, stand_ins, &hash_from_map, &sums);
     REQUIRE(binding.files.size() == 1u);
     CHECK(binding.files.at("birch_leaf") == "birch/leaf.glb");
     REQUIRE(binding.missing.size() == 3u);
@@ -465,19 +472,25 @@ TEST_CASE("asset binding: a name binds only to a manifest file whose checksum ma
     CHECK(binding.missing[2] == "birch_bud");
     CHECK(asset_missing_line("birch_bud") == "asset missing birch_bud");
 
-    // 03.2 point 4: the bound name is drawn as the view draws it, the missing one in the error
-    // material - the same magenta for every missing name, an unknown and an empty one included
+    // 03.2 point 4 (operator order of 2026-10-23): the bound name is drawn as the view draws it, a missing
+    // one in the stand-in colour of the list; a name the list gives no colour - an empty one included -
+    // takes the signal colour
     CHECK(asset_color(binding, "birch_leaf", GODOT_COLOR_SOIL) == GODOT_COLOR_SOIL);
-    CHECK(asset_color(binding, "ground_meadow", GODOT_COLOR_SOIL) == GODOT_COLOR_ASSET_MISSING);
+    CHECK(asset_color(binding, "ground_meadow", GODOT_COLOR_SOIL) == kStandInMeadow);
+    CHECK(asset_color(binding, "birch_bark_white", GODOT_COLOR_SOIL) == kStandInBark);
     CHECK(asset_color(binding, "birch_bud", GODOT_COLOR_GROW) == GODOT_COLOR_ASSET_MISSING);
     CHECK(asset_color(binding, std::string(), GODOT_COLOR_SOIL) == GODOT_COLOR_ASSET_MISSING);
     CHECK(GODOT_COLOR_ASSET_MISSING != GODOT_COLOR_SOIL);
+    // the binding keeps the colours of the listed names only
+    CHECK(binding.stand_ins.size() == 3u);
+    CHECK(binding.stand_ins.count("brook_stone") == 0u);
 
-    // no asset set delivered yet (Phase 04): every name is missing, none is bound silently
-    const VivariumAssetBinding nothing = bind_assets(names, {}, &hash_from_map, &sums);
+    // no asset set delivered yet (Phase 04): every name is missing, none is bound silently, each listed
+    // name stands in its colour
+    const VivariumAssetBinding nothing = bind_assets(names, {}, stand_ins, &hash_from_map, &sums);
     CHECK(nothing.files.empty());
     CHECK(nothing.missing.size() == 4u);
-    CHECK(asset_color(nothing, "birch_leaf", GODOT_COLOR_SOIL) == GODOT_COLOR_ASSET_MISSING);
+    CHECK(asset_color(nothing, "birch_leaf", GODOT_COLOR_SOIL) == kStandInLeaf);
 }
 
 }  // namespace ase::adp::godot

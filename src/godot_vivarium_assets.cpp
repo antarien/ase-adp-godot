@@ -8,7 +8,7 @@
  *              (godot_asset_binding.hpp). The asset list is configuration: without it, without its play
  *              stage or without a role the view draws with, the view does not start. The manifest is the
  *              delivery of Phase 04: without it every name is missing - reported name by name at every
- *              boot - and the view runs.
+ *              boot - and the view runs, drawing each role in its stand-in colour (stand_ins_of).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -17,8 +17,8 @@
  * @usecase     usecase:100344 - verify assets in the package
  * @actor       Smartphone App Integration (SMARTAPP)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-23
+ * @version     00.00.02.00002
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -33,6 +33,8 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace ase::adp::godot {
@@ -50,6 +52,30 @@ std::string asset_checksum(const std::string& file, void* user) {
         return std::string();
     }
     return utf8_of(::godot::FileAccess::get_sha256(path));
+}
+
+/**
+ * The stand-in colours of the stage (operator order of 2026-10-23): every role the view draws keeps its
+ * GODOT_COLOR_STAND_IN_* colour of types.hpp - the drawing style of the adapter - under the asset name the
+ * stage gives that role, so a missing file is drawn in the colour of what it stands for. A role the stage
+ * does not name carries no name to colour.
+ */
+std::unordered_map<std::string, uint32_t> stand_ins_of(const std::unordered_map<std::string, std::string>& roles) {
+    const std::pair<const char*, uint32_t> colours[] = {
+        {GODOT_ROLE_BARK, GODOT_COLOR_STAND_IN_BARK},           {GODOT_ROLE_BARK_BASE, GODOT_COLOR_STAND_IN_BARK_BASE},
+        {GODOT_ROLE_GROUND_MEADOW, GODOT_COLOR_STAND_IN_MEADOW}, {GODOT_ROLE_GROUND_FOREST, GODOT_COLOR_STAND_IN_FOREST},
+        {GODOT_ROLE_LEAF, GODOT_COLOR_STAND_IN_LEAF},           {GODOT_ROLE_MALE, GODOT_COLOR_STAND_IN_MALE},
+        {GODOT_ROLE_FEMALE, GODOT_COLOR_STAND_IN_FEMALE},       {GODOT_ROLE_FRUIT, GODOT_COLOR_STAND_IN_FRUIT},
+        {GODOT_ROLE_NUTLET, GODOT_COLOR_STAND_IN_NUTLET},
+    };
+    std::unordered_map<std::string, uint32_t> stand_ins;
+    for (const auto& [role, colour] : colours) {
+        const auto named = roles.find(role);
+        if (named != roles.end()) {
+            stand_ins[named->second] = colour;
+        }
+    }
+    return stand_ins;
 }
 
 }  // namespace
@@ -115,7 +141,7 @@ bool VivariumView::load_assets(const ::godot::Dictionary& root) {
     }
     std::vector<VivariumAssetEntry> manifest;
     load_asset_manifest(manifest_path, manifest);
-    assets_ = bind_assets(asset_names_, manifest, &asset_checksum, &asset_root_);
+    assets_ = bind_assets(asset_names_, manifest, stand_ins_of(asset_roles_), &asset_checksum, &asset_root_);
     return true;
 }
 
