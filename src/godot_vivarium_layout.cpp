@@ -134,6 +134,10 @@ bool VivariumView::load_layout(const ::godot::Dictionary& root) {
         !read_text(button, "label", texts_.water)) {
         return fail_config("buttons.water");
     }
+    if (!read_section(buttons, "level", button) || !read_rect(button, "rect", layout_.level_rect) ||
+        !read_text(button, "label", texts_.level)) {
+        return fail_config("buttons.level");
+    }
     if (!read_section(buttons, "prune", button) || !read_rect(button, "rect", layout_.prune_rect) ||
         !read_text(button, "label", texts_.prune)) {
         return fail_config("buttons.prune");
@@ -188,6 +192,9 @@ bool VivariumView::load_bands(const ::godot::Dictionary& layout) {
     }
     if (!in_one_band(placed_bands, layout_.water_rect.position.y, layout_.water_rect.get_end().y)) {
         return fail_config("layout.bands: buttons.water");
+    }
+    if (!in_one_band(placed_bands, layout_.level_rect.position.y, layout_.level_rect.get_end().y)) {
+        return fail_config("layout.bands: buttons.level");
     }
     if (!in_one_band(placed_bands, layout_.prune_rect.position.y, layout_.prune_rect.get_end().y)) {
         return fail_config("layout.bands: buttons.prune");

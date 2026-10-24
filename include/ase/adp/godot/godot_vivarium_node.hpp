@@ -64,7 +64,8 @@
  *              godot_vivarium_node.cpp (lifecycle, boot, frame, log), godot_vivarium_config.cpp,
  *              godot_vivarium_host_config.cpp, godot_vivarium_layout.cpp, godot_vivarium_assets.cpp (the
  *              configuration), godot_vivarium_input.cpp (taps and the selection),
- *              godot_vivarium_water.cpp (Regar), godot_vivarium_prune.cpp (the cutting mode),
+ *              godot_vivarium_water.cpp (Regar), godot_vivarium_level.cpp (Nivelar),
+ *              godot_vivarium_prune.cpp (the cutting mode),
  *              godot_vivarium_draw.cpp (placement and canvas), godot_vivarium_scene.cpp (the 3D scene per
  *              frame) and
  *              godot_vivarium_measure.cpp (self-test and measurement).
@@ -120,6 +121,7 @@ struct VivariumLayout {
     ::godot::Vector2 note_at;
     std::vector<::godot::Rect2> place_rects;  // the rectangle of each place, index = place
     ::godot::Rect2   water_rect;
+    ::godot::Rect2   level_rect;               // the field that levels the selected patch (03.8 point 2)
     ::godot::Rect2   prune_rect;               // the button of the cutting mode (03.10 step 9)
     ::godot::Rect2   reset_rect;
 };
@@ -183,6 +185,7 @@ struct VivariumTexts {
     ::godot::String restart_note;
     ::godot::String error;
     ::godot::String water;
+    ::godot::String level;
     ::godot::String prune;
     ::godot::String reset;
     ::godot::String separator;   // between the parts of one line, e.g. "área 2 · Broto"
@@ -248,7 +251,8 @@ private:
     void tap(const ::godot::Vector2& at);
     void select(uint32_t place);
     void water();
-    void toggle_pruning();                 // the button Podar: the cutting mode on or off (03.10 step 9)
+    void level();                          // the field Nivelar: level the ground of the selected patch (03.8 point 2)
+    void toggle_pruning();                // the button Podar: the cutting mode on or off (03.10 step 9)
     void prune(const ::godot::Vector2& at);  // in the cutting mode: cut the branch of the internode under the tap
     void announce_patches();
     void follow_stages();
@@ -259,6 +263,7 @@ private:
     void note(const ::godot::String& line);
 
     [[nodiscard]] bool can_water() const;
+    [[nodiscard]] bool can_level() const;
     [[nodiscard]] bool can_prune() const;
     // the internode under a tap, GODOT_NO_OBJECT for none; `candidates` counts the internodes of the focused
     // plant in front of the camera, `nearest_px` the distance of the closest of them from the tap

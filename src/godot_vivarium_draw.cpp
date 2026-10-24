@@ -177,6 +177,8 @@ void VivariumView::draw() {
     draw_info();
     use_band(layout_.water_rect.position.y);
     draw_button(layout_.water_rect, texts_.water, can_water());
+    use_band(layout_.level_rect.position.y);
+    draw_button(layout_.level_rect, texts_.level, can_level());
     use_band(layout_.prune_rect.position.y);
     draw_button(layout_.prune_rect, texts_.prune, can_prune());
     use_band(layout_.reset_rect.position.y);

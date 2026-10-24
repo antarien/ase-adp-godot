@@ -6,8 +6,8 @@
  * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.4 and PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1: the tap of
  *              the Plant Keeper. A tap is matched against the rectangles as the last drawn frame placed
  *              them (placed, godot_vivarium_draw.cpp), so it lands where the button was seen. A selection
- *              is a frame, no change to the simulation. Regar leads to godot_vivarium_water.cpp, the
- *              cutting mode to godot_vivarium_prune.cpp.
+ *              is a frame, no change to the simulation. Regar leads to godot_vivarium_water.cpp, Nivelar
+ *              to godot_vivarium_level.cpp, the cutting mode to godot_vivarium_prune.cpp.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -76,6 +76,10 @@ void VivariumView::tap(const ::godot::Vector2& at) {
     }
     if (placed(layout_.water_rect).has_point(at)) {
         water();
+        return;
+    }
+    if (placed(layout_.level_rect).has_point(at)) {
+        level();
         return;
     }
     if (placed(layout_.prune_rect).has_point(at)) {
