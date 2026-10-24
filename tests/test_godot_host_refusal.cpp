@@ -165,8 +165,9 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     CHECK(resources.boot(no_species) == ase::kernel::HostStatusInvalidArgument);
 
     // An unnamed port is refused before a host exists, never at the port step of a host that loaded
-    // the whole set for nothing: an organ port, the ground, the sky, the seeds, the tiling, the templates.
-    std::vector<VivariumStartConfig> unnamed(8u, vivarium_config(bundle));
+    // the whole set for nothing: an organ port, the ground, the sky, the seeds, the tiling, the templates,
+    // the level port and its operation.
+    std::vector<VivariumStartConfig> unnamed(10u, vivarium_config(bundle));
     unnamed[0].organ_ports[GODOT_ORGAN_ROOT].clear();
     unnamed[1].terrain_port.clear();
     unnamed[2].ground_cell_port.clear();
@@ -175,6 +176,8 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     unnamed[5].tile_port.clear();
     unnamed[6].template_corner_port.clear();
     unnamed[7].template_triangle_port.clear();
+    unnamed[8].level_port.clear();
+    unnamed[9].op_level.clear();
     for (const VivariumStartConfig& config : unnamed) {
         CHECK(resources.boot(config) == ase::kernel::HostStatusInvalidArgument);
         CHECK(std::string(resources.failure_step()) == GODOT_STEP_CONFIG);
@@ -182,7 +185,7 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     }
 
     // A port the set does not offer is found after the load and before the start.
-    std::vector<VivariumStartConfig> unoffered(7u, vivarium_config(bundle));
+    std::vector<VivariumStartConfig> unoffered(8u, vivarium_config(bundle));
     unoffered[0].clock_port = "flora.clock.v9";
     unoffered[1].organ_ports[GODOT_ORGAN_LEAF] = "flora.organ.leaf.v9";
     unoffered[2].sky_port = "sky.scene.v9";
@@ -190,6 +193,7 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     unoffered[4].tile_port = "flora.tile.v9";
     unoffered[5].template_corner_port = "flora.template.corner.v9";
     unoffered[6].template_triangle_port = "flora.template.triangle.v9";
+    unoffered[7].level_port = "flora.level.v9";
     for (const VivariumStartConfig& config : unoffered) {
         CHECK(resources.boot(config) == ase::kernel::HostStatusNotFound);
         CHECK(std::string(resources.failure_step()) == GODOT_STEP_PORT);

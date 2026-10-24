@@ -88,6 +88,8 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.seed_port = "flora.seed.v1";
     // The bark tiling of the internodes (03.11 step 2): boot() asks the set for this port as well.
     config.tile_port = "flora.tile.v1";
+    // The level requests of the player (03.8 point 2): boot() asks the set for this port as well.
+    config.level_port = "flora.level.v1";
     // The organ templates of ase-render-data (usecase:101011 lay out organ templates): both ports as well.
     config.template_corner_port = "flora.template.corner.v1";
     config.template_triangle_port = "flora.template.triangle.v1";
@@ -107,6 +109,7 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.instance_ports[GODOT_ORGAN_FRUIT] = "flora.instance.fruit.v1";
     config.op_irrigate = "irrigate";
     config.op_prune = "prune";
+    config.op_level = "level";
     config.op_lay = "lay";
     config.irrigate_amount_mm = 25.0;
     config.catch_up_steps = 8u;

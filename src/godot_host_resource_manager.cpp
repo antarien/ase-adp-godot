@@ -472,7 +472,8 @@ bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written,
 /**
  * The ports and operations every host of the Vivarium needs: patch, clock, scene, ground, brook,
  * terrain, ground cell, the six organ ports, the five instance ports, the sky port, the seed port, the
- * tile port and the two template ports, irrigate, prune and lay - every port boot() asks the set for. An
+ * tile port, the level port and the two template ports, irrigate, prune, level and lay - every port boot()
+ * asks the set for. An
  * empty one would surface later as a NotFound of the first call, or as the port step of a boot that a
  * configuration check could have refused before a host existed.
  */
@@ -480,10 +481,10 @@ bool ports_named(const VivariumStartConfig& config) {
     bool named = !config.patch_port.empty() && !config.clock_port.empty() && !config.scene_port.empty() &&
                  !config.ground_port.empty() && !config.brook_port.empty() && !config.terrain_port.empty() &&
                  !config.ground_cell_port.empty() && !config.sky_port.empty() && !config.seed_port.empty() &&
-                 !config.tile_port.empty() && !config.template_corner_port.empty() &&
+                 !config.tile_port.empty() && !config.level_port.empty() && !config.template_corner_port.empty() &&
                  !config.template_triangle_port.empty() &&
                  !config.op_irrigate.empty() &&
-                 !config.op_prune.empty() && !config.op_lay.empty();
+                 !config.op_prune.empty() && !config.op_level.empty() && !config.op_lay.empty();
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         named = named && !config.organ_ports[c].empty();
     }
@@ -1088,6 +1089,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.brook_port.c_str()) && host_->has_port(config_.terrain_port.c_str()) &&
                    host_->has_port(config_.ground_cell_port.c_str()) && host_->has_port(config_.sky_port.c_str()) &&
                    host_->has_port(config_.seed_port.c_str()) && host_->has_port(config_.tile_port.c_str()) &&
+                   host_->has_port(config_.level_port.c_str()) &&
                    host_->has_port(config_.template_corner_port.c_str()) &&
                    host_->has_port(config_.template_triangle_port.c_str());
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
@@ -1763,6 +1765,16 @@ HostStatus GodotHostResourceManager::prune(uint32_t object_id) {
     KernelHostInput input{};
     input.object_id = object_id;
     return host_->submit(config_.organ_ports[GODOT_ORGAN_SEGMENT].c_str(), config_.op_prune.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::level(uint32_t object_id) {
+    // The request names only the patch: its disc is the plugin's, the height ase-terrain's.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    input.object_id = object_id;
+    return host_->submit(config_.level_port.c_str(), config_.op_level.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::note(const char* text) {
