@@ -57,6 +57,9 @@ add_library(ase-adp-godot-host STATIC
     src/godot_host_resource_manager.cpp
     src/godot_view_layout.cpp
     src/godot_plant_geometry.cpp
+    src/godot_plant_instances.cpp    # the instance buffers of the plants (usecase:101348 hand organ instances to app, 03.11)
+    src/godot_plant_templates.cpp    # the organ templates from the template ports (usecase:101342 hand organ shapes to app, 03.11)
+    src/godot_plant_ground.cpp       # the ground mesh and the marks of its shader (usecase:101339 show the ground around plant, 03.8)
     src/godot_scene_exposure.cpp     # the exposure of the scene camera for the sky's light (usecase:101415 hand sky light to app, D1721)
     src/godot_order_budget.cpp
     src/godot_cycle_measure.cpp      # the measurement line of one cycle, also compiled into avt-headless (03.6)

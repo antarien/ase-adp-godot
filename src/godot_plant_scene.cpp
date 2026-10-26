@@ -28,6 +28,8 @@
 
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_asset_showcase_scene.hpp>
+#include <ase/adp/godot/godot_plant_instances.hpp>
+#include <ase/adp/godot/godot_plant_templates.hpp>
 #include <ase/adp/godot/godot_scene_exposure.hpp>
 #include <ase/adp/godot/types.hpp>
 

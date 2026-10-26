@@ -23,7 +23,7 @@
 
 #include <doctest/doctest.h>
 
-#include <ase/adp/godot/godot_plant_geometry.hpp>
+#include <ase/adp/godot/godot_plant_ground.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
 #include <ase/math/scalar.hpp>
