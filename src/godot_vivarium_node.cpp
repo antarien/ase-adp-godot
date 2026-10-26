@@ -37,8 +37,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-18
- * @version     00.00.04.00007
+ * @modified    2026-10-25
+ * @version     00.00.04.00009
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -48,6 +48,7 @@
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
+#include <ase/math/math.hpp>
 #include <ase/utils/boot_clock.hpp>
 #include <ase/utils/clock.hpp>
 
@@ -143,6 +144,11 @@ void VivariumView::boot_host() {
     selected_place_ = GODOT_NO_PLACE;
     water_pending_place_ = GODOT_NO_PLACE;
     pruning_ = false;
+    bedding_ = false;
+    bed_started_ = false;
+    player_beds_.clear();  // a new host carries only the configured brooks
+    flattening_ = false;
+    player_flats_.clear();  // and only the ground it lays
     // The first frame after a boot starts the clock: the time the boot took is no simulation time.
     last_frame_ns_ = 0;
     garden_return_ = GardenReturn{};
@@ -403,8 +409,11 @@ void VivariumView::follow_stages() {
 
 void VivariumView::follow_water() {
     // Input → plugin (Reception) → ase-hydro (Reception) → balance and publish (Dissemination) →
-    // snapshot: the pour has arrived once the patch's soil water rose above its value at the
-    // press, and only then is the result logged (L3). It may also be refused on its way - by
+    // snapshot: the pour has arrived once the patch's soil water rose by GODOT_WATER_ARRIVED_SHARE of
+    // what the pour can add - its amount, or the room up to the field capacity if that is smaller -
+    // and only then is the result logged (L3). ANY RISE IS NOT THE POUR (run 20261025-phase03-v39):
+    // one step after the press the soil stood at 20.004 mm against 20.003 from drift, the line said
+    // applied, and the 25 mm arrived one step later at 45.003. It may also be refused on its way - by
     // ase-hydro above the field capacity - and then no rise ever comes: after
     // GODOT_WATER_WAIT_STEPS Dissemination runs that is a line of its own.
     if (water_pending_place_ == GODOT_NO_PLACE) {
@@ -415,7 +424,8 @@ void VivariumView::follow_water() {
         water_pending_place_ = GODOT_NO_PLACE;
         return;
     }
-    if (patch->soil_mm > water_pending_from_) {
+    const double expected_mm = ase::math::min(start_.irrigate_amount_mm, patch->capacity_mm - water_pending_from_);
+    if (expected_mm > 0.0 && patch->soil_mm >= water_pending_from_ + GODOT_WATER_ARRIVED_SHARE * expected_mm) {
         note("water applied " + measure(water_pending_place_) + " soil_mm_before=" +
              ::godot::String::num(water_pending_from_, GODOT_LOG_DECIMALS));
         water_pending_place_ = GODOT_NO_PLACE;

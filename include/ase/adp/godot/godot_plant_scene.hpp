@@ -11,7 +11,7 @@
  *              ase-pl-sky. These functions make the Godot nodes and hand them the arrays of
  *              godot_plant_geometry.hpp; they compute no organ, no template, no matrix, no height and no
  *              light. The plant takes the instance and organ views of GodotHostResourceManager and the
- *              organ templates of its template ports (usecase:101011 lay out organ templates), the ground
+ *              organ templates of its template ports (usecase:101011 tessellate the organ templates), the ground
  *              the terrain samples, the light the sky port (VivariumSkyView), the materials and the
  *              template files the look bound once (godot_plant_look.hpp, 03.2): a missing material is
  *              drawn in the error material, a missing template file as the port template that stands in
@@ -42,8 +42,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-10-18
- * @version     00.00.04.00005
+ * @modified    2026-10-25
+ * @version     00.00.05.00000
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -74,11 +74,15 @@ void aim_plant_camera(::godot::Node3D* scene, const PlantSceneCamera& camera, co
 
 /**
  * Replaces the ground mesh with build_ground over the samples and cells of the ports - places, normals,
- * texture coordinates and triangles as ase-terrain and ase-render-data laid them - drawn in `material`,
- * the ground of the focused patch's soil (PlantSceneLook::ground).
+ * texture coordinates and triangles as ase-terrain and ase-render-data laid them -, its vertex colours
+ * laid by mark_ground over the levelled `discs` and the brook `beds`, drawn in `material`, the ground of
+ * the focused patch's soil (PlantSceneLook::ground), whose grid lines stand `step_m` apart: the distance
+ * of two height samples.
  */
 void fill_plant_ground(::godot::Node3D* scene, const std::vector<VivariumTerrainView>& samples,
-                       const std::vector<VivariumGroundCellView>& cells, const ::godot::Ref<::godot::Material>& material);
+                       const std::vector<VivariumGroundCellView>& cells, const std::vector<PlantGroundDisc>& discs,
+                       const std::vector<PlantGroundBed>& beds, float step_m,
+                       const ::godot::Ref<::godot::Material>& material);
 
 /**
  * Replaces the plants: one node per body of `origins` at its stem base, under it the instance records of

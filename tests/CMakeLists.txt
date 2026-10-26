@@ -25,11 +25,19 @@ The same form as plugins/ase-pl-vegetation/tests.
                               handset, camera and gesture bar insets, a 3:4 tablet, a safe area too
                               small, a surface without room, the band edges. Pure computation, needs
                               neither bundle nor Godot.
-  ase-adp-godot-plant-test    rows_by_body, build_template, ground and stem base, the order budget by
-                              frame time and bind_assets against a test manifest
-                              (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1, 03.2, 03.11). Pure computation.
-  ase-adp-godot-keeper-test   The care flow of the Plant Keeper: the return to the garden, the focused
-                              patch and the seed of every sowing (03.1, 03.6). Pure computation.
+  ase-adp-godot-plant-test    The stem base and the order budget by frame time (03.1, 03.6). Pure computation.
+  ase-adp-godot-instances-test rows_by_body: the instance records to body and order split (03.11). Pure.
+  ase-adp-godot-bark-test     The bark share and tiling as custom data of each instance (03.11). Pure.
+  ase-adp-godot-templates-test build_template from the template ports (03.11). Pure computation.
+  ase-adp-godot-stand-test    Soil water and condition of a patch for its materials (03.2). Pure.
+  ase-adp-godot-binding-test  bind_assets against a test manifest, stand-in colours (03.2). Pure.
+  ase-adp-godot-ground-test   build_ground, mark_ground (levelled disc, brook bed) and the uniforms of
+                              the ground shader (03.8, 03.11). Pure computation.
+  ase-adp-godot-keeper-test   The return to the garden of the Plant Keeper (03.1, 03.6, V6). Pure computation.
+  ase-adp-godot-focus-test    The selected patch: the place the camera looks at, its near view and the
+                              zoom (03.1, V2). Pure computation.
+  ase-adp-godot-seed-test     The seed of every sowing (03.1, V7). Pure computation.
+  ase-adp-godot-exposure-test The exposure of the scene camera for the sky's light (D1721). Pure computation.
   ase-adp-godot-showcase-test The asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7). Pure
                               computation against a test binding.
 
@@ -38,7 +46,7 @@ directory and the target of the bundle, the path of the table. Without them ther
 tests could run against - a test against an invented bundle or a table of its own would pass every
 case without touching the path Godot takes.
 
-@usecase     usecase:100051 - bind a build edge
+@usecase     usecase:100051 - resolve module dependencies
 ]]
 
 foreach(_adp_godot_test_input ASE_ADP_GODOT_TEST_BUNDLE_DIR ASE_ADP_GODOT_TEST_BUNDLE_TARGET
@@ -90,13 +98,31 @@ foreach(_adp_godot_bundle_test host refusal scene)
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant keeper showcase)
+foreach(_adp_godot_pure_test layout plant instances bark templates stand binding ground keeper focus seed exposure showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
         set(_adp_godot_pure_source test_godot_plant_view.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "instances")
+        set(_adp_godot_pure_source test_godot_plant_instances.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "bark")
+        set(_adp_godot_pure_source test_godot_plant_bark.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "templates")
+        set(_adp_godot_pure_source test_godot_plant_templates.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "stand")
+        set(_adp_godot_pure_source test_godot_plant_stand.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "binding")
+        set(_adp_godot_pure_source test_godot_asset_binding.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "ground")
+        set(_adp_godot_pure_source test_godot_plant_ground.cpp)
     elseif(_adp_godot_pure_test STREQUAL "keeper")
         set(_adp_godot_pure_source test_godot_keeper_flow.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "focus")
+        set(_adp_godot_pure_source test_godot_patch_focus.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "seed")
+        set(_adp_godot_pure_source test_godot_new_seed.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "exposure")
+        set(_adp_godot_pure_source test_godot_scene_exposure.cpp)
     else()
         set(_adp_godot_pure_source test_godot_asset_showcase.cpp)
     endif()

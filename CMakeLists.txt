@@ -57,6 +57,7 @@ add_library(ase-adp-godot-host STATIC
     src/godot_host_resource_manager.cpp
     src/godot_view_layout.cpp
     src/godot_plant_geometry.cpp
+    src/godot_scene_exposure.cpp     # the exposure of the scene camera for the sky's light (usecase:101415 hand sky light to app, D1721)
     src/godot_order_budget.cpp
     src/godot_cycle_measure.cpp      # the measurement line of one cycle, also compiled into avt-headless (03.6)
     src/godot_garden_return.cpp      # the return from the background and its catch-up (usecase:100390 return to the garden, 03.6)
@@ -113,7 +114,10 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_assets.cpp       # VivariumView: asset list of the play stage and its manifest (03.2)
     src/godot_vivarium_input.cpp        # VivariumView: taps and the selection of a patch
     src/godot_vivarium_water.cpp        # VivariumView: Regar, the pour to the patch port
+    src/godot_vivarium_level.cpp        # VivariumView: Nivelar, the level request to the level port (03.8)
     src/godot_vivarium_prune.cpp        # VivariumView: cutting mode, the internode under the finger, the cut
+    src/godot_vivarium_bed.cpp          # VivariumView: bed mode, the ground under the finger, the bed the player lays (03.8)
+    src/godot_vivarium_flatten.cpp      # VivariumView: flatten mode, the disc the player levels where he taps (03.8)
     src/godot_vivarium_draw.cpp         # VivariumView: placement on the visible surface and the canvas
     src/godot_vivarium_scene.cpp        # VivariumView: what a frame fills of the 3D scene (03.1)
     src/godot_vivarium_measure.cpp      # VivariumView: self-test and measurement modes (02.3)

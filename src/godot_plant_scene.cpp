@@ -22,16 +22,18 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-10-18
- * @version     00.00.05.00006
+ * @modified    2026-10-25
+ * @version     00.00.06.00000
  */
 
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_asset_showcase_scene.hpp>
+#include <ase/adp/godot/godot_scene_exposure.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
+#include <godot_cpp/classes/camera_attributes_practical.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
 #include <godot_cpp/classes/environment.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
@@ -39,11 +41,13 @@
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/multi_mesh.hpp>
 #include <godot_cpp/classes/multi_mesh_instance3d.hpp>
+#include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/world_environment.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/node_path.hpp>
+#include <godot_cpp/variant/packed_color_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
@@ -116,6 +120,16 @@ T* add_part(::godot::Node3D* scene, const char* name) {
                                                               arrays.normals[v * 3u + 2u]));
     }
     surface[::godot::Mesh::ARRAY_NORMAL] = normals;
+    // the vertex colours where the surface carries them: the cover of the ground (mark_ground)
+    if (!arrays.colors.empty()) {
+        ::godot::PackedColorArray colors;
+        colors.resize(static_cast<int64_t>(arrays.colors.size() / 4u));
+        for (std::size_t v = 0u; v < arrays.colors.size() / 4u; ++v) {
+            colors.set(static_cast<int64_t>(v), ::godot::Color(arrays.colors[v * 4u], arrays.colors[v * 4u + 1u],
+                                                               arrays.colors[v * 4u + 2u], arrays.colors[v * 4u + 3u]));
+        }
+        surface[::godot::Mesh::ARRAY_COLOR] = colors;
+    }
     ::godot::Ref<::godot::ArrayMesh> mesh;
     mesh.instantiate();
     mesh->add_surface_from_arrays(::godot::Mesh::PRIMITIVE_TRIANGLES, surface);
@@ -123,7 +137,7 @@ T* add_part(::godot::Node3D* scene, const char* name) {
 }
 
 /**
- * The organ template `code` of the template ports as a mesh (usecase:101011 lay out organ templates): the
+ * The organ template `code` of the template ports as a mesh (usecase:101011 tessellate the organ templates): the
  * corners and triangles ase-render-data laid, through build_template. Empty while the ports carry no set.
  */
 ::godot::Ref<::godot::Mesh> template_mesh(const GodotHostResourceManager& resources, uint32_t code) {
@@ -217,6 +231,12 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
     environment->set_background(::godot::Environment::BG_COLOR);
     environment->set_ambient_source(::godot::Environment::AMBIENT_SOURCE_COLOR);
     world->set_environment(environment);
+    // the camera adapts to the light as an eye does (register D1721): light_plant_scene sets its multiplier
+    // every frame from the sky port (scene_exposure); the sky's numbers stay as they are
+    ::godot::Ref<::godot::CameraAttributesPractical> exposure;
+    exposure.instantiate();
+    exposure->set_auto_exposure_enabled(false);
+    world->set_camera_attributes(exposure);
 
     (void)add_part<::godot::MeshInstance3D>(scene, GODOT_PLANT_GROUND);
     (void)add_part<::godot::Node3D>(scene, GODOT_PLANT_BODIES);
@@ -235,14 +255,21 @@ void aim_plant_camera(::godot::Node3D* scene, const PlantSceneCamera& camera, co
 }
 
 void fill_plant_ground(::godot::Node3D* scene, const std::vector<VivariumTerrainView>& samples,
-                       const std::vector<VivariumGroundCellView>& cells, const ::godot::Ref<::godot::Material>& material) {
+                       const std::vector<VivariumGroundCellView>& cells, const std::vector<PlantGroundDisc>& discs,
+                       const std::vector<PlantGroundBed>& beds, float step_m,
+                       const ::godot::Ref<::godot::Material>& material) {
     ::godot::MeshInstance3D* node = part_of<::godot::MeshInstance3D>(scene, GODOT_PLANT_GROUND);
     if (node == nullptr) {
         return;
     }
     PlantMeshArrays arrays;
     (void)build_ground(samples, cells, arrays);
+    (void)mark_ground(discs, beds, arrays);
     node->set_mesh(mesh_of(arrays));
+    const ::godot::Ref<::godot::ShaderMaterial> shaded = material;
+    if (shaded.is_valid()) {
+        shaded->set_shader_parameter(GODOT_GROUND_GRID_STEP, step_m);
+    }
     node->set_material_override(material);
 }
 
@@ -406,6 +433,10 @@ void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky) {
                                                     static_cast<float>(sky.fog_b)));
     environment->set_fog_depth_begin(static_cast<float>(sky.fog_near));
     environment->set_fog_depth_end(static_cast<float>(sky.fog_far));
+    const ::godot::Ref<::godot::CameraAttributes> exposure = world->get_camera_attributes();
+    if (exposure.is_valid()) {
+        exposure->set_exposure_multiplier(scene_exposure(sky));
+    }
 }
 
 }  // namespace ase::adp::godot

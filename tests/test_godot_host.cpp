@@ -139,6 +139,39 @@ TEST_CASE("L3: a pour arrives as more soil water of that patch - after the modul
     CHECK(resources.patch_count() == 4u);
 }
 
+TEST_CASE("Nivelar: a level request is taken by the level port, and the ground of the disc stands at its level") {
+    AdapterEnvironment& env = environment();
+    REQUIRE(env.booted == ase::kernel::HostStatusOk);
+    GodotHostResourceManager& resources = env.resources;
+    advance_frames(resources, 8u);
+    const VivariumPatchView before = patch_at(resources, 0u);
+
+    CHECK(resources.level(before.object_id) == ase::kernel::HostStatusOk);
+    // Four Dissemination runs: the plugin files the flatten, ase-terrain levels the disc and measures it again.
+    advance_frames(resources, 16u);
+    const VivariumPatchView after = patch_at(resources, 0u);
+    // The centre decides the level, and nothing moved the centre: the stem base stays where it stood.
+    CHECK(after.y == doctest::Approx(before.y).epsilon(1e-4));
+
+    // Every sample well inside the disc stands at that level; the count shows the disc held samples at all.
+    const double inner_m = 0.75 * test::kPatchHalfM;
+    uint32_t inside = 0u;
+    for (const VivariumTerrainView& sample : resources.get_terrain()) {
+        const double dx = sample.x - after.x;
+        const double dz = sample.z - after.z;
+        if (dx * dx + dz * dz < inner_m * inner_m) {
+            ++inside;
+            CHECK(sample.height == doctest::Approx(after.y).epsilon(1e-4));
+        }
+    }
+    CHECK(inside > 0u);
+
+    // An object the plugin does not know is taken by the port and levels nothing.
+    CHECK(resources.level(GODOT_NO_OBJECT - 1u) == ase::kernel::HostStatusOk);
+    advance_frames(resources, 8u);
+    CHECK(resources.patch_count() == 4u);
+}
+
 TEST_CASE("the poured seed sprouts, and its shoot and root reach the organ ports within a few frames") {
     AdapterEnvironment& env = environment();
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
@@ -317,7 +350,7 @@ TEST_CASE("clear_all ends the game host once, is idempotent and leaves no host b
     CHECK(resources.unit_count() == 0u);
     CHECK(resources.patch_count() == 0u);
     CHECK(!resources.get_clock().known);
-    // the templates of the old host go with it (usecase:101011 lay out organ templates), and the view
+    // the templates of the old host go with it (usecase:101011 tessellate the organ templates), and the view
     // sees a new generation
     CHECK(resources.get_template_corners().empty());
     CHECK(resources.get_template_triangles().empty());

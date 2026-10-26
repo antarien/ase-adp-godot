@@ -26,8 +26,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-25
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -260,6 +260,11 @@ bool VivariumView::load_view(const ::godot::Dictionary& root) {
         return fail_config("view.pick_px");
     }
     pick_px_ = static_cast<float>(pick);
+    double flatten = 0.0;
+    if (!read_number(view, GODOT_VIEW_KEY_FLATTEN, flatten) || !(flatten > 0.0)) {
+        return fail_config("view.flatten_m");
+    }
+    flatten_m_ = static_cast<float>(flatten);
     return true;
 }
 

@@ -6,7 +6,7 @@
  * @brief       Pins what the scene ports of one game host carry to the view: organ templates, sky, ground, stem bases
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11, against the real bundle with the configuration and the
  *              game host of test_godot_host_support.hpp: the template ports carry the three organ templates
- *              of ase-render-data once (usecase:101011 lay out organ templates), the sky port lights the
+ *              of ase-render-data once (usecase:101011 tessellate the organ templates), the sky port lights the
  *              scene, the terrain and ground cell ports lay the ground, and the patch records carry the
  *              stem bases ase-terrain levelled. The checks pin properties of the ports, never a number the
  *              view would choose: a unit normal, a closed set of indices, a front face facing outward.
@@ -17,11 +17,11 @@
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    process/validation/check
- * @usecase     usecase:101011 - lay out organ templates
- * @actor       Vivarium Client (VIVCLNT)
+ * @usecase     usecase:100387 - view the plant
+ * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-24
+ * @version     00.00.01.00002
  */
 
 #include "test_godot_host_support.hpp"
@@ -51,7 +51,7 @@ uint64_t corner_key(uint32_t code, uint32_t index) {
 
 }  // namespace
 
-TEST_CASE("usecase:101011 lay out organ templates: the template ports carry the three templates once, each a closed set facing outward") {
+TEST_CASE("usecase:101011 tessellate the organ templates: the template ports carry the three templates once, each a closed set facing outward") {
     AdapterEnvironment& env = environment();
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
     GodotHostResourceManager& resources = env.resources;

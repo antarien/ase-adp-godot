@@ -24,8 +24,8 @@
  * @usecase     usecase:100386 - select a patch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-12
- * @modified    2026-10-12
- * @version     00.00.01.00001
+ * @modified    2026-10-25
+ * @version     00.00.02.00000
  */
 
 #include <ase/adp/godot/godot_plant_geometry.hpp>
@@ -57,5 +57,15 @@ struct PatchFocusAim {
 
 /** The near view onto `origin`: `distance_m` south of it and `height_m` above, looking at `look_m` above it. */
 [[nodiscard]] PatchFocusAim patch_focus_aim(const PlantSceneCamera& camera, const PlantOrigin& origin);
+
+/**
+ * The zoom after `steps` turns of the mouse wheel or pinches (operator order of 2026-10-25: the terrain and the
+ * birch both in sight): each step towards the birch multiplies it by GODOT_ZOOM_STEP, each step away divides
+ * by it, held between GODOT_ZOOM_MIN (close at the seedling) and GODOT_ZOOM_MAX (the whole ground).
+ */
+[[nodiscard]] float patch_focus_zoom(float zoom, int32_t steps);
+
+/** The near view of the start configuration at `zoom`: distance, height and look point scaled, the field of view kept. */
+[[nodiscard]] PlantSceneCamera patch_focus_zoomed(const PlantSceneCamera& camera, float zoom);
 
 }  // namespace ase::adp::godot

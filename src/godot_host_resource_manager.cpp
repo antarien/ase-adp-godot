@@ -13,8 +13,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-18
- * @version     00.00.04.00006 [seed]
+ * @modified    2026-10-25
+ * @version     00.00.04.00007 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -108,10 +108,12 @@
 #include <toml++/toml.hpp>
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #if defined(__ANDROID__)
@@ -335,7 +337,38 @@ bool ground_cell_view_of(const KernelHostRecord& record, VivariumGroundCellView&
 }
 
 /**
- * One template corner record as a view (usecase:101011 lay out organ templates). false for a record that
+ * Whether two reads of the terrain and ground cell ports carry the same ground, sample for sample and cell
+ * for cell in port order. GODOT_TERRAIN_SCHEDULE runs whether ase-terrain changed a height or not, so a
+ * read alone is no change: only a ground that differs moves terrain_generation, and the view rebuilds
+ * its mesh and writes its `scene ground` line once per levelling or carved bed, never twice a second.
+ */
+bool same_ground(const std::vector<VivariumTerrainView>& samples, const std::vector<VivariumGroundCellView>& cells,
+                 const std::vector<VivariumTerrainView>& held_samples,
+                 const std::vector<VivariumGroundCellView>& held_cells) {
+    if (samples.size() != held_samples.size() || cells.size() != held_cells.size()) {
+        return false;
+    }
+    for (std::size_t i = 0u; i < samples.size(); ++i) {
+        const VivariumTerrainView& a = samples[i];
+        const VivariumTerrainView& b = held_samples[i];
+        if (a.object_id != b.object_id || a.body != b.body || a.x != b.x || a.z != b.z || a.height != b.height ||
+            a.nx != b.nx || a.ny != b.ny || a.nz != b.nz || a.u != b.u || a.v != b.v) {
+            return false;
+        }
+    }
+    for (std::size_t i = 0u; i < cells.size(); ++i) {
+        const VivariumGroundCellView& a = cells[i];
+        const VivariumGroundCellView& b = held_cells[i];
+        if (a.object_id != b.object_id || a.body != b.body || a.sw != b.sw || a.se != b.se || a.ne != b.ne ||
+            a.nw != b.nw) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * One template corner record as a view (usecase:101011 tessellate the organ templates). false for a record that
  * misses a key, names no known template code or no whole index, or carries a place, normal or texture
  * coordinate that is no finite number: the corner port writes all ten keys of every corner (ase-pl-flora,
  * FloraHostTmplVtxExptSystem), so a gap is a broken port - never a corner drawn at the origin.
@@ -472,7 +505,8 @@ bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written,
 /**
  * The ports and operations every host of the Vivarium needs: patch, clock, scene, ground, brook,
  * terrain, ground cell, the six organ ports, the five instance ports, the sky port, the seed port, the
- * tile port, the level port and the two template ports, irrigate, prune, level and lay - every port boot()
+ * tile port, the level and the flatten port and the two template ports, irrigate, prune, level, flatten
+ * and lay - every port boot()
  * asks the set for. An
  * empty one would surface later as a NotFound of the first call, or as the port step of a boot that a
  * configuration check could have refused before a host existed.
@@ -481,10 +515,11 @@ bool ports_named(const VivariumStartConfig& config) {
     bool named = !config.patch_port.empty() && !config.clock_port.empty() && !config.scene_port.empty() &&
                  !config.ground_port.empty() && !config.brook_port.empty() && !config.terrain_port.empty() &&
                  !config.ground_cell_port.empty() && !config.sky_port.empty() && !config.seed_port.empty() &&
-                 !config.tile_port.empty() && !config.level_port.empty() && !config.template_corner_port.empty() &&
-                 !config.template_triangle_port.empty() &&
+                 !config.tile_port.empty() && !config.level_port.empty() && !config.flatten_port.empty() &&
+                 !config.template_corner_port.empty() && !config.template_triangle_port.empty() &&
                  !config.op_irrigate.empty() &&
-                 !config.op_prune.empty() && !config.op_level.empty() && !config.op_lay.empty();
+                 !config.op_prune.empty() && !config.op_level.empty() && !config.op_flatten.empty() &&
+                 !config.op_lay.empty();
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         named = named && !config.organ_ports[c].empty();
     }
@@ -1089,7 +1124,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.brook_port.c_str()) && host_->has_port(config_.terrain_port.c_str()) &&
                    host_->has_port(config_.ground_cell_port.c_str()) && host_->has_port(config_.sky_port.c_str()) &&
                    host_->has_port(config_.seed_port.c_str()) && host_->has_port(config_.tile_port.c_str()) &&
-                   host_->has_port(config_.level_port.c_str()) &&
+                   host_->has_port(config_.level_port.c_str()) && host_->has_port(config_.flatten_port.c_str()) &&
                    host_->has_port(config_.template_corner_port.c_str()) &&
                    host_->has_port(config_.template_triangle_port.c_str());
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
@@ -1619,24 +1654,24 @@ HostStatus GodotHostResourceManager::read_terrain() {
     if (status != ase::kernel::HostStatusOk) {
         return status;
     }
-    terrain_.clear();
-    terrain_.reserve(written);
+    std::vector<VivariumTerrainView> samples;
+    samples.reserve(written);
     for (uint32_t i = 0u; i < written; ++i) {
         VivariumTerrainView view;
         if (!terrain_view_of(organ_records_[i], view)) {
             terrain_.clear();
             return ase::kernel::HostStatusInvalidArgument;
         }
-        terrain_.push_back(view);
+        samples.push_back(view);
     }
     // the cells of the same ground, from the same snapshot: ase-render-data lays both in one Observation
-    const HostStatus cells = snapshot_all(*host_, config_.ground_cell_port, organ_records_, written);
-    if (cells != ase::kernel::HostStatusOk) {
+    const HostStatus cells_read = snapshot_all(*host_, config_.ground_cell_port, organ_records_, written);
+    if (cells_read != ase::kernel::HostStatusOk) {
         terrain_.clear();
-        return cells;
+        return cells_read;
     }
-    ground_cells_.clear();
-    ground_cells_.reserve(written);
+    std::vector<VivariumGroundCellView> cells;
+    cells.reserve(written);
     for (uint32_t i = 0u; i < written; ++i) {
         VivariumGroundCellView view;
         if (!ground_cell_view_of(organ_records_[i], view)) {
@@ -1644,14 +1679,20 @@ HostStatus GodotHostResourceManager::read_terrain() {
             ground_cells_.clear();
             return ase::kernel::HostStatusInvalidArgument;
         }
-        ground_cells_.push_back(view);
+        cells.push_back(view);
     }
-    terrain_generation_ += 1u;
+    // a read that carries the ground the view already holds is no change (same_ground)
+    const bool changed = !same_ground(samples, cells, terrain_, ground_cells_);
+    terrain_ = std::move(samples);
+    ground_cells_ = std::move(cells);
+    if (changed) {
+        terrain_generation_ += 1u;
+    }
     return ase::kernel::HostStatusOk;
 }
 
 HostStatus GodotHostResourceManager::read_templates() {
-    // THE TEMPLATES ARE BUILT ONCE (usecase:101011 lay out organ templates). ase-render-data builds the fine
+    // THE TEMPLATES ARE BUILT ONCE (usecase:101011 tessellate the organ templates). ase-render-data builds the fine
     // and the coarse cylinder and the unit leaf in the Initialization of its host and keeps their rows; the
     // plugin lays them on its two template ports in every Production run. So both ports are read with every
     // snapshot until each carries a set, and not again while this host runs. Until the plugin's first
@@ -1775,6 +1816,27 @@ HostStatus GodotHostResourceManager::level(uint32_t object_id) {
     KernelHostInput input{};
     input.object_id = object_id;
     return host_->submit(config_.level_port.c_str(), config_.op_level.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::lay_brook(const VivariumBrookSpec& brook) {
+    // The bed the player draws goes the way the configured brooks go at the start (lay_brooks).
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    const KernelHostInput input = brook_input(brook);
+    return host_->submit(config_.brook_port.c_str(), config_.op_lay.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::flatten(double x, double z, double radius_m) {
+    // The request names a place, no patch: the disc is the player's, the height ase-terrain's.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_X, x);
+    (void)put_value(input, GODOT_KEY_Z, z);
+    (void)put_value(input, GODOT_KEY_HALF, radius_m);
+    return host_->submit(config_.flatten_port.c_str(), config_.op_flatten.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::note(const char* text) {

@@ -26,14 +26,13 @@
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
- * @design      DSGN_021
- * @design      DSGN_024
+ * @design      DSGN_066
  * @category    ecs/module
- * @usecase     usecase:100974 - lay out organ records
- * @actor       Vivarium Client (VIVCLNT)
+ * @usecase     usecase:100387 - view the plant
+ * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-09
- * @modified    2026-10-18
- * @version     00.00.05.00003
+ * @modified    2026-10-25
+ * @version     00.00.06.00000
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -44,12 +43,37 @@
 
 namespace ase::adp::godot {
 
-/** The arrays of one mesh surface: three floats per position and normal, two per uv, three indices per triangle. */
+/**
+ * The arrays of one mesh surface: three floats per position and normal, two per uv, three indices per
+ * triangle, and four floats per colour where a surface carries vertex colours (the ground: mark_ground).
+ */
 struct PlantMeshArrays {
     std::vector<float>   positions;
     std::vector<float>   normals;
     std::vector<float>   uvs;
     std::vector<int32_t> indices;
+    std::vector<float>   colors;
+};
+
+/**
+ * The disc ase-terrain levels under the plant of one patch (03.8): its centre and radius from the start
+ * configuration, its height the one the patch record carries (TRN_FLAT_HGT). Ground that stands at this
+ * height inside the disc is levelled ground - bare soil, no grass.
+ */
+struct PlantGroundDisc {
+    float x = 0.0f;       // centre, world metres east
+    float z = 0.0f;       // centre, world metres north
+    float radius = 0.0f;  // metres
+    float height = 0.0f;  // levelled height, metres
+};
+
+/** The bed of one brook as the start configuration lays it (03.8): the two ends and half its width, metres. */
+struct PlantGroundBed {
+    float x = 0.0f;
+    float z = 0.0f;
+    float end_x = 0.0f;
+    float end_z = 0.0f;
+    float half_m = 0.0f;
 };
 
 /** Where the stem base of the plant on one patch stands in the scene, metres. */
@@ -99,7 +123,7 @@ std::unordered_map<uint32_t, PlantBodyRows> rows_by_body(const std::vector<Vivar
 
 /**
  * Appends one organ template to `out`, taken as the template ports carried it (ase-render-data,
- * usecase:101011 lay out organ templates): one vertex per corner record of `code` - its place on the
+ * usecase:101011 tessellate the organ templates): one vertex per corner record of `code` - its place on the
  * unit, its normal and its texture coordinates - and per triangle record of `code` the triangle over
  * the corners its three indices name, in the order the record gives them. GODOT_TMPL_FINE is the
  * cylinder of the internodes up to the shown orders, GODOT_TMPL_CORS the one above them, and the fine
@@ -124,6 +148,18 @@ uint32_t build_template(const std::vector<VivariumTemplateCornerView>& corners,
  */
 uint32_t build_ground(const std::vector<VivariumTerrainView>& samples,
                       const std::vector<VivariumGroundCellView>& cells, PlantMeshArrays& out);
+
+/**
+ * Gives every vertex of a ground `out` built by build_ground its colour, which the ground shader reads as
+ * the cover of the ground (GODOT_GROUND_SHADER_CODE): red 1 where the vertex is levelled ground - inside a
+ * disc of `discs` and within GODOT_GROUND_LEVEL_TOLERANCE_M of its height, so the disc is soil only once
+ * ase-terrain levelled it -, green 1 where it lies in the bed of a brook of `beds` (no farther from the
+ * line between its ends than half its width), blue 0, alpha 1. Replaces the colours `out` carried.
+ *
+ * @return the vertices marked levelled or bed
+ */
+uint32_t mark_ground(const std::vector<PlantGroundDisc>& discs, const std::vector<PlantGroundBed>& beds,
+                     PlantMeshArrays& out);
 
 /**
  * Where the stem base of the plant on each patch stands, taken from its record: x and z, the centre

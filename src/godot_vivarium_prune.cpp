@@ -15,8 +15,8 @@
  * @usecase     usecase:100365 - prune a branch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-22
- * @version     00.00.01.00002
+ * @modified    2026-10-25
+ * @version     00.00.01.00003
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -46,6 +46,10 @@ void VivariumView::toggle_pruning() {
         return;
     }
     pruning_ = !pruning_;
+    // one mode at a time: a tap in the scene either cuts, lays a bed or levels a disc
+    bedding_ = false;
+    bed_started_ = false;
+    flattening_ = false;
     note(::godot::String("prune mode ") + (pruning_ ? "on" : "off"));
     node_->queue_redraw();
 }

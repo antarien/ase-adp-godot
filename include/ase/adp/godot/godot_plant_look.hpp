@@ -11,7 +11,7 @@
  *              when the configuration is read; the scene fills only hand the bound resources on
  *              (godot_plant_scene.hpp). A role the stage does not name, or whose file is missing, is drawn
  *              in the error material, a missing template file as the port template that stands in for it
- *              (usecase:101011 lay out organ templates).
+ *              (usecase:101011 tessellate the organ templates).
  *
  *              THE BARK IS ONE MATERIAL (usecase:100395 age the bark): a ShaderMaterial that mixes the
  *              white bark with the stem-base bark by the share each internode instance carries as custom

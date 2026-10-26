@@ -22,8 +22,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-23
- * @version     00.00.08.00012
+ * @modified    2026-10-25
+ * @version     00.00.09.00000
  *
  * WHY THE PORT KEYS ARE WRITTEN A SECOND TIME
  *
@@ -170,7 +170,7 @@ constexpr const char* GODOT_TERRAIN_SCHEDULE = "Dissemination"; // schedule in w
 constexpr uint32_t GODOT_TERRAIN_READS_PER_RUN = 2u;          // terrain reads after a new run: that frame and the next, as for the organs
 
 /**
- * The organ templates (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2, usecase:101011 lay out organ templates):
+ * The organ templates (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2, usecase:101011 tessellate the organ templates):
  * ase-render-data builds the fine and the coarse cylinder and the unit leaf on the unit, ase-pl-flora lays
  * their corners on one port and their triangles on another, each record with the code of its template. The
  * codes and keys are the plugin's (ase-pl-flora types.hpp, FLORA_HOST_TMPL_*, FLORA_HOST_KEY_*), repeated
@@ -249,6 +249,24 @@ constexpr const char* GODOT_VIEW_KEY_START = "order_start";       // view: order
 constexpr const char* GODOT_VIEW_KEY_CALM = "calm_frames";        // view: calm frames in a row that give one order more
 constexpr const char* GODOT_VIEW_KEY_OVER = "over_frames";        // view: over frames in a row that take one order back
 constexpr const char* GODOT_VIEW_KEY_PICK = "pick_px";            // view: logical pixels around a tap within which the middle of an internode is hit (cutting mode, 03.10 step 9)
+constexpr const char* GODOT_VIEW_KEY_FLATTEN = "flatten_m";       // view: radius of the disc one tap in the flatten mode levels, metres (03.8)
+/**
+ * The exposure of the scene camera (register D1721): the eye adapts to the night, a fixed camera does not. The
+ * sky port hands the light as ase-pl-sky computes it - at night the sun light 0.05 and the ambient
+ * 0.02/0.02/0.06 at intensity 0.15 (ATM_CONST_NIGHT_AMBIENT_*), by day at noon the sun 0.95 and the ambient
+ * 0.7 (run 20261025-phase03-v46) - and the view keeps those numbers. It lifts the camera's exposure by the
+ * square root of the ratio of GODOT_EXPOSURE_DAY_LIGHT to the light of the scene (scene_exposure), the partial
+ * adaptation of an eye, never below 1 and at most
+ * GODOT_EXPOSURE_LIFT_MAX, as an eye adapts to starlight: the night stays darker than the day, and the ground
+ * and the birch stay to be seen. The multiplier is the camera's, so both renderers, mobile and Compatibility,
+ * take it.
+ */
+constexpr float GODOT_EXPOSURE_DAY_LIGHT = 1.0f;   // light of the scene that needs no lift: the sun at noon plus its ambient share
+constexpr float GODOT_EXPOSURE_LIFT_MAX = 32.0f;   // largest lift of the exposure: the night stays at least this much darker than the day's light
+constexpr float GODOT_ZOOM_START = 1.0f;   // zoom of the near view at the start: the camera as the view section places it
+constexpr float GODOT_ZOOM_STEP = 0.8f;    // one wheel turn or pinch towards the birch: distance, height and look point times this
+constexpr float GODOT_ZOOM_MIN = 0.08f;    // closest zoom: 0.8 m from a seedling at the configured 10 m
+constexpr float GODOT_ZOOM_MAX = 1.6f;     // farthest zoom: the whole ground square in sight
 constexpr float GODOT_TUBE_MID = 0.5f;                            // middle of the unit tube template (y from 0 to 1): where a tap picks an internode
 constexpr double GODOT_MS_PER_SECOND = 1000.0;                    // the order budget takes frame times in milliseconds
 constexpr const char* GODOT_ROLE_BARK = "bark_white";             // material role of the white bark of the tubes and twigs
@@ -342,6 +360,115 @@ constexpr uint32_t GODOT_COLOR_STAND_IN_MALE = 0xA38A4CFFu;               // sta
 constexpr uint32_t GODOT_COLOR_STAND_IN_FEMALE = 0x7D8C3FFFu;             // stand-in of GODOT_ROLE_FEMALE: a female catkin
 constexpr uint32_t GODOT_COLOR_STAND_IN_FRUIT = 0x8A6A3EFFu;              // stand-in of GODOT_ROLE_FRUIT: a ripe fruit stand
 constexpr uint32_t GODOT_COLOR_STAND_IN_NUTLET = 0x9C7A44FFu;             // stand-in of GODOT_ROLE_NUTLET: a winged nutlet
+
+/**
+ * The ground of the care view (usecase:100387 view the plant, operator order of 2026-10-25: "ein Terrain
+ * hat je nach Schräglage andere Farben ... wo sieht man die Gitternetzlinien"). One ShaderMaterial per soil
+ * over the whole terrain mesh, its cover the material of the soil's role (godot_plant_look.cpp):
+ * - THE SLOPE PAINTS: the world normal of a fragment gives its slope; above GODOT_GROUND_SLOPE_BANK_DEG the
+ *   cover gives way to bare earth, above GODOT_GROUND_SLOPE_STEEP_DEG to the colour of an open bank.
+ * - THE GROUND STATE PAINTS: the vertex colour mark_ground lays (godot_plant_geometry.hpp) - red where
+ *   ase-terrain levelled the disc of a patch, which turns to bare soil, green where a brook's bed runs,
+ *   which turns to wet gravel. A Nivelar the player taps changes the terrain port and with it the colour.
+ * - THE GRID SHOWS THE SHAPE: thin lines along x and z at the distance of two height samples (the edges of
+ *   the terrain cells), a stronger one every GODOT_GROUND_GRID_MAJOR cells, and contour lines every
+ *   GODOT_GROUND_CONTOUR_M of height, so slopes, the levelled disc and the banks of the bed read as relief.
+ * The grain of the cover is value noise over the world place, so a meadow is no flat colour before Phase 04
+ * delivers its texture; the soil water of the focused patch darkens the ground as the stand-in did.
+ */
+constexpr const char* GODOT_GROUND_SHADER_CODE =
+    "shader_type spatial;\n"
+    "render_mode cull_back;\n"
+    "uniform vec4 cover_color : source_color = vec4(1.0);\n"
+    "uniform sampler2D cover_albedo : source_color, filter_linear_mipmap, repeat_enable, hint_default_white;\n"
+    "uniform vec2 cover_uv = vec2(1.0);\n"
+    "uniform vec4 soil_color : source_color = vec4(1.0);\n"
+    "uniform vec4 bank_color : source_color = vec4(1.0);\n"
+    "uniform vec4 bed_color : source_color = vec4(1.0);\n"
+    "uniform vec4 grid_color : source_color = vec4(0.0, 0.0, 0.0, 1.0);\n"
+    "uniform float slope_bank = 0.0;\n"
+    "uniform float slope_steep = 0.0;\n"
+    "uniform float grid_step = 1.0;\n"
+    "uniform float grid_major = 1.0;\n"
+    "uniform float contour_step = 1.0;\n"
+    "uniform float grid_weight = 0.0;\n"
+    "uniform float major_weight = 0.0;\n"
+    "uniform float contour_weight = 0.0;\n"
+    "uniform float wet_shade = 1.0;\n"
+    "uniform float ground_roughness = 1.0;\n"
+    "instance uniform float soil_rel = -1.0;\n"
+    "varying vec3 world_pos;\n"
+    "varying vec3 world_normal;\n"
+    "float grain_hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
+    "float grain_at(vec2 p) {\n"
+    "    vec2 i = floor(p);\n"
+    "    vec2 f = fract(p);\n"
+    "    vec2 u = f * f * (3.0 - 2.0 * f);\n"
+    "    return mix(mix(grain_hash(i), grain_hash(i + vec2(1.0, 0.0)), u.x),\n"
+    "               mix(grain_hash(i + vec2(0.0, 1.0)), grain_hash(i + vec2(1.0, 1.0)), u.x), u.y);\n"
+    "}\n"
+    "float line_at(float c, float width) {\n"
+    "    float d = abs(fract(c - 0.5) - 0.5) / max(width, 0.00001);\n"
+    "    return 1.0 - clamp(d, 0.0, 1.0);\n"
+    "}\n"
+    "void vertex() {\n"
+    "    world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
+    "    world_normal = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;\n"
+    "}\n"
+    "void fragment() {\n"
+    "    float slope = 1.0 - clamp(normalize(world_normal).y, 0.0, 1.0);\n"
+    "    float grain = grain_at(world_pos.xz * 1.3) * 0.6 + grain_at(world_pos.xz * 6.1) * 0.4;\n"
+    "    vec3 cover = cover_color.rgb * texture(cover_albedo, UV * cover_uv).rgb * mix(0.78, 1.18, grain);\n"
+    "    vec3 soil = soil_color.rgb * mix(0.85, 1.12, grain_at(world_pos.xz * 4.7));\n"
+    "    vec3 bank = bank_color.rgb * mix(0.85, 1.12, grain);\n"
+    "    vec3 bed = bed_color.rgb * mix(0.8, 1.1, grain_at(world_pos.xz * 9.0));\n"
+    "    vec3 color = mix(cover, soil, smoothstep(slope_bank * 0.5, slope_bank, slope));\n"
+    "    color = mix(color, bank, smoothstep(slope_steep * 0.7, slope_steep, slope));\n"
+    "    color = mix(color, soil, COLOR.r);\n"
+    "    color = mix(color, bed, COLOR.g);\n"
+    "    if (soil_rel >= 0.0) {\n"
+    "        color *= mix(1.0, wet_shade, clamp(soil_rel, 0.0, 1.0));\n"
+    "    }\n"
+    "    vec2 cell = world_pos.xz / grid_step;\n"
+    "    vec2 block = world_pos.xz / (grid_step * grid_major);\n"
+    "    float level = world_pos.y / contour_step;\n"
+    "    float minor = max(line_at(cell.x, fwidth(cell.x)), line_at(cell.y, fwidth(cell.y)));\n"
+    "    float major = max(line_at(block.x, fwidth(block.x)), line_at(block.y, fwidth(block.y)));\n"
+    "    float contour = line_at(level, fwidth(level));\n"
+    "    float lines = max(max(minor * grid_weight, major * major_weight), contour * contour_weight);\n"
+    "    ALBEDO = mix(color, grid_color.rgb, lines);\n"
+    "    ROUGHNESS = ground_roughness;\n"
+    "}\n";
+constexpr const char* GODOT_GROUND_COVER_COLOR = "cover_color";            // ground shader uniform: colour of the soil's cover (its role)
+constexpr const char* GODOT_GROUND_COVER_ALBEDO = "cover_albedo";          // ground shader uniform: albedo texture of the cover, white while none is bound
+constexpr const char* GODOT_GROUND_COVER_UV = "cover_uv";                  // ground shader uniform: UV scale of the cover
+constexpr const char* GODOT_GROUND_SOIL = "soil_color";                    // ground shader uniform: bare soil of levelled ground and of a slope
+constexpr const char* GODOT_GROUND_BANK = "bank_color";                    // ground shader uniform: an open bank
+constexpr const char* GODOT_GROUND_BED = "bed_color";                      // ground shader uniform: the wet gravel of a brook's bed
+constexpr const char* GODOT_GROUND_GRID = "grid_color";                    // ground shader uniform: colour of grid and contour lines
+constexpr const char* GODOT_GROUND_SLOPE_BANK = "slope_bank";              // ground shader uniform: GODOT_GROUND_SLOPE_BANK_SHARE
+constexpr const char* GODOT_GROUND_SLOPE_STEEP = "slope_steep";            // ground shader uniform: GODOT_GROUND_SLOPE_STEEP_SHARE
+constexpr const char* GODOT_GROUND_GRID_STEP = "grid_step";                // ground shader uniform: distance of two height samples, metres (the ground's step_m)
+constexpr const char* GODOT_GROUND_GRID_MAJOR_KEY = "grid_major";          // ground shader uniform: GODOT_GROUND_GRID_MAJOR
+constexpr const char* GODOT_GROUND_CONTOUR = "contour_step";               // ground shader uniform: GODOT_GROUND_CONTOUR_M
+constexpr const char* GODOT_GROUND_GRID_WEIGHT = "grid_weight";            // ground shader uniform: GODOT_GROUND_GRID_SHARE
+constexpr const char* GODOT_GROUND_MAJOR_WEIGHT = "major_weight";          // ground shader uniform: GODOT_GROUND_MAJOR_SHARE
+constexpr const char* GODOT_GROUND_CONTOUR_WEIGHT = "contour_weight";      // ground shader uniform: GODOT_GROUND_CONTOUR_SHARE
+constexpr const char* GODOT_GROUND_WET = "wet_shade";                      // ground shader uniform: GODOT_STAND_IN_WET_SHADE
+constexpr const char* GODOT_GROUND_ROUGH = "ground_roughness";             // ground shader uniform: roughness of the cover
+constexpr uint32_t GODOT_COLOR_GROUND_BANK = 0x7D6A52FFu;                  // an open bank: loam and gravel where the slope carries no grass
+constexpr uint32_t GODOT_COLOR_GROUND_BED = 0x4B4C45FFu;                   // the bed of a brook: wet gravel
+constexpr uint32_t GODOT_COLOR_GROUND_GRID = 0x10140CFFu;                  // grid and contour lines: near black, read on grass and on soil
+constexpr float GODOT_GROUND_SLOPE_BANK_DEG = 18.0f;                       // slope above which the cover gives way to bare earth, degrees
+constexpr float GODOT_GROUND_SLOPE_BANK_SHARE = 0.048943f;                 // 1 - cos(GODOT_GROUND_SLOPE_BANK_DEG): the shader compares 1 - normal.y with it
+constexpr float GODOT_GROUND_SLOPE_STEEP_DEG = 35.0f;                      // slope above which the ground is an open bank, degrees
+constexpr float GODOT_GROUND_SLOPE_STEEP_SHARE = 0.180848f;                // 1 - cos(GODOT_GROUND_SLOPE_STEEP_DEG)
+constexpr float GODOT_GROUND_GRID_MAJOR = 4.0f;                            // cells between two strong grid lines: 2 m at a sample step of 0.5 m
+constexpr float GODOT_GROUND_CONTOUR_M = 0.1f;                             // height between two contour lines, metres: the 0.4 m bed shows four
+constexpr float GODOT_GROUND_GRID_SHARE = 0.28f;                           // share of the line colour on a cell edge
+constexpr float GODOT_GROUND_MAJOR_SHARE = 0.55f;                          // share of the line colour on a strong grid line
+constexpr float GODOT_GROUND_CONTOUR_SHARE = 0.45f;                        // share of the line colour on a contour line
+constexpr float GODOT_GROUND_LEVEL_TOLERANCE_M = 0.01f;                    // a vertex within this of a disc's levelled height is levelled ground (mark_ground)
 
 /**
  * The bark of the internodes (usecase:100395 age the bark, DSGN_024): one material for the tubes and
@@ -594,6 +721,7 @@ constexpr uint32_t GODOT_HOOK_EXIT_HASH = 3218959716u;            // signature v
 constexpr double GODOT_CATCH_UP_NOTE_S = 1.0;   // a frame longer than this is a return from the background and gets one line
 constexpr uint32_t GODOT_SOWING_FIRST = 0u;      // the first sowing of a view: the seeds of the start configuration (godot_new_seed.hpp)
 constexpr uint64_t GODOT_WATER_WAIT_STEPS = 3u;  // Dissemination runs a pour may take to show in the soil water: plugin, hydro, balance, publish
+constexpr double GODOT_WATER_ARRIVED_SHARE = 0.5;  // share of the expected rise (the pour, or the room up to field capacity if smaller) the soil water must gain before the pour counts as arrived; drift between press and arrival moves it by thousandths of a millimetre
 
 /**
  * Drawing style of AseVivariumView - RGBA, 8 bit per channel (Godot Color::hex).

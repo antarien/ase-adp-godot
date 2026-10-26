@@ -16,8 +16,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-25
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -72,7 +72,7 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.ground_cell");
     }
     start_.ground_cell_port = utf8_of(text);
-    // The organ templates (usecase:101011 lay out organ templates): ase-render-data lays the corners and the
+    // The organ templates (usecase:101011 tessellate the organ templates): ase-render-data lays the corners and the
     // triangles of the fine and the coarse cylinder and of the unit leaf; the view builds its meshes from
     // them and computes no ring, no normal and no winding of its own.
     if (!read_text(ports, "template_corner", text)) {
@@ -107,6 +107,11 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.level");
     }
     start_.level_port = utf8_of(text);
+    // The flatten requests of the player at a place (03.8): a port of their own, they name no patch.
+    if (!read_text(ports, "flatten", text)) {
+        return fail_config("ports.flatten");
+    }
+    start_.flatten_port = utf8_of(text);
     // One port per organ class, keyed by the class's word (GodotHostResourceManager::organ_word).
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         if (!read_text(ports, GodotHostResourceManager::organ_word(c), text)) {
@@ -139,6 +144,10 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("operations.level");
     }
     start_.op_level = utf8_of(text);
+    if (!read_text(operations, "flatten", text)) {
+        return fail_config("operations.flatten");
+    }
+    start_.op_flatten = utf8_of(text);
     if (!read_text(operations, "lay", text)) {
         return fail_config("operations.lay");
     }

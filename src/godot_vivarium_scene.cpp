@@ -6,7 +6,7 @@
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 points 3 and 5: the scene stands once
  *              (build_plant_scene, godot_plant_scene.hpp) and follow_scene fills it frame by frame from
  *              what the ports carry. The ground is rebuilt when the terrain port changed; the plant when
- *              the organ ports or the template ports changed (usecase:101011 lay out organ templates), the
+ *              the organ ports or the template ports changed (usecase:101011 tessellate the organ templates), the
  *              frame time moved the line between fine and coarse cylinder (03.6, V8) or a patch record
  *              moved its stem base; the light and the seeds every frame. Nothing grows here, no matrix
  *              and no template is computed and no height is looked up: the instance ports carry the
@@ -18,8 +18,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-25
+ * @version     00.00.02.00000
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -28,6 +28,7 @@
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/types.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <unordered_map>
 #include <utility>
@@ -56,6 +57,22 @@ bool same_origins(const std::unordered_map<uint32_t, PlantOrigin>& now,
     return true;
 }
 
+/**
+ * What the scene draws, in one line: the ground samples and cells, the internodes and leaves, and the
+ * light of the sky port. The window acceptance reads it (register D1647) - a black window and a drawn one
+ * show apart only here, not in the patch values.
+ */
+::godot::String scene_counts(const GodotHostResourceManager& resources) {
+    const VivariumSkyView& sky = resources.get_sky();
+    return "ground_samples=" + ::godot::String::num_uint64(resources.get_terrain().size()) +
+           " ground_cells=" + ::godot::String::num_uint64(resources.get_ground_cells().size()) +
+           " segments=" + ::godot::String::num_uint64(resources.get_organs(GODOT_ORGAN_SEGMENT).size()) +
+           " leaves=" + ::godot::String::num_uint64(resources.get_organs(GODOT_ORGAN_LEAF).size()) +
+           " sky_known=" + (sky.known ? "1" : "0") +
+           " sun_intensity=" + ::godot::String::num(sky.sun_intensity, GODOT_LOG_DECIMALS) +
+           " ambient_intensity=" + ::godot::String::num(sky.ambient_intensity, GODOT_LOG_DECIMALS);
+}
+
 }  // namespace
 
 void VivariumView::follow_scene(double elapsed_s) {
@@ -67,7 +84,9 @@ void VivariumView::follow_scene(double elapsed_s) {
     const bool ground_moved = terrain != scene_terrain_;
     if (ground_moved) {
         scene_terrain_ = terrain;
-        fill_plant_ground(scene_, resources_.get_terrain(), resources_.get_ground_cells(), ground_material());
+        fill_ground();
+        // an event: the terrain port changed (a levelling, a carved bed), never once per frame
+        note("scene ground " + scene_counts(resources_) + " " + measure(GODOT_NO_PLACE));
     }
     // the stem base of every configured patch, as its record carries it (plant_origins reads it)
     std::vector<VivariumPatchView> patches;
@@ -81,9 +100,14 @@ void VivariumView::follow_scene(double elapsed_s) {
     const bool stood_moved = !same_origins(origins, scene_origins_);
     const uint64_t organs = resources_.organ_generation();
     // the templates arrive with the plugin's first Production run and stay; their generation changes then
-    // and with every new host (usecase:101011 lay out organ templates)
+    // and with every new host (usecase:101011 tessellate the organ templates)
     const uint64_t templates = resources_.template_generation();
     if (organs != scene_organs_ || templates != scene_templates_ || orders_moved || stood_moved) {
+        // the organ views are read anew with every Dissemination run, so only the first fill after a
+        // boot gets a line; later counts stand in the next `scene ground` line
+        if (scene_organs_ == 0u) {
+            note("scene organs " + scene_counts(resources_) + " " + measure(GODOT_NO_PLACE));
+        }
         scene_organs_ = organs;
         scene_templates_ = templates;
         scene_origins_ = std::move(origins);
@@ -97,8 +121,8 @@ void VivariumView::follow_scene(double elapsed_s) {
     if (focus != scene_focus_ && focused != nullptr) {
         const auto origin = scene_origins_.find(focused->object_id);
         if (origin != scene_origins_.end()) {
-            aim_plant_camera(scene_, scene_camera_, origin->second);
-            fill_plant_ground(scene_, resources_.get_terrain(), resources_.get_ground_cells(), ground_material());
+            aim_plant_camera(scene_, patch_focus_zoomed(scene_camera_, zoom_), origin->second);
+            fill_ground();
             scene_focus_ = focus;
         }
     }
@@ -123,6 +147,48 @@ void VivariumView::follow_scene(double elapsed_s) {
         return scene_look_.soil;
     }
     return scene_look_.ground[patch->soil];
+}
+
+void VivariumView::fill_ground() {
+    // The state of the ground the shader paints (GODOT_GROUND_SHADER_CODE): the disc of every patch whose
+    // record carries its levelled height - a patch not levelled yet marks nothing - and the bed of every
+    // brook of the start configuration and of every bed the player laid (godot_vivarium_bed.cpp); the grid
+    // at the distance of two height samples.
+    std::vector<PlantGroundDisc> discs;
+    for (const VivariumPatchSpec& spec : start_.patches) {
+        const VivariumPatchView* patch = resources_.get_patch_at(spec.place);
+        if (patch == nullptr || !std::isfinite(patch->x) || !std::isfinite(patch->y) || !std::isfinite(patch->z)) {
+            continue;
+        }
+        discs.push_back(PlantGroundDisc{static_cast<float>(patch->x), static_cast<float>(patch->z),
+                                        static_cast<float>(spec.half_m), static_cast<float>(patch->y)});
+    }
+    // a disc the player levelled stands at the height of the ground at its centre: the sample nearest it
+    for (const PlantGroundDisc& flat : player_flats_) {
+        float best = -1.0f;
+        PlantGroundDisc disc = flat;
+        for (const VivariumTerrainView& sample : resources_.get_terrain()) {
+            const float dx = static_cast<float>(sample.x) - flat.x;
+            const float dz = static_cast<float>(sample.z) - flat.z;
+            if (best < 0.0f || dx * dx + dz * dz < best) {
+                best = dx * dx + dz * dz;
+                disc.height = static_cast<float>(sample.height);
+            }
+        }
+        if (best >= 0.0f) {
+            discs.push_back(disc);
+        }
+    }
+    std::vector<PlantGroundBed> beds;
+    for (const std::vector<VivariumBrookSpec>* laid : {&start_.brooks, &player_beds_}) {
+        for (const VivariumBrookSpec& brook : *laid) {
+            beds.push_back(PlantGroundBed{static_cast<float>(brook.x), static_cast<float>(brook.z),
+                                          static_cast<float>(brook.end_x), static_cast<float>(brook.end_z),
+                                          static_cast<float>(brook.half_m)});
+        }
+    }
+    fill_plant_ground(scene_, resources_.get_terrain(), resources_.get_ground_cells(), discs, beds,
+                      static_cast<float>(start_.ground.step_m), ground_material());
 }
 
 }  // namespace ase::adp::godot

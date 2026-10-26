@@ -32,8 +32,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-21
- * @version     00.00.02.00002
+ * @modified    2026-10-25
+ * @version     00.00.02.00003
  */
 
 #include <doctest/doctest.h>
@@ -90,7 +90,9 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.tile_port = "flora.tile.v1";
     // The level requests of the player (03.8 point 2): boot() asks the set for this port as well.
     config.level_port = "flora.level.v1";
-    // The organ templates of ase-render-data (usecase:101011 lay out organ templates): both ports as well.
+    // The flatten requests of the player at a place (03.8): boot() asks the set for this port as well.
+    config.flatten_port = "flora.flatten.v1";
+    // The organ templates of ase-render-data (usecase:101011 tessellate the organ templates): both ports as well.
     config.template_corner_port = "flora.template.corner.v1";
     config.template_triangle_port = "flora.template.triangle.v1";
     config.organ_ports[GODOT_ORGAN_SEGMENT] = "flora.organ.segment.v1";
@@ -110,6 +112,7 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.op_irrigate = "irrigate";
     config.op_prune = "prune";
     config.op_level = "level";
+    config.op_flatten = "flatten";
     config.op_lay = "lay";
     config.irrigate_amount_mm = 25.0;
     config.catch_up_steps = 8u;

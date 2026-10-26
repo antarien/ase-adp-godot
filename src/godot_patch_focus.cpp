@@ -12,8 +12,8 @@
  * @usecase     usecase:100386 - select a patch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-12
- * @modified    2026-10-12
- * @version     00.00.01.00001
+ * @modified    2026-10-25
+ * @version     00.00.02.00000
  */
 
 #include <ase/adp/godot/godot_patch_focus.hpp>
@@ -34,6 +34,25 @@ PatchFocusAim patch_focus_aim(const PlantSceneCamera& camera, const PlantOrigin&
     aim.target_y = origin.y + camera.look_m;
     aim.target_z = origin.z;
     return aim;
+}
+
+float patch_focus_zoom(float zoom, int32_t steps) {
+    float next = zoom;
+    for (int32_t s = 0; s < steps; ++s) {
+        next *= GODOT_ZOOM_STEP;
+    }
+    for (int32_t s = 0; s > steps; --s) {
+        next /= GODOT_ZOOM_STEP;
+    }
+    return next < GODOT_ZOOM_MIN ? GODOT_ZOOM_MIN : (next > GODOT_ZOOM_MAX ? GODOT_ZOOM_MAX : next);
+}
+
+PlantSceneCamera patch_focus_zoomed(const PlantSceneCamera& camera, float zoom) {
+    PlantSceneCamera zoomed = camera;
+    zoomed.distance_m = camera.distance_m * zoom;
+    zoomed.height_m = camera.height_m * zoom;
+    zoomed.look_m = camera.look_m * zoom;
+    return zoomed;
 }
 
 }  // namespace ase::adp::godot

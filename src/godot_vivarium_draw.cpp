@@ -23,8 +23,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-10-25
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -181,6 +181,10 @@ void VivariumView::draw() {
     draw_button(layout_.level_rect, texts_.level, can_level());
     use_band(layout_.prune_rect.position.y);
     draw_button(layout_.prune_rect, texts_.prune, can_prune());
+    use_band(layout_.bed_rect.position.y);
+    draw_button(layout_.bed_rect, texts_.bed, can_bed());
+    use_band(layout_.flatten_rect.position.y);
+    draw_button(layout_.flatten_rect, texts_.flatten, can_flatten());
     use_band(layout_.reset_rect.position.y);
     draw_button(layout_.reset_rect, texts_.reset, true);
     use_canvas();

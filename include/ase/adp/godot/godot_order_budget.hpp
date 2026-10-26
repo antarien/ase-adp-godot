@@ -11,7 +11,7 @@
  *              frame time. Every internode is an instance of a cylinder template with the 3x4
  *              ase-render-data computed (03.11 step 2); the orders up to the shown one take the fine
  *              template (GODOT_TMPL_FINE), the finer orders the coarse one (GODOT_TMPL_CORS), both laid
- *              by ase-render-data on the template ports (usecase:101011 lay out organ templates). The
+ *              by ase-render-data on the template ports (usecase:101011 tessellate the organ templates). The
  *              view never changes what the engine computes - this budget only moves the line between
  *              the two templates.
  *

@@ -18,8 +18,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-18
- * @version     00.00.04.00006 [seed]
+ * @modified    2026-10-25
+ * @version     00.00.04.00007 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -157,11 +157,13 @@ struct VivariumStartConfig {
     std::string seed_port;           // host port of the seed bodies of ase-physics (ase-pl-flora: flora.seed.v1)
     std::string tile_port;           // host port of the bark tiling of the internodes (ase-pl-flora: flora.tile.v1)
     std::string level_port;          // host port the player levels a patch through (ase-pl-flora: flora.level.v1)
+    std::string flatten_port;        // host port the player flattens the ground at a place through (ase-pl-flora: flora.flatten.v1)
     std::string template_corner_port;    // host port of the corners of the organ templates (ase-pl-flora: flora.template.corner.v1)
     std::string template_triangle_port;  // host port of the triangles of the organ templates (ase-pl-flora: flora.template.triangle.v1)
     std::string op_irrigate;         // submit operation that pours on one patch
     std::string op_prune;            // submit operation that cuts the branch an internode sits on (03.10 step 9)
     std::string op_level;            // submit operation that levels the ground of one patch (03.8 point 2)
+    std::string op_flatten;          // submit operation that flattens a disc of the ground at a place (03.8)
     std::string op_lay;              // submit operation that lays one patch, the ground square or a brook
     double      irrigate_amount_mm = 0.0;  // water one press of Regar pours, mm
     uint32_t    catch_up_steps = 0u;       // most ticks one frame may run while the host catches up
@@ -205,7 +207,7 @@ struct VivariumGroundCellView {
 
 /**
  * One corner of an organ template as the last snapshot of the template corner port showed it - a copy
- * (usecase:101011 lay out organ templates). ase-render-data builds the corner on the unit - base at the
+ * (usecase:101011 tessellate the organ templates). ase-render-data builds the corner on the unit - base at the
  * origin, length 1 along +y - and the view takes its place, normal and texture coordinates into the
  * template mesh of its code and computes none of them.
  */
@@ -481,6 +483,18 @@ public:
      * value; the plugin files it in its next Reception run, ase-terrain levels the disc of the patch.
      */
     ase::kernel::HostStatus level(uint32_t object_id);
+    /**
+     * Lay one more brook bed while the host runs (03.8, the bed the player draws): the lay request of the
+     * start configuration's brooks on the brook port, the same form; ase-pl-flora files it in its next
+     * Reception run, ase-terrain carves the bed and ase-hydro lets its water run.
+     */
+    ase::kernel::HostStatus lay_brook(const VivariumBrookSpec& brook);
+    /**
+     * Flatten a disc of the ground where the player tapped (03.8): a flatten request on the flatten port
+     * with the centre `x`, `z` and the radius `radius_m`, metres; ase-pl-flora files it in its next
+     * Reception run, ase-terrain levels the disc to the height of its centre.
+     */
+    ase::kernel::HostStatus flatten(double x, double z, double radius_m);
     /** One line of the view itself (boot line, action, measurement) through the host's logger. */
     ase::kernel::HostStatus note(const char* text);
 
@@ -523,7 +537,7 @@ public:
     [[nodiscard]] uint64_t terrain_generation() const;
     /**
      * The corners of the organ templates as the template corner port showed them, every code together
-     * (usecase:101011 lay out organ templates). ase-render-data builds the templates once when the host
+     * (usecase:101011 tessellate the organ templates). ase-render-data builds the templates once when the host
      * starts, so the ports are read with every snapshot until both carry a set, and not again until a
      * new host boots.
      */

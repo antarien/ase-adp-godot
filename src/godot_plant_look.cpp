@@ -6,7 +6,9 @@
  * @description See godot_plant_look.hpp. Every file is resolved through godot_asset_loader.hpp at the
  *              start; the scene fills never read a file. The bark of the internodes is one ShaderMaterial
  *              of GODOT_BARK_SHADER_CODE over both bark materials (usecase:100395 age the bark); a bark
- *              file that is missing hands on the stand-in colour of its name instead.
+ *              file that is missing hands on the stand-in colour of its name instead. The ground of every
+ *              soil is one ShaderMaterial of GODOT_GROUND_SHADER_CODE whose cover is the soil's role:
+ *              slope, levelled disc, brook bed, grid and contour lines are drawn over it.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -16,8 +18,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-23
- * @version     00.00.02.00002
+ * @modified    2026-10-25
+ * @version     00.00.03.00000
  */
 
 #include <ase/adp/godot/godot_plant_look.hpp>
@@ -27,7 +29,6 @@
 #include <godot_cpp/classes/base_material3d.hpp>
 #include <godot_cpp/classes/shader.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
-#include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/vector2.hpp>
@@ -40,14 +41,6 @@
 namespace ase::adp::godot {
 
 namespace {
-
-/** A lit surface of one colour: the bare soil of a focused patch that carries no soil code - no role, no asset. */
-::godot::Ref<::godot::StandardMaterial3D> material_of(uint32_t color) {
-    ::godot::Ref<::godot::StandardMaterial3D> material;
-    material.instantiate();
-    material->set_albedo(::godot::Color::hex(color));
-    return material;
-}
 
 /** The asset name the stage gives a role; empty when the stage does not name it - a name the binding holds no file for. */
 std::string asset_of(const std::unordered_map<std::string, std::string>& roles, const char* role) {
@@ -161,6 +154,56 @@ PlantSceneTemplate template_of(const VivariumAssetBinding& binding, const ::godo
     return mix;
 }
 
+/**
+ * The ground of one soil (GODOT_GROUND_SHADER_CODE): a ShaderMaterial whose cover is `cover` - a side bound to
+ * a BaseMaterial3D hands on its colour, albedo texture, UV scale and roughness, a cover whose file is
+ * missing the colour `fallback` and no texture, so the shader samples white. Bare soil, bank, bed, slope
+ * thresholds and the line shares are the same for every soil; the grid step comes with the terrain
+ * (fill_plant_ground).
+ */
+::godot::Ref<::godot::Material> ground_of(const ::godot::Ref<::godot::Material>& cover, uint32_t fallback) {
+    ::godot::Ref<::godot::Shader> shader;
+    shader.instantiate();
+    shader->set_code(GODOT_GROUND_SHADER_CODE);
+    ::godot::Ref<::godot::ShaderMaterial> ground;
+    ground.instantiate();
+    ground->set_shader(shader);
+    const ::godot::Ref<::godot::BaseMaterial3D> pbr = cover;
+    if (pbr.is_valid()) {
+        ground->set_shader_parameter(GODOT_GROUND_COVER_COLOR, pbr->get_albedo());
+        ground->set_shader_parameter(GODOT_GROUND_COVER_ALBEDO, pbr->get_texture(::godot::BaseMaterial3D::TEXTURE_ALBEDO));
+        const ::godot::Vector3 uv = pbr->get_uv1_scale();
+        ground->set_shader_parameter(GODOT_GROUND_COVER_UV, ::godot::Vector2(uv.x, uv.y));
+        ground->set_shader_parameter(GODOT_GROUND_ROUGH, pbr->get_roughness());
+    } else {
+        ground->set_shader_parameter(GODOT_GROUND_COVER_COLOR, ::godot::Color::hex(fallback));
+        ground->set_shader_parameter(GODOT_GROUND_ROUGH, GODOT_STAND_IN_ROUGHNESS);
+    }
+    ground->set_shader_parameter(GODOT_GROUND_SOIL, ::godot::Color::hex(GODOT_COLOR_SOIL));
+    ground->set_shader_parameter(GODOT_GROUND_BANK, ::godot::Color::hex(GODOT_COLOR_GROUND_BANK));
+    ground->set_shader_parameter(GODOT_GROUND_BED, ::godot::Color::hex(GODOT_COLOR_GROUND_BED));
+    ground->set_shader_parameter(GODOT_GROUND_GRID, ::godot::Color::hex(GODOT_COLOR_GROUND_GRID));
+    ground->set_shader_parameter(GODOT_GROUND_SLOPE_BANK, GODOT_GROUND_SLOPE_BANK_SHARE);
+    ground->set_shader_parameter(GODOT_GROUND_SLOPE_STEEP, GODOT_GROUND_SLOPE_STEEP_SHARE);
+    ground->set_shader_parameter(GODOT_GROUND_GRID_MAJOR_KEY, GODOT_GROUND_GRID_MAJOR);
+    ground->set_shader_parameter(GODOT_GROUND_CONTOUR, GODOT_GROUND_CONTOUR_M);
+    ground->set_shader_parameter(GODOT_GROUND_GRID_WEIGHT, GODOT_GROUND_GRID_SHARE);
+    ground->set_shader_parameter(GODOT_GROUND_MAJOR_WEIGHT, GODOT_GROUND_MAJOR_SHARE);
+    ground->set_shader_parameter(GODOT_GROUND_CONTOUR_WEIGHT, GODOT_GROUND_CONTOUR_SHARE);
+    ground->set_shader_parameter(GODOT_GROUND_WET, GODOT_STAND_IN_WET_SHADE);
+    return ground;
+}
+
+/** The ground of the soil whose role is `role`: its cover is the material the role's file carries, while the file is missing its stand-in colour. */
+::godot::Ref<::godot::Material> soil_ground(const VivariumAssetBinding& binding, const ::godot::String& asset_root,
+                                            const std::unordered_map<std::string, std::string>& roles,
+                                            const char* role) {
+    const std::string name = asset_of(roles, role);
+    const ::godot::Ref<::godot::Material> cover =
+        binding.files.count(name) == 0u ? ::godot::Ref<::godot::Material>() : bound_material(binding, asset_root, name);
+    return ground_of(cover, asset_color(binding, name, GODOT_COLOR_ASSET_MISSING));
+}
+
 }  // namespace
 
 PlantSceneLook bind_plant_look(const VivariumAssetBinding& binding, const ::godot::String& asset_root,
@@ -170,9 +213,9 @@ PlantSceneLook bind_plant_look(const VivariumAssetBinding& binding, const ::godo
     const std::string base_name = asset_of(roles, GODOT_ROLE_BARK_BASE);
     look.bark = bark_mix_of(binding, white_name, role_material(binding, asset_root, white_name), base_name,
                             role_material(binding, asset_root, base_name));
-    look.ground[GODOT_SOIL_MEADOW] = role_material(binding, asset_root, asset_of(roles, GODOT_ROLE_GROUND_MEADOW));
-    look.ground[GODOT_SOIL_FOREST] = role_material(binding, asset_root, asset_of(roles, GODOT_ROLE_GROUND_FOREST));
-    look.soil = material_of(GODOT_COLOR_SOIL);
+    look.ground[GODOT_SOIL_MEADOW] = soil_ground(binding, asset_root, roles, GODOT_ROLE_GROUND_MEADOW);
+    look.ground[GODOT_SOIL_FOREST] = soil_ground(binding, asset_root, roles, GODOT_ROLE_GROUND_FOREST);
+    look.soil = ground_of(::godot::Ref<::godot::Material>(), GODOT_COLOR_SOIL);
     look.leaf = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_LEAF));
     look.male = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_MALE));
     look.female = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_FEMALE));

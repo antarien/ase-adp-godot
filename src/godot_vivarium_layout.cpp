@@ -16,8 +16,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-21
- * @version     00.00.01.00002
+ * @modified    2026-10-25
+ * @version     00.00.01.00003
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -142,6 +142,14 @@ bool VivariumView::load_layout(const ::godot::Dictionary& root) {
         !read_text(button, "label", texts_.prune)) {
         return fail_config("buttons.prune");
     }
+    if (!read_section(buttons, "bed", button) || !read_rect(button, "rect", layout_.bed_rect) ||
+        !read_text(button, "label", texts_.bed)) {
+        return fail_config("buttons.bed");
+    }
+    if (!read_section(buttons, "flatten", button) || !read_rect(button, "rect", layout_.flatten_rect) ||
+        !read_text(button, "label", texts_.flatten)) {
+        return fail_config("buttons.flatten");
+    }
     if (!read_section(buttons, "reset", button) || !read_rect(button, "rect", layout_.reset_rect) ||
         !read_text(button, "label", texts_.reset)) {
         return fail_config("buttons.reset");
@@ -198,6 +206,12 @@ bool VivariumView::load_bands(const ::godot::Dictionary& layout) {
     }
     if (!in_one_band(placed_bands, layout_.prune_rect.position.y, layout_.prune_rect.get_end().y)) {
         return fail_config("layout.bands: buttons.prune");
+    }
+    if (!in_one_band(placed_bands, layout_.bed_rect.position.y, layout_.bed_rect.get_end().y)) {
+        return fail_config("layout.bands: buttons.bed");
+    }
+    if (!in_one_band(placed_bands, layout_.flatten_rect.position.y, layout_.flatten_rect.get_end().y)) {
+        return fail_config("layout.bands: buttons.flatten");
     }
     if (!in_one_band(placed_bands, layout_.reset_rect.position.y, layout_.reset_rect.get_end().y)) {
         return fail_config("layout.bands: buttons.reset");

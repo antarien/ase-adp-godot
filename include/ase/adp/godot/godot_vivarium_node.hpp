@@ -40,7 +40,7 @@
  *              host booted, the view builds one scene under its Node2D (godot_plant_scene.hpp) - camera
  *              on the near view of the "view" section, sun and sky from the sky port, the ground from
  *              the terrain port, the plant from the instance and organ ports and the organ templates of
- *              the template ports (usecase:101011 lay out organ templates), the line between fine and
+ *              the template ports (usecase:101011 tessellate the organ templates), the line between fine and
  *              coarse cylinder by the order budget of the frame time - and the canvas draws its bands
  *              over it: the patches
  *              as frames with label, soil water and selection, the buttons below.
@@ -65,7 +65,8 @@
  *              godot_vivarium_host_config.cpp, godot_vivarium_layout.cpp, godot_vivarium_assets.cpp (the
  *              configuration), godot_vivarium_input.cpp (taps and the selection),
  *              godot_vivarium_water.cpp (Regar), godot_vivarium_level.cpp (Nivelar),
- *              godot_vivarium_prune.cpp (the cutting mode),
+ *              godot_vivarium_prune.cpp (the cutting mode), godot_vivarium_bed.cpp (the bed mode and the
+ *              ground under the finger), godot_vivarium_flatten.cpp (the flatten mode),
  *              godot_vivarium_draw.cpp (placement and canvas), godot_vivarium_scene.cpp (the 3D scene per
  *              frame) and
  *              godot_vivarium_measure.cpp (self-test and measurement).
@@ -76,8 +77,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-22
- * @version     00.00.05.00004
+ * @modified    2026-10-25
+ * @version     00.00.05.00005
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
@@ -123,6 +124,8 @@ struct VivariumLayout {
     ::godot::Rect2   water_rect;
     ::godot::Rect2   level_rect;               // the field that levels the selected patch (03.8 point 2)
     ::godot::Rect2   prune_rect;               // the button of the cutting mode (03.10 step 9)
+    ::godot::Rect2   bed_rect;                 // the button of the bed mode: two taps on the ground lay a brook's bed (03.8)
+    ::godot::Rect2   flatten_rect;             // the button of the flatten mode: a tap on the ground levels a disc there (03.8)
     ::godot::Rect2   reset_rect;
 };
 
@@ -187,6 +190,8 @@ struct VivariumTexts {
     ::godot::String water;
     ::godot::String level;
     ::godot::String prune;
+    ::godot::String bed;
+    ::godot::String flatten;
     ::godot::String reset;
     ::godot::String separator;   // between the parts of one line, e.g. "área 2 · Broto"
 };
@@ -250,10 +255,15 @@ private:
     void restart();
     void tap(const ::godot::Vector2& at);
     void select(uint32_t place);
+    void zoom(int32_t steps);              // the mouse wheel or a pinch: the near view towards the birch or away (patch_focus_zoom)
     void water();
     void level();                          // the field Nivelar: level the ground of the selected patch (03.8 point 2)
     void toggle_pruning();                // the button Podar: the cutting mode on or off (03.10 step 9)
     void prune(const ::godot::Vector2& at);  // in the cutting mode: cut the branch of the internode under the tap
+    void toggle_bedding();                // the button Cauce: the bed mode on or off (03.8)
+    void bed(const ::godot::Vector2& at);    // in the bed mode: the first tap marks where the bed starts, the second lays it
+    void toggle_flattening();             // the button Aplanar: the flatten mode on or off (03.8)
+    void flatten(const ::godot::Vector2& at);  // in the flatten mode: level a disc of the ground under the tap
     void announce_patches();
     void follow_stages();
     void follow_water();
@@ -268,12 +278,17 @@ private:
     // the internode under a tap, GODOT_NO_OBJECT for none; `candidates` counts the internodes of the focused
     // plant in front of the camera, `nearest_px` the distance of the closest of them from the tap
     [[nodiscard]] uint32_t pick_segment(const ::godot::Vector2& at, uint32_t& candidates, float& nearest_px) const;
+    [[nodiscard]] bool can_bed() const;
+    [[nodiscard]] bool can_flatten() const;
+    // the terrain sample under a tap: its world place east and north; false when none lies within pick_px
+    [[nodiscard]] bool pick_ground(const ::godot::Vector2& at, float& x, float& z, float& nearest_px) const;
     [[nodiscard]] ::godot::String stage_text(uint8_t stage) const;
     [[nodiscard]] ::godot::String patch_text(const VivariumPatchView& patch) const;
     [[nodiscard]] ::godot::String boot_line() const;
     [[nodiscard]] ::godot::String measure(uint32_t place) const;
     [[nodiscard]] uint32_t ground_color(const VivariumPatchView* patch) const;
     [[nodiscard]] ::godot::Ref<::godot::Material> ground_material() const;
+    void fill_ground();
 
     [[nodiscard]] ViewSurface surface() const;
     [[nodiscard]] ::godot::Rect2 placed(const ::godot::Rect2& rect) const;
@@ -305,15 +320,24 @@ private:
     ::godot::Node3D*         showcase_ = nullptr;  // root of the asset showcase (modes.assets), nullptr without its launch argument
     ::godot::Node3D*         scene_ = nullptr;     // root of the 3D scene of the care view, built once the host booted (03.1)
     PlantSceneCamera         scene_camera_;        // the near view (view.camera_*)
+    float                    zoom_ = GODOT_ZOOM_START;  // the near view's zoom, moved by the mouse wheel or a pinch
     PlantSceneLook           scene_look_;         // materials and organ templates of the scene, bound once at the start (03.2)
     OrderBudget              order_budget_;        // the line between fine and coarse cylinder by frame time (view, 03.6 V8)
     std::unordered_map<uint32_t, PlantOrigin> scene_origins_;  // stem base per patch object, last placed
     uint64_t                 scene_organs_ = 0;    // organ generation the plant was last filled from
     uint64_t                 scene_terrain_ = 0;   // terrain generation the ground was last built from
-    uint64_t                 scene_templates_ = 0; // template generation the plant was last filled from (usecase:101011 lay out organ templates)
+    uint64_t                 scene_templates_ = 0; // template generation the plant was last filled from (usecase:101011 tessellate the organ templates)
     uint32_t                 scene_focus_ = GODOT_NO_PLACE;  // the place the camera last looked at
     float                    pick_px_ = 0.0f;      // logical pixels around a tap that hit an internode's middle (view.pick_px)
     bool                     pruning_ = false;     // the cutting mode is on: a tap in the scene cuts, it selects no place
+    bool                     bedding_ = false;     // the bed mode is on: a tap in the scene marks a bed's end, it selects no place
+    bool                     bed_started_ = false; // the first end of the bed is marked
+    float                    bed_x_ = 0.0f;        // the first end, world metres east
+    float                    bed_z_ = 0.0f;        // the first end, world metres north
+    std::vector<VivariumBrookSpec> player_beds_;   // the beds the player laid in this host, marked on the ground like the configured ones
+    bool                     flattening_ = false;  // the flatten mode is on: a tap in the scene levels a disc, it selects no place
+    float                    flatten_m_ = 0.0f;    // radius of the disc one tap levels, metres (view.flatten_m)
+    std::vector<PlantGroundDisc> player_flats_;    // the discs the player levelled in this host; their height is the ground's at the centre
     std::vector<std::string> selftest_report_;  // written through the game host once it is up
     uint32_t                 selftest_errors_ = 0;
     bool                     selftest_ran_ = false;

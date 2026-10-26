@@ -16,14 +16,15 @@
  * @usecase     usecase:100386 - select a patch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.02.00002
+ * @modified    2026-10-25
+ * @version     00.00.02.00003
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/types.hpp>
 
+#include <godot_cpp/classes/input_event_magnify_gesture.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_screen_touch.hpp>
 #include <godot_cpp/classes/viewport.hpp>
@@ -44,6 +45,21 @@ void VivariumView::unhandled_input(const ::godot::Ref<::godot::InputEvent>& even
     const ::godot::Ref<::godot::InputEvent> local = node_->make_input_local(event);
     const ::godot::Ref<::godot::InputEventScreenTouch> touch = local;
     const ::godot::Ref<::godot::InputEventMouseButton> mouse = local;
+    const ::godot::Ref<::godot::InputEventMagnifyGesture> pinch = local;
+    // THE CAMERA ZOOMS: the mouse wheel on the desktop, two fingers on the device - towards the birch and
+    // back to the whole ground (patch_focus_zoom)
+    if (mouse.is_valid() && mouse->is_pressed() &&
+        (mouse->get_button_index() == ::godot::MOUSE_BUTTON_WHEEL_UP ||
+         mouse->get_button_index() == ::godot::MOUSE_BUTTON_WHEEL_DOWN)) {
+        node_->get_viewport()->set_input_as_handled();
+        zoom(mouse->get_button_index() == ::godot::MOUSE_BUTTON_WHEEL_UP ? 1 : -1);
+        return;
+    }
+    if (pinch.is_valid()) {
+        node_->get_viewport()->set_input_as_handled();
+        zoom(pinch->get_factor() > 1.0f ? 1 : -1);
+        return;
+    }
     ::godot::Vector2 at;
     if (touch.is_valid()) {
         if (!touch->is_pressed()) {
@@ -86,8 +102,24 @@ void VivariumView::tap(const ::godot::Vector2& at) {
         toggle_pruning();
         return;
     }
+    if (placed(layout_.bed_rect).has_point(at)) {
+        toggle_bedding();
+        return;
+    }
+    if (placed(layout_.flatten_rect).has_point(at)) {
+        toggle_flattening();
+        return;
+    }
     if (pruning_) {
         prune(at);  // in the cutting mode a tap in the scene cuts and selects no place
+        return;
+    }
+    if (bedding_) {
+        bed(at);  // in the bed mode a tap in the scene marks an end of the bed and selects no place
+        return;
+    }
+    if (flattening_) {
+        flatten(at);  // in the flatten mode a tap in the scene levels a disc there and selects no place
         return;
     }
     for (std::size_t place = 0; place < layout_.place_rects.size(); ++place) {
@@ -96,6 +128,13 @@ void VivariumView::tap(const ::godot::Vector2& at) {
             return;
         }
     }
+}
+
+void VivariumView::zoom(int32_t steps) {
+    // The camera is aimed anew in the next frame (follow_scene), at the new zoom.
+    zoom_ = patch_focus_zoom(zoom_, steps);
+    scene_focus_ = GODOT_NO_PLACE;
+    note("zoom " + ::godot::String::num(zoom_, 3));
 }
 
 void VivariumView::select(uint32_t place) {
