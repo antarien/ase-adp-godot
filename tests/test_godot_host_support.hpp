@@ -32,8 +32,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.02.00003
+ * @modified    2026-10-26
+ * @version     00.00.02.00005
  */
 
 #include <doctest/doctest.h>
@@ -92,6 +92,8 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.level_port = "flora.level.v1";
     // The flatten requests of the player at a place (03.8): boot() asks the set for this port as well.
     config.flatten_port = "flora.flatten.v1";
+    // The place of the view's camera (03.11 point 7, the level of detail): view() submits on this port.
+    config.view_port = "flora.view.v1";
     // The organ templates of ase-render-data (usecase:101011 tessellate the organ templates): both ports as well.
     config.template_corner_port = "flora.template.corner.v1";
     config.template_triangle_port = "flora.template.triangle.v1";
@@ -113,6 +115,7 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.op_prune = "prune";
     config.op_level = "level";
     config.op_flatten = "flatten";
+    config.op_view = "view";
     config.op_lay = "lay";
     config.irrigate_amount_mm = 25.0;
     config.catch_up_steps = 8u;
@@ -249,10 +252,10 @@ struct AdapterEnvironmentTeardown : doctest::IReporter {
 
 DOCTEST_REGISTER_LISTENER("adapter_environment_teardown", 1, AdapterEnvironmentTeardown);
 
-// n frames of a quarter second each - one tick each, the scheduler's frame ceiling.
+// n frames of a quarter second each - one tick each, the scheduler's frame ceiling, no lapse.
 inline void advance_frames(GodotHostResourceManager& resources, uint32_t frames) {
     for (uint32_t frame = 0u; frame < frames; ++frame) {
-        REQUIRE(resources.advance(0.25) == ase::kernel::HostStatusOk);
+        REQUIRE(resources.advance(0.25, 0.0, 0u) == ase::kernel::HostStatusOk);
     }
 }
 

@@ -18,8 +18,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.02.00000
+ * @modified    2026-10-28
+ * @version     00.00.02.00001
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -27,6 +27,7 @@
 #include <ase/adp/godot/godot_plant_geometry.hpp>
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/types.hpp>
+#include <ase/math/math.hpp>
 
 #include <cmath>
 #include <cstdint>
@@ -70,7 +71,15 @@ bool same_origins(const std::unordered_map<uint32_t, PlantOrigin>& now,
            " leaves=" + ::godot::String::num_uint64(resources.get_organs(GODOT_ORGAN_LEAF).size()) +
            " sky_known=" + (sky.known ? "1" : "0") +
            " sun_intensity=" + ::godot::String::num(sky.sun_intensity, GODOT_LOG_DECIMALS) +
-           " ambient_intensity=" + ::godot::String::num(sky.ambient_intensity, GODOT_LOG_DECIMALS);
+           " ambient_intensity=" + ::godot::String::num(sky.ambient_intensity, GODOT_LOG_DECIMALS) +
+           // the start picture stood red and dim at game hour 15 (run 20261028-phase03-v52, grey 36.2):
+           // elevation and colours of the sky port say whether the port or the picture carries it
+           " sun_up=" + ::godot::String::num(sky.sun_y, GODOT_LOG_DECIMALS) +
+           " sun_rgb=" + ::godot::String::num(sky.sun_r, GODOT_LOG_DECIMALS) + "/" +
+           ::godot::String::num(sky.sun_g, GODOT_LOG_DECIMALS) + "/" + ::godot::String::num(sky.sun_b, GODOT_LOG_DECIMALS) +
+           " sky_rgb=" + ::godot::String::num(sky.background_r, GODOT_LOG_DECIMALS) + "/" +
+           ::godot::String::num(sky.background_g, GODOT_LOG_DECIMALS) + "/" +
+           ::godot::String::num(sky.background_b, GODOT_LOG_DECIMALS);
 }
 
 }  // namespace
@@ -87,6 +96,17 @@ void VivariumView::follow_scene(double elapsed_s) {
         fill_ground();
         // an event: the terrain port changed (a levelling, a carved bed), never once per frame
         note("scene ground " + scene_counts(resources_) + " " + measure(GODOT_NO_PLACE));
+    }
+    // an event of the clock: a new game hour of the day. The ground and organ lines come with a rebuild
+    // only, so without this line the scene of noon and of the night stood in no line at all (run
+    // 20261028-phase03-v52: `day`, `night picture` and `scene` found no line after the first second).
+    const VivariumClockView& clock = resources_.get_clock();
+    if (clock.known && std::isfinite(clock.hour)) {
+        const int64_t hour = static_cast<int64_t>(ase::math::floor(static_cast<float>(clock.hour)));
+        if (hour != scene_hour_) {
+            scene_hour_ = hour;
+            note("scene hour " + scene_counts(resources_) + " " + measure(GODOT_NO_PLACE));
+        }
     }
     // the stem base of every configured patch, as its record carries it (plant_origins reads it)
     std::vector<VivariumPatchView> patches;
@@ -121,7 +141,14 @@ void VivariumView::follow_scene(double elapsed_s) {
     if (focus != scene_focus_ && focused != nullptr) {
         const auto origin = scene_origins_.find(focused->object_id);
         if (origin != scene_origins_.end()) {
-            aim_plant_camera(scene_, patch_focus_zoomed(scene_camera_, zoom_), origin->second);
+            const PlantSceneCamera zoomed = patch_focus_zoomed(scene_camera_, zoom_);
+            aim_plant_camera(scene_, zoomed, origin->second);
+            // the engine learns where the camera stands (03.11 point 7): the level of detail of
+            // ase-render-data measures from it; aiming happens on a new focus or zoom only
+            const PatchFocusAim aim = patch_focus_aim(zoomed, origin->second);
+            const ase::kernel::HostStatus viewed = resources_.view(aim.eye_x, aim.eye_y, aim.eye_z);
+            note("view eye " + ::godot::String::num(aim.eye_x, 2) + " " + ::godot::String::num(aim.eye_y, 2) + " " +
+                 ::godot::String::num(aim.eye_z, 2) + " status " + ::godot::String::num_int64(viewed));
             fill_ground();
             scene_focus_ = focus;
         }

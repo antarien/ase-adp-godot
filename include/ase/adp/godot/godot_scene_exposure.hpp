@@ -31,7 +31,8 @@ namespace ase::adp::godot {
 
 /**
  * The exposure multiplier of the scene camera for the light `sky` carries: the light of the scene is the sun's
- * intensity plus the ambient intensity times the mean of its colour, and the lift is the square root of
+ * intensity plus that of every moon the port carries plus the ambient intensity times the mean
+ * of its colour, and the lift is the square root of
  * GODOT_EXPOSURE_DAY_LIGHT over that light - the eye adapts only in part, so the night stays darker than the
  * day -, never below 1 and at most GODOT_EXPOSURE_LIFT_MAX. A sky the port did not carry yet, or no light at
  * all, takes the largest lift. Nothing of the sky is computed: its numbers are read as the port carried them.

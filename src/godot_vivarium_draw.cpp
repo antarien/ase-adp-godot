@@ -23,8 +23,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.01.00002
+ * @modified    2026-10-26
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -175,6 +175,7 @@ void VivariumView::draw() {
         draw_failure(panel);
     }
     draw_info();
+    draw_debug();
     use_band(layout_.water_rect.position.y);
     draw_button(layout_.water_rect, texts_.water, can_water());
     use_band(layout_.level_rect.position.y);
@@ -304,24 +305,30 @@ void VivariumView::draw_button(const ::godot::Rect2& rect, const ::godot::String
 
 void VivariumView::draw_info() {
     // Each line in the band of its baseline (load_bands holds the three info lines in one).
+    // EVERY LINE FITS ITS WIDTH (register D1748): the lines grow with the game - the day, the steps, a
+    // patch label - and drawn at the body size without a bound they ran out of the window on the right
+    // (run 20261026-124615, debug_stage_3.png). Each takes the largest size up to its own that fits the
+    // width between the left inset and the same inset on the right, as the build line does
+    // (godot_vivarium_node.cpp).
     const ::godot::Ref<::godot::Font> font = view_font();
     ::godot::Vector2 at = layout_.info_at;
+    const float width = layout_.size.x - 2.0f * at.x;
     const VivariumPatchView* patch =
         selected_place_ == GODOT_NO_PLACE ? nullptr : resources_.get_patch_at(selected_place_);
     use_band(at.y);
-    node_->draw_string(font, at, texts_.selection + ": " + (patch == nullptr ? texts_.selection_none : patch_text(*patch)),
-                       ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f, GODOT_FONT_BODY, ::godot::Color::hex(GODOT_COLOR_TEXT));
+    const ::godot::String selection_line =
+        texts_.selection + ": " + (patch == nullptr ? texts_.selection_none : patch_text(*patch));
+    node_->draw_string(font, at, selection_line, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
+                       fitting_size(selection_line, width, GODOT_FONT_BODY), ::godot::Color::hex(GODOT_COLOR_TEXT));
     at.y += layout_.info_line;
     if (patch != nullptr) {
         use_band(at.y);
-        node_->draw_string(font, at,
-                           texts_.coverage + " " +
-                               ::godot::String::num(patch->coverage * GODOT_PERCENT, GODOT_TEXT_DECIMALS) + " %" +
-                               texts_.separator + texts_.soil + " " +
-                               ::godot::String::num(patch->soil_mm, GODOT_TEXT_DECIMALS) + " mm (" +
-                               ::godot::String::num(patch->soil_rel * GODOT_PERCENT, GODOT_TEXT_DECIMALS) + " %)",
-                           ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f, GODOT_FONT_BODY,
-                           ::godot::Color::hex(GODOT_COLOR_TEXT));
+        const ::godot::String patch_line =
+            texts_.coverage + " " + ::godot::String::num(patch->coverage * GODOT_PERCENT, GODOT_TEXT_DECIMALS) +
+            " %" + texts_.separator + texts_.soil + " " + ::godot::String::num(patch->soil_mm, GODOT_TEXT_DECIMALS) +
+            " mm (" + ::godot::String::num(patch->soil_rel * GODOT_PERCENT, GODOT_TEXT_DECIMALS) + " %)";
+        node_->draw_string(font, at, patch_line, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
+                           fitting_size(patch_line, width, GODOT_FONT_BODY), ::godot::Color::hex(GODOT_COLOR_TEXT));
     }
     at.y += layout_.info_line;
     const VivariumClockView& clock = resources_.get_clock();
@@ -334,11 +341,12 @@ void VivariumView::draw_info() {
                     ::godot::String::num(clock.hour, GODOT_TEXT_DECIMALS) + texts_.separator + time_line;
     }
     use_band(at.y);
-    node_->draw_string(font, at, time_line, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f, GODOT_FONT_BODY,
-                       ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
+    node_->draw_string(font, at, time_line, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
+                       fitting_size(time_line, width, GODOT_FONT_BODY), ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
     use_band(layout_.note_at.y);
     node_->draw_string(font, layout_.note_at, texts_.restart_note, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
-                       GODOT_FONT_SMALL, ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
+                       fitting_size(texts_.restart_note, layout_.size.x - 2.0f * layout_.note_at.x, GODOT_FONT_SMALL),
+                       ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
 }
 
 void VivariumView::draw_failure(const ::godot::Rect2& panel) {

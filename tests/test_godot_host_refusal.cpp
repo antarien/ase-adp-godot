@@ -23,8 +23,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.01.00002
+ * @modified    2026-10-26
+ * @version     00.00.01.00003
  */
 
 #include "test_godot_host_support.hpp"
@@ -234,7 +234,7 @@ TEST_CASE("L8: a bundle without one unit fails at load_units, loudly and without
     CHECK(!resources.running());
     CHECK(resources.patch_count() == 0u);
     CHECK(resources.unit_count() == 0u);
-    CHECK(resources.advance(0.25) == ase::kernel::HostStatusInvalidState);
+    CHECK(resources.advance(0.25, 0.0, 0u) == ase::kernel::HostStatusInvalidState);
     CHECK(resources.irrigate(0u) == ase::kernel::HostStatusInvalidState);
 
     // The stopped host is kept, so its log carries the cause.

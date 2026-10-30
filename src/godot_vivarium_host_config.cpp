@@ -16,8 +16,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.01.00002
+ * @modified    2026-10-26
+ * @version     00.00.01.00003
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -112,6 +112,18 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.flatten");
     }
     start_.flatten_port = utf8_of(text);
+    // The pace requests of the debug mode (the time lapse of this host's clock): a port of their own,
+    // they name no object.
+    if (!read_text(ports, "pace", text)) {
+        return fail_config("ports.pace");
+    }
+    start_.pace_port = utf8_of(text);
+    // The place of the view's camera (03.11 point 7, the level of detail): a port of its own, it names no
+    // object.
+    if (!read_text(ports, "view", text)) {
+        return fail_config("ports.view");
+    }
+    start_.view_port = utf8_of(text);
     // One port per organ class, keyed by the class's word (GodotHostResourceManager::organ_word).
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         if (!read_text(ports, GodotHostResourceManager::organ_word(c), text)) {
@@ -148,6 +160,14 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("operations.flatten");
     }
     start_.op_flatten = utf8_of(text);
+    if (!read_text(operations, "pace", text)) {
+        return fail_config("operations.pace");
+    }
+    start_.op_pace = utf8_of(text);
+    if (!read_text(operations, "view", text)) {
+        return fail_config("operations.view");
+    }
+    start_.op_view = utf8_of(text);
     if (!read_text(operations, "lay", text)) {
         return fail_config("operations.lay");
     }

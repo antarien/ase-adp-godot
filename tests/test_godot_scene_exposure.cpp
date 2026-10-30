@@ -15,7 +15,7 @@
  * @actor       cycle/DAY/NIGHT (semi/nbp) Day/Night Cycle
  * @created     2026-10-26
  * @modified    2026-10-26
- * @version     00.00.01.00000
+ * @version     00.00.02.00000
  */
 
 #include <doctest/doctest.h>
@@ -56,6 +56,30 @@ TEST_CASE("D1721: the camera lifts its exposure at night as an eye does, by day 
     dark.ambient_intensity = 0.0;
     CHECK(scene_exposure(dark) == doctest::Approx(GODOT_EXPOSURE_LIFT_MAX));
     CHECK(scene_exposure(VivariumSkyView{}) == doctest::Approx(GODOT_EXPOSURE_LIFT_MAX));
+}
+
+TEST_CASE("C0455: a moon in the sky is light of the scene, a moon record never carried is none") {
+    VivariumSkyView night;
+    night.known = true;
+    night.sun_intensity = 0.05;
+    night.ambient_intensity = 0.15;
+    night.ambient_r = 0.02;
+    night.ambient_g = 0.02;
+    night.ambient_b = 0.06;
+    const float moonless = scene_exposure(night);
+    // Amilox high up: CEL_MOON_CONTRIB 0.08, Scorpii beside it lights nothing - less lift than the moonless night
+    VivariumSkyView moonlit = night;
+    moonlit.moons = 2u;
+    moonlit.moon[0].intensity = 0.0;
+    moonlit.moon[1].intensity = 0.08;
+    const float lift = scene_exposure(moonlit);
+    const double light = 0.05 + 0.08 + 0.15 * (0.02 + 0.02 + 0.06) / 3.0;
+    CHECK(lift * lift == doctest::Approx(1.0 / light).epsilon(0.001));
+    CHECK(lift < moonless);
+    // a strength in a slot the port did not fill counts for nothing
+    VivariumSkyView stale = night;
+    stale.moon[0].intensity = 0.08;
+    CHECK(scene_exposure(stale) == doctest::Approx(moonless));
 }
 
 }  // namespace ase::adp::godot

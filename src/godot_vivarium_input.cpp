@@ -16,8 +16,8 @@
  * @usecase     usecase:100386 - select a patch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.02.00003
+ * @modified    2026-10-26
+ * @version     00.00.02.00004
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -89,6 +89,9 @@ void VivariumView::tap(const ::godot::Vector2& at) {
     }
     if (!configured_ || !failure_text_.is_empty()) {
         return;  // on the error panel only Reiniciar answers
+    }
+    if (debug_tap(at)) {
+        return;  // a debug button (launched with modes.debug.argument only) answered the tap
     }
     if (placed(layout_.water_rect).has_point(at)) {
         water();

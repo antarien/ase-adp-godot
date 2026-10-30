@@ -22,13 +22,15 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-10-25
- * @version     00.00.06.00000
+ * @modified    2026-10-26
+ * @version     00.00.07.00000
  */
 
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_asset_showcase_scene.hpp>
+#include <ase/adp/godot/godot_plant_haze.hpp>
 #include <ase/adp/godot/godot_plant_instances.hpp>
+#include <ase/adp/godot/godot_plant_sky.hpp>
 #include <ase/adp/godot/godot_plant_templates.hpp>
 #include <ase/adp/godot/godot_scene_exposure.hpp>
 #include <ase/adp/godot/types.hpp>
@@ -243,6 +245,8 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
     (void)add_part<::godot::MeshInstance3D>(scene, GODOT_PLANT_GROUND);
     (void)add_part<::godot::Node3D>(scene, GODOT_PLANT_BODIES);
     (void)add_part<::godot::MultiMeshInstance3D>(scene, GODOT_PLANT_SEEDS);
+    build_plant_sky(scene);
+    build_plant_haze(scene);
     return scene;
 }
 
@@ -417,6 +421,7 @@ void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky) {
     if (sun != nullptr) {
         sun->set_shadow(true);
     }
+    light_plant_sky(scene, sky);
 
     ::godot::WorldEnvironment* world = part_of<::godot::WorldEnvironment>(scene, GODOT_PLANT_ENVIRONMENT);
     if (world == nullptr || world->get_environment().is_null()) {
@@ -435,6 +440,8 @@ void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky) {
                                                     static_cast<float>(sky.fog_b)));
     environment->set_fog_depth_begin(static_cast<float>(sky.fog_near));
     environment->set_fog_depth_end(static_cast<float>(sky.fog_far));
+    // the shimmer of hot air ase-atmosphere computes, carried in the fog record (usecase:101515)
+    veil_plant_scene(scene, sky);
     const ::godot::Ref<::godot::CameraAttributes> exposure = world->get_camera_attributes();
     if (exposure.is_valid()) {
         exposure->set_exposure_multiplier(scene_exposure(sky));

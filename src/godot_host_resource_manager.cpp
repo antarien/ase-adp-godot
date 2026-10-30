@@ -13,8 +13,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-25
- * @version     00.00.04.00007 [seed]
+ * @modified    2026-10-28
+ * @version     00.00.04.00011 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -46,7 +46,8 @@
  *   advance() hands the host the real time the frame took, uncapped. The host ticks it in
  *   ordinary steps of its scheduler's frame, at most catch_up_steps of them per call, and keeps
  *   the rest in its backlog - a return from the background is caught up over a few frames, never
- *   in one giant step and never dropped.
+ *   in one giant step and never dropped. The lapse of the debug mode rides the same path: the view
+ *   hands extra time and extra steps, and the host ticks them as ordinary ticks of its own clock.
  *
  * THE SELF-TEST STARTS ONE TEST HOST (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3):
  *   self_test() creates, loads and starts one host, runs every scenario of the table on it in
@@ -454,10 +455,16 @@ const KernelHostRecord* sky_record(const std::vector<KernelHostRecord>& records,
 }
 
 /**
- * The four records of the sky port as one view. false for a set without one of the four records, a
- * record that misses a key, or a value that is no finite number: ase-pl-sky lays all four records with
- * all their keys in one publication (SkyHostScneExptSystem), so a gap is a broken port - never a scene
- * lit from the origin or in black.
+ * The four records of the sky port and its brightest moon as one view. false for a set without one of the
+ * four records, a record that misses a key, or a value that is no finite number: ase-pl-sky lays all four
+ * records with all their keys in one publication, and a moon record with all of its keys for every visible
+ * moon (SkyHostScneExptSystem), so a gap is a broken port - never a scene lit from the origin or in black.
+ * Every moon record takes the next slot of the view; without one the view stands with no moon in the sky.
+ * Every comet record takes the next comet slot the same way (usecase:101274 - track the comets), every
+ * planet record the next planet slot (usecase:101273 - track the neighbour planet), every companion record
+ * the next companion slot (usecase:101272 - track the companion star), every fragment record the next slot
+ * of the halves of Aurora (usecase:101384 - place sun and moon spatially), every belt record the next belt
+ * slot (usecase:2758 - generated asteroids).
  */
 bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written, VivariumSkyView& out) {
     out = VivariumSkyView{};
@@ -475,6 +482,10 @@ bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written,
     out.sun_g = record_value(*sun, GODOT_KEY_G);
     out.sun_b = record_value(*sun, GODOT_KEY_B);
     out.sun_intensity = record_value(*sun, GODOT_KEY_INTENSITY);
+    out.sun_size = record_value(*sun, GODOT_KEY_SIZE);
+    out.sun_disc_r = record_value(*sun, GODOT_KEY_DISC_R);
+    out.sun_disc_g = record_value(*sun, GODOT_KEY_DISC_G);
+    out.sun_disc_b = record_value(*sun, GODOT_KEY_DISC_B);
     out.ambient_r = record_value(*ambient, GODOT_KEY_R);
     out.ambient_g = record_value(*ambient, GODOT_KEY_G);
     out.ambient_b = record_value(*ambient, GODOT_KEY_B);
@@ -487,16 +498,217 @@ bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written,
     out.fog_b = record_value(*fog, GODOT_KEY_B);
     out.fog_near = record_value(*fog, GODOT_KEY_NEAR);
     out.fog_far = record_value(*fog, GODOT_KEY_FAR);
+    out.fog_shimmer = record_value(*fog, GODOT_KEY_SHIMMER);
     const double values[] = {out.sun_x,        out.sun_y,        out.sun_z,         out.sun_r,
-                             out.sun_g,        out.sun_b,        out.sun_intensity, out.ambient_r,
+                             out.sun_g,        out.sun_b,        out.sun_intensity, out.sun_size,
+                             out.sun_disc_r,   out.sun_disc_g,   out.sun_disc_b,    out.ambient_r,
                              out.ambient_g,    out.ambient_b,    out.ambient_intensity,
                              out.background_r, out.background_g, out.background_b,  out.fog_r,
-                             out.fog_g,        out.fog_b,        out.fog_near,      out.fog_far};
+                             out.fog_g,        out.fog_b,        out.fog_near,      out.fog_far,
+                             out.fog_shimmer};
     for (const double value : values) {
         if (!std::isfinite(value)) {
             out = VivariumSkyView{};
             return false;
         }
+    }
+    // the moons: every moon record must be whole, and each takes the next slot - its own light and disc
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_MOON) {
+            continue;
+        }
+        if (out.moons >= GODOT_SKY_MOONS_MAX) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& moon = records[i];
+        const double moon_values[] = {record_value(moon, GODOT_KEY_X), record_value(moon, GODOT_KEY_Y),
+                                      record_value(moon, GODOT_KEY_Z), record_value(moon, GODOT_KEY_R),
+                                      record_value(moon, GODOT_KEY_G), record_value(moon, GODOT_KEY_B),
+                                      record_value(moon, GODOT_KEY_INTENSITY), record_value(moon, GODOT_KEY_SIZE)};
+        for (const double value : moon_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        VivariumMoonView& slot = out.moon[out.moons];
+        slot.x = moon_values[0];
+        slot.y = moon_values[1];
+        slot.z = moon_values[2];
+        slot.r = moon_values[3];
+        slot.g = moon_values[4];
+        slot.b = moon_values[5];
+        slot.intensity = moon_values[6];
+        slot.size = moon_values[7];
+        out.moons += 1u;
+    }
+    // the comets: every comet record must be whole, and each takes the next slot - its head and its tail
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_COMET) {
+            continue;
+        }
+        if (out.comets >= GODOT_SKY_COMETS_MAX) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& comet = records[i];
+        const double comet_values[] = {record_value(comet, GODOT_KEY_X),      record_value(comet, GODOT_KEY_Y),
+                                       record_value(comet, GODOT_KEY_Z),      record_value(comet, GODOT_KEY_INTENSITY),
+                                       record_value(comet, GODOT_KEY_TAIL_X), record_value(comet, GODOT_KEY_TAIL_Y),
+                                       record_value(comet, GODOT_KEY_TAIL_Z), record_value(comet, GODOT_KEY_LENGTH)};
+        for (const double value : comet_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        VivariumCometView& slot = out.comet[out.comets];
+        slot.x = comet_values[0];
+        slot.y = comet_values[1];
+        slot.z = comet_values[2];
+        slot.intensity = comet_values[3];
+        slot.tail_x = comet_values[4];
+        slot.tail_y = comet_values[5];
+        slot.tail_z = comet_values[6];
+        slot.length = comet_values[7];
+        out.comets += 1u;
+    }
+    // the planets: every planet record must be whole, and each takes the next slot - its disc
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_PLANET) {
+            continue;
+        }
+        if (out.planets >= GODOT_SKY_PLANETS_MAX) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& planet = records[i];
+        const double planet_values[] = {record_value(planet, GODOT_KEY_X), record_value(planet, GODOT_KEY_Y),
+                                        record_value(planet, GODOT_KEY_Z), record_value(planet, GODOT_KEY_SIZE),
+                                        record_value(planet, GODOT_KEY_PHASE)};
+        for (const double value : planet_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        VivariumPlanetView& slot = out.planet[out.planets];
+        slot.x = planet_values[0];
+        slot.y = planet_values[1];
+        slot.z = planet_values[2];
+        slot.size = planet_values[3];
+        slot.phase = planet_values[4];
+        out.planets += 1u;
+    }
+    // the companion stars: every companion record must be whole, and each takes the next slot - its disc
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_COMPANION) {
+            continue;
+        }
+        if (out.companions >= GODOT_SKY_COMPANIONS_MAX) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& companion = records[i];
+        const double companion_values[] = {record_value(companion, GODOT_KEY_X),    record_value(companion, GODOT_KEY_Y),
+                                           record_value(companion, GODOT_KEY_Z),    record_value(companion, GODOT_KEY_SIZE),
+                                           record_value(companion, GODOT_KEY_INTENSITY)};
+        for (const double value : companion_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        VivariumCompanionView& slot = out.companion[out.companions];
+        slot.x = companion_values[0];
+        slot.y = companion_values[1];
+        slot.z = companion_values[2];
+        slot.size = companion_values[3];
+        slot.intensity = companion_values[4];
+        out.companions += 1u;
+    }
+    // the moon halves: every fragment record must be whole, and each takes the next slot - its disc
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_FRAGMENT) {
+            continue;
+        }
+        if (out.fragments >= GODOT_SKY_FRAGMENTS_MAX) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& fragment = records[i];
+        const double fragment_values[] = {record_value(fragment, GODOT_KEY_X),    record_value(fragment, GODOT_KEY_Y),
+                                          record_value(fragment, GODOT_KEY_Z),    record_value(fragment, GODOT_KEY_SIZE),
+                                          record_value(fragment, GODOT_KEY_INTENSITY)};
+        for (const double value : fragment_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        VivariumFragmentView& slot = out.fragment[out.fragments];
+        slot.x = fragment_values[0];
+        slot.y = fragment_values[1];
+        slot.z = fragment_values[2];
+        slot.size = fragment_values[3];
+        slot.intensity = fragment_values[4];
+        out.fragments += 1u;
+    }
+    // the asteroid belts: every belt record must be whole, and each takes the next slot - its grains
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_BELT) {
+            continue;
+        }
+        if (out.belts >= GODOT_SKY_BELTS_MAX) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& belt = records[i];
+        const double belt_values[] = {record_value(belt, GODOT_KEY_X),         record_value(belt, GODOT_KEY_Y),
+                                      record_value(belt, GODOT_KEY_Z),         record_value(belt, GODOT_KEY_SPAN),
+                                      record_value(belt, GODOT_KEY_INTENSITY), record_value(belt, GODOT_KEY_DENSITY)};
+        for (const double value : belt_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        VivariumBeltView& slot = out.belt[out.belts];
+        slot.x = belt_values[0];
+        slot.y = belt_values[1];
+        slot.z = belt_values[2];
+        slot.span = belt_values[3];
+        slot.intensity = belt_values[4];
+        slot.density = belt_values[5];
+        out.belts += 1u;
+    }
+    // the meteor showers: every shower record must be whole, and each takes the next slot - its streaks
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_SHOWER) {
+            continue;
+        }
+        if (out.showers >= GODOT_SKY_SHOWERS_MAX) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& shower = records[i];
+        const double shower_values[] = {record_value(shower, GODOT_KEY_X),         record_value(shower, GODOT_KEY_Y),
+                                        record_value(shower, GODOT_KEY_Z),         record_value(shower, GODOT_KEY_INTENSITY),
+                                        record_value(shower, GODOT_KEY_RATE)};
+        for (const double value : shower_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        VivariumShowerView& slot = out.shower[out.showers];
+        slot.x = shower_values[0];
+        slot.y = shower_values[1];
+        slot.z = shower_values[2];
+        slot.intensity = shower_values[3];
+        slot.rate = shower_values[4];
+        out.showers += 1u;
     }
     out.known = true;
     return true;
@@ -993,8 +1205,30 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         return true;
     }
 
+    if (const toml::table* view = action[GODOT_SELFTEST_KEY_VIEW].as_table()) {
+        // The eye through the view port, as the scene places it at its aim site: the level of detail bands
+        // the bodies around it, and an organ of a body without a band reaches no organ port (03.11 point 7).
+        const double at_x = (*view)[GODOT_SELFTEST_KEY_X].value_or(std::nan(""));
+        const double at_y = (*view)[GODOT_SELFTEST_KEY_Y].value_or(std::nan(""));
+        const double at_z = (*view)[GODOT_SELFTEST_KEY_Z].value_or(std::nan(""));
+        const std::string expected = (*view)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
+        if (!std::isfinite(at_x) || !std::isfinite(at_y) || !std::isfinite(at_z) || expected.empty()) {
+            report_broken(label, GODOT_SELFTEST_KEY_VIEW, "needs a finite x, y, z and status", result, report);
+            return false;
+        }
+        KernelHostInput input{};
+        (void)put_value(input, GODOT_KEY_X, at_x);
+        (void)put_value(input, GODOT_KEY_Y, at_y);
+        (void)put_value(input, GODOT_KEY_Z, at_z);
+        const std::string actual = GodotHostResourceManager::status_name(
+            host.submit(config.view_port.c_str(), config.op_view.c_str(), &input));
+        report_check(check, "action=view x=" + decimal(at_x) + " y=" + decimal(at_y) + " z=" + decimal(at_z),
+                     actual, expected, actual == expected, result, report);
+        return true;
+    }
+
     report_broken(label, GODOT_SELFTEST_KEY_DO,
-                  "an action names none of frames, remember, irrigate, wait, catch_up, expect, records, lay",
+                  "an action names none of frames, remember, irrigate, wait, catch_up, expect, records, lay, view",
                   result, report);
     return false;
 }
@@ -1437,19 +1671,21 @@ VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartCo
 
 // RUNNING
 
-HostStatus GodotHostResourceManager::advance(double elapsed_s) {
+HostStatus GodotHostResourceManager::advance(double elapsed_s, double lapse_s, uint32_t lapse_steps) {
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
     // Never capped, never dropped: NaN and infinity reach the host unchanged and are refused there
-    // with its own warning; a long frame is the background time, and the host catches it up.
+    // with its own warning; a long frame is the background time, and the host catches it up. The
+    // lapse adds its time and its steps to the same call - one advance, one backlog.
     uint32_t steps = 0u;
     double backlog = 0.0;
-    const HostStatus status = host_->advance(elapsed_s, config_.catch_up_steps, &steps, &backlog);
+    const HostStatus status =
+        host_->advance(elapsed_s + lapse_s, config_.catch_up_steps + lapse_steps, &steps, &backlog);
     if (status != ase::kernel::HostStatusOk) {
         return status;  // this frame is refused; the host said why
     }
-    elapsed_in_s_ += elapsed_s;
+    elapsed_in_s_ += elapsed_s + lapse_s;
     backlog_s_ = backlog;
     last_steps_ = steps;
     tick_count_ += steps;
@@ -1737,10 +1973,11 @@ HostStatus GodotHostResourceManager::read_templates() {
 }
 
 HostStatus GodotHostResourceManager::read_sky() {
-    // THE SKY IS READ EVERY SNAPSHOT. ase-pl-sky lays its four records in every Production run
-    // (SkyHostScneExptSystem), a handful of numbers - no schedule count saves anything here. Until the
-    // plugin's light pipeline has run once the port publishes an empty set: the sky is not known yet,
-    // and nothing is broken. A set that is not the four records of one sky is.
+    // THE SKY IS READ EVERY SNAPSHOT. ase-pl-sky lays its four records and one per visible moon in every
+    // Production run (SkyHostScneExptSystem), a handful of numbers - no schedule count saves anything here.
+    // Until the plugin's light pipeline has run once the port publishes an empty set: the sky is not known
+    // yet, and nothing is broken. A set that is not the four records of one sky with at most
+    // GODOT_SKY_MOONS_MAX moons is.
     uint32_t written = 0u;
     const HostStatus status = snapshot_all(*host_, config_.sky_port, organ_records_, written);
     if (status != ase::kernel::HostStatusOk) {
@@ -1750,7 +1987,7 @@ HostStatus GodotHostResourceManager::read_sky() {
         sky_ = VivariumSkyView{};
         return ase::kernel::HostStatusOk;
     }
-    if (written != GODOT_SKY_RECORD_COUNT) {
+    if (written < GODOT_SKY_RECORD_COUNT || written > GODOT_SKY_RECORD_COUNT + GODOT_SKY_MOONS_MAX) {
         sky_ = VivariumSkyView{};
         return ase::kernel::HostStatusInvalidArgument;
     }
@@ -1837,6 +2074,29 @@ HostStatus GodotHostResourceManager::flatten(double x, double z, double radius_m
     (void)put_value(input, GODOT_KEY_Z, z);
     (void)put_value(input, GODOT_KEY_HALF, radius_m);
     return host_->submit(config_.flatten_port.c_str(), config_.op_flatten.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::pace(double scale) {
+    // The request names no object: the clock is the one clock of this host. Which scale is valid is
+    // ase-pl-flora's and ase-time's to check.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_SCALE, scale);
+    return host_->submit(config_.pace_port.c_str(), config_.op_pace.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::view(double x, double y, double z) {
+    // The request names no object: the camera is the one camera of this view.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_X, x);
+    (void)put_value(input, GODOT_KEY_Y, y);
+    (void)put_value(input, GODOT_KEY_Z, z);
+    return host_->submit(config_.view_port.c_str(), config_.op_view.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::note(const char* text) {

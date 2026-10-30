@@ -13,7 +13,7 @@
  * @actor       cycle/DAY/NIGHT (semi/nbp) Day/Night Cycle
  * @created     2026-10-26
  * @modified    2026-10-26
- * @version     00.00.01.00000
+ * @version     00.00.02.00000
  */
 
 #include <ase/adp/godot/godot_scene_exposure.hpp>
@@ -24,7 +24,12 @@ namespace ase::adp::godot {
 
 float scene_exposure(const VivariumSkyView& sky) {
     const double ambient = sky.ambient_intensity * (sky.ambient_r + sky.ambient_g + sky.ambient_b) / 3.0;
-    const double light = sky.sun_intensity + ambient;
+    // every moon the port carries lights the scene beside the sun
+    double moon = 0.0;
+    for (uint32_t m = 0u; m < sky.moons && m < GODOT_SKY_MOONS_MAX; ++m) {
+        moon += sky.moon[m].intensity;
+    }
+    const double light = sky.sun_intensity + moon + ambient;
     if (!sky.known || !(light > 0.0)) {
         return GODOT_EXPOSURE_LIFT_MAX;
     }

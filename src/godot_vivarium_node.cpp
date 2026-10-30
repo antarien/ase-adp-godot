@@ -13,7 +13,9 @@
  *              the frame and the log; the configuration stands in godot_vivarium_config.cpp,
  *              godot_vivarium_host_config.cpp, godot_vivarium_layout.cpp and godot_vivarium_assets.cpp,
  *              the input in godot_vivarium_input.cpp, the canvas in godot_vivarium_draw.cpp, the 3D scene
- *              in godot_vivarium_scene.cpp, the explicit modes in godot_vivarium_measure.cpp.
+ *              in godot_vivarium_scene.cpp, the explicit modes in godot_vivarium_measure.cpp, the pour and
+ *              its arrival in godot_vivarium_water.cpp, the debug buttons and their lapse in
+ *              godot_vivarium_debug.cpp.
  *
  *              EVERY ENGINE CALL GOES THROUGH node_: drawing, redraw requests, processing, input
  *              mapping and the viewport are those of the engine object this view is the instance
@@ -37,8 +39,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-25
- * @version     00.00.04.00009
+ * @modified    2026-10-26
+ * @version     00.00.04.00011
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -48,7 +50,6 @@
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
-#include <ase/math/math.hpp>
 #include <ase/utils/boot_clock.hpp>
 #include <ase/utils/clock.hpp>
 
@@ -224,6 +225,10 @@ void VivariumView::restart() {
     // pending pour and drawing values of the old run go with it.
     note("restart " + measure(GODOT_NO_PLACE));
     resources_.clear_all();
+    // The new host boots at the default scale of its clock: a running time lapse ends with the old one.
+    debug_.scale = GODOT_PACE_NONE;
+    debug_.target_stage = GODOT_STAGE_NONE;
+    debug_.target_place = GODOT_NO_PLACE;
     drain_log();
     if (!configured_) {
         configured_ = load_config();
@@ -271,6 +276,7 @@ void VivariumView::restart() {
         + " data_root=" + text_of(start_.files_dir) + "/" + text_of(bundle.data_root)
         + " selftest=" + (selftest_ran_ ? "errors:" + ::godot::String::num_uint64(selftest_errors_) : "off")
         + " measure=" + (measurement_.active ? "on" : "off")
+        + " debug=" + (debug_.on ? "on" : "off")
         + " play_stage=" + ::godot::String::num_uint64(play_stage_)
         + " assets=" + ::godot::String::num_uint64(assets_.files.size() + assets_.missing.size())
         + " asset_missing=" + ::godot::String::num_uint64(assets_.missing.size())
@@ -312,13 +318,20 @@ void VivariumView::process(double delta) {
     const double elapsed_s =
         static_cast<double>(frame_ns - last_frame_ns_) / static_cast<double>(ase::utils::NANOS_PER_SECOND);
     last_frame_ns_ = frame_ns;
+    // A lapse to a stage hands the host more time than the frame took and lets it run more ticks
+    // (godot_vivarium_debug.cpp) - topped up only while the backlog holds less than one feed, so a
+    // frame that could not run all of it never piles up more than the next one runs.
+    const bool lapsing = debug_.target_stage != GODOT_STAGE_NONE;
+    const double lapse_s = lapsing && resources_.backlog_seconds() < debug_.lapse_s ? debug_.lapse_s : 0.0;
+    const uint32_t lapse_steps = lapsing ? debug_.lapse_steps : 0u;
     // Host time (advance + snapshots) is measured apart from the whole _process interval (PLAN 02.3).
-    const HostStatus status = resources_.advance(elapsed_s);
+    const HostStatus status = resources_.advance(elapsed_s, lapse_s, lapse_steps);
     const uint64_t host_usec = clock->get_ticks_usec() - frame_start_usec;
     if (status == ase::kernel::HostStatusOk) {
         announce_patches();
         follow_catch_up(elapsed_s, static_cast<double>(frame_ns) / static_cast<double>(ase::utils::NANOS_PER_SECOND));
         follow_stages();
+        follow_debug();
         follow_water();
         follow_scene(elapsed_s);
         // The asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7) is lit by the sun of the host's
@@ -404,39 +417,6 @@ void VivariumView::follow_stages() {
                  ::godot::String::num_uint64(conditions_[place]));
             conditions_[place] = patch->condition;
         }
-    }
-}
-
-void VivariumView::follow_water() {
-    // Input → plugin (Reception) → ase-hydro (Reception) → balance and publish (Dissemination) →
-    // snapshot: the pour has arrived once the patch's soil water rose by GODOT_WATER_ARRIVED_SHARE of
-    // what the pour can add - its amount, or the room up to the field capacity if that is smaller -
-    // and only then is the result logged (L3). ANY RISE IS NOT THE POUR (run 20261025-phase03-v39):
-    // one step after the press the soil stood at 20.004 mm against 20.003 from drift, the line said
-    // applied, and the 25 mm arrived one step later at 45.003. It may also be refused on its way - by
-    // ase-hydro above the field capacity - and then no rise ever comes: after
-    // GODOT_WATER_WAIT_STEPS Dissemination runs that is a line of its own.
-    if (water_pending_place_ == GODOT_NO_PLACE) {
-        return;
-    }
-    const VivariumPatchView* patch = resources_.get_patch_at(water_pending_place_);
-    if (patch == nullptr) {
-        water_pending_place_ = GODOT_NO_PLACE;
-        return;
-    }
-    const double expected_mm = ase::math::min(start_.irrigate_amount_mm, patch->capacity_mm - water_pending_from_);
-    if (expected_mm > 0.0 && patch->soil_mm >= water_pending_from_ + GODOT_WATER_ARRIVED_SHARE * expected_mm) {
-        note("water applied " + measure(water_pending_place_) + " soil_mm_before=" +
-             ::godot::String::num(water_pending_from_, GODOT_LOG_DECIMALS));
-        water_pending_place_ = GODOT_NO_PLACE;
-        return;
-    }
-    uint64_t steps = 0u;
-    if (resources_.schedule_runs(GODOT_LOG_STEP_SCHEDULE, &steps) == ase::kernel::HostStatusOk &&
-        steps >= water_pending_steps_ + GODOT_WATER_WAIT_STEPS) {
-        note("water not applied " + measure(water_pending_place_) + " soil_mm_before=" +
-             ::godot::String::num(water_pending_from_, GODOT_LOG_DECIMALS));
-        water_pending_place_ = GODOT_NO_PLACE;
     }
 }
 

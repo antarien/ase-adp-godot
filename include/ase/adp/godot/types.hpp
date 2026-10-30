@@ -22,14 +22,14 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-25
- * @version     00.00.09.00000
+ * @modified    2026-10-28
+ * @version     00.00.10.00003
  *
  * WHY THE PORT KEYS ARE WRITTEN A SECOND TIME
  *
  * ase-pl-flora carries the same names (FLORA_HOST_KEY_* in its types.hpp). The adapter sees only
- * the kernel facade - no component, no hub, no unit header (ARCH_ASE_KERNEL_EMBEDDED.md,
- * "Schichten und Grenzen") - so it holds the DOCUMENTED contract of the ports
+ * the kernel facade - no component, no hub, no unit header (ARCH_ASE_KERNEL_EMBEDDED.md, the section
+ * on layers and boundaries) - so it holds the DOCUMENTED contract of the ports
  * (PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.3 point 1), exactly as
  * clients/avt-client-android/tests/avt_headless.cpp does. A renamed key breaks the host test of
  * this adapter, which runs against the real bundle.
@@ -66,6 +66,7 @@ constexpr const char* GODOT_KEY_SOIL_MM = "soil_mm";          // patch record: s
 constexpr const char* GODOT_KEY_SOIL_REL = "soil_rel";        // patch record: soil water over field capacity, 0..1
 constexpr const char* GODOT_KEY_CAPACITY_MM = "capacity_mm";  // patch record: field capacity, mm
 constexpr const char* GODOT_KEY_AMOUNT_MM = "amount_mm";      // irrigate request: water poured on the patch, mm
+constexpr const char* GODOT_KEY_SCALE = "scale";              // pace request: the time scale the host's game clock runs at, 0 = its default
 constexpr const char* GODOT_KEY_ELAPSED = "elapsed_s";        // clock record: game time, seconds (TIM_ELAPSED_GAME)
 constexpr const char* GODOT_KEY_DAY = "day";                  // clock record: game day (TIM_DAY_COUNT)
 constexpr const char* GODOT_KEY_HOUR = "hour";                // clock record: hour of the game day (TIM_CURRENT_HOUR)
@@ -84,7 +85,7 @@ constexpr const char* GODOT_KEY_QX = "qx";                    // organ record: f
 constexpr const char* GODOT_KEY_QY = "qy";                    // organ record: frame, vector part, upward share
 constexpr const char* GODOT_KEY_QZ = "qz";                    // organ record: frame, vector part, north share
 constexpr const char* GODOT_KEY_QW = "qw";                    // organ record: frame, scalar part
-constexpr const char* GODOT_KEY_LENGTH = "length";            // organ record: length, metres (leaf: edge of the equal square)
+constexpr const char* GODOT_KEY_LENGTH = "length";            // organ record: length, metres (leaf: edge of the equal square); comet record: angular length of the tail, radians
 constexpr const char* GODOT_KEY_RADIUS = "radius";            // organ record: radius, metres (internode and root segment, else 0)
 constexpr const char* GODOT_KEY_BARK = "bark";                // segment record only: share of the stem-base bark at the middle of the internode, 0 white to 1 base bark (usecase:100395)
 constexpr double GODOT_BARK_WHITE = 0.0;                      // share of the stem-base bark of the white bark, the lower end of its range
@@ -189,24 +190,51 @@ constexpr uint32_t GODOT_TMPL_LEAF = 2u;                      // template code: 
 constexpr uint32_t GODOT_TMPL_COUNT = 3u;                     // template codes the ports carry
 
 /**
- * The sky and the light of the scene (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3): ase-pl-sky
- * lays four records on its scene port every frame (SkyHostScneExptSystem), one per object id below.
- * The sun record carries the unit direction TOWARDS the sun in the world frame of the organ records
- * (x east, y up, z north) - a directional light shines along its negative; colours are shares 0..1.
- * The ids and keys are the plugin's (ase-pl-sky types.hpp, SKY_HOST_*), repeated here because the
- * adapter reads the port and never links the plugin. The adapter computes none of the light.
+ * The sky and the light of the scene (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11: sun, moon and the day
+ * cycle): ase-pl-sky lays four records on its scene port every frame and one more per visible moon
+ * (SkyHostScneExptSystem), one per object id below. The sun and the moon record carry the unit
+ * direction TOWARDS their body in the world frame of the organ records (x east, y up, z north) - a
+ * directional light shines along its negative; colours are shares 0..1. The ids and keys are the
+ * plugin's (ase-pl-sky types.hpp, SKY_HOST_*), repeated here because the adapter reads the port and
+ * never links the plugin. The adapter computes none of the light.
  */
 constexpr uint32_t GODOT_SKY_RECORD_SUN = 1u;                 // sky record object id: the sun - direction towards it, colour, strength
 constexpr uint32_t GODOT_SKY_RECORD_AMBIENT = 2u;             // sky record object id: the ambient light - colour, strength
 constexpr uint32_t GODOT_SKY_RECORD_BACKGROUND = 3u;          // sky record object id: the background of the sky - colour
 constexpr uint32_t GODOT_SKY_RECORD_FOG = 4u;                 // sky record object id: the fog - colour, near and far distance
-constexpr uint32_t GODOT_SKY_RECORD_COUNT = 4u;               // records of one sky publication: sun, ambient, background, fog
+constexpr uint32_t GODOT_SKY_RECORD_MOON = 5u;                // sky record object id: a visible moon - direction towards it, colour, strength of its light
+constexpr uint32_t GODOT_SKY_RECORD_COUNT = 4u;               // records of one sky publication without its moons: sun, ambient, background, fog
+constexpr uint32_t GODOT_SKY_MOONS_MAX = 2u;                  // moons one publication may carry: Scorpii and Amilox (CAUSA_ASE_SKY)
+constexpr uint32_t GODOT_SKY_RECORD_COMET = 6u;               // sky record object id: the visible comet - direction towards it, brightness, tail direction and length
+constexpr uint32_t GODOT_SKY_COMETS_MAX = 1u;                 // comets one publication may carry: ase-ephemeris hands one comet as EPH_COM_* rows
+constexpr const char* GODOT_KEY_TAIL_X = "tail_x";            // comet record: east share of the unit direction the tail runs on the sky
+constexpr const char* GODOT_KEY_TAIL_Y = "tail_y";            // comet record: upward share of the unit direction the tail runs on the sky
+constexpr const char* GODOT_KEY_TAIL_Z = "tail_z";            // comet record: north share of the unit direction the tail runs on the sky
+constexpr uint32_t GODOT_SKY_RECORD_PLANET = 7u;              // sky record object id: Luca above the horizon - direction towards it, angular size, illuminated share
+constexpr uint32_t GODOT_SKY_PLANETS_MAX = 1u;                // planets one publication may carry: Luca, the neighbour planet (PLAN_ASE_SKY_EXT)
+constexpr const char* GODOT_KEY_PHASE = "phase";              // planet record: illuminated share of the disc, 0 new to 1 full
+constexpr uint32_t GODOT_SKY_RECORD_COMPANION = 8u;           // sky record object id: Arcturus above the horizon - direction towards it, angular size, nebula glow
+constexpr uint32_t GODOT_SKY_COMPANIONS_MAX = 1u;             // companion stars one publication may carry: Arcturus (CAUSA_ASE_EPHEMERIS)
+constexpr uint32_t GODOT_SKY_RECORD_FRAGMENT = 9u;            // sky record object id: a half of the split moon Aurora above the horizon - direction, angular size, brightness
+constexpr uint32_t GODOT_SKY_FRAGMENTS_MAX = 2u;              // moon halves one publication may carry: Matrum and Fractum Aurix (SCISSURA AURIX)
+constexpr uint32_t GODOT_SKY_RECORD_BELT = 10u;               // sky record object id: the asteroid belt arc - direction to its centre, span, glitter, density
+constexpr uint32_t GODOT_SKY_BELTS_MAX = 1u;                  // belts one publication may carry: Cingulum Aurix (CAUSA_ASE_EPHEMERIS)
+constexpr const char* GODOT_KEY_SPAN = "span";                // belt record: angle the arc spans along the orbit, radians, centred on the record direction
+constexpr const char* GODOT_KEY_DENSITY = "density";          // belt record: apparent share of the belt particles, 0..1
+constexpr uint32_t GODOT_SKY_RECORD_SHOWER = 11u;             // sky record object id: the meteor shower while it throws - direction to its radiant, intensity, rate
+constexpr uint32_t GODOT_SKY_SHOWERS_MAX = 1u;                // showers one publication may carry: ase-ephemeris hands one shower as EPH_MTR_* rows
+constexpr const char* GODOT_KEY_RATE = "rate";                // shower record: meteors per hour out of the radiant
 constexpr const char* GODOT_KEY_R = "r";                      // sky records: red share of the colour, 0..1
 constexpr const char* GODOT_KEY_G = "g";                      // sky records: green share of the colour, 0..1
 constexpr const char* GODOT_KEY_B = "b";                      // sky records: blue share of the colour, 0..1
+constexpr const char* GODOT_KEY_DISC_R = "disc_r";            // sun record: red share of the disc colour, the sunlight darkened by an eclipse, 0..1
+constexpr const char* GODOT_KEY_DISC_G = "disc_g";            // sun record: green share of the disc colour, 0..1
+constexpr const char* GODOT_KEY_DISC_B = "disc_b";            // sun record: blue share of the disc colour, 0..1
 constexpr const char* GODOT_KEY_INTENSITY = "intensity";      // sun and ambient record: strength of the light
 constexpr const char* GODOT_KEY_NEAR = "near";                // fog record: distance where the fog begins, metres
 constexpr const char* GODOT_KEY_FAR = "far";                  // fog record: distance where the fog is full, metres
+constexpr const char* GODOT_KEY_SHIMMER = "shimmer";          // fog record: shimmer of hot air, 0 none to 1 full (ATM_VIS_HEAT_HAZE)
+constexpr const char* GODOT_KEY_SIZE = "size";                // sun and moon record: angular diameter of the disc, radians (ase-ephemeris)
 
 /**
  * Plant geometry (godot_plant_geometry.hpp): the template, ground and instance records go unchanged into the
@@ -226,7 +254,17 @@ constexpr double GODOT_ORDER_EVERY = -1.0;          // split order below the ste
 constexpr const char* GODOT_PLANT_SCENE_ROOT = "PlantScene";      // name of the scene's root node
 constexpr const char* GODOT_PLANT_CAMERA = "PlantCamera";         // the camera of the near view
 constexpr const char* GODOT_PLANT_SUN = "PlantSun";               // the directional light the sun of the sky port sets
+constexpr const char* GODOT_PLANT_MOON = "PlantMoon";             // prefix of the directional light of a moon slot: this and the slot number
+constexpr const char* GODOT_PLANT_SUN_DISC = "PlantSunDisc";      // the sun as a disc in the sky, along its direction
+constexpr const char* GODOT_PLANT_MOON_DISC = "PlantMoonDisc";    // prefix of the disc of a moon slot in the sky: this and the slot number
+constexpr const char* GODOT_PLANT_COMET_HEAD = "PlantCometHead";  // prefix of the head of a comet slot in the sky: this and the slot number
+constexpr const char* GODOT_PLANT_COMET_TAIL = "PlantCometTail";  // prefix of the tail of a comet slot in the sky: this and the slot number
+constexpr const char* GODOT_PLANT_PLANET_DISC = "PlantPlanetDisc";  // prefix of the disc of a planet slot in the sky: this and the slot number
+constexpr const char* GODOT_PLANT_COMPANION_DISC = "PlantCompanionDisc";  // prefix of the disc of a companion star slot in the sky: this and the slot number
+constexpr const char* GODOT_PLANT_FRAGMENT_DISC = "PlantFragmentDisc";    // prefix of the disc of a moon half slot in the sky: this and the slot number
+constexpr const char* GODOT_PLANT_BELT_GRAIN = "PlantBeltGrain";          // prefix of a particle of the asteroid belt arc: this and the particle number
 constexpr const char* GODOT_PLANT_ENVIRONMENT = "PlantEnvironment";  // sky colour, ambient light and fog of the sky port
+constexpr const char* GODOT_PLANT_HAZE = "PlantHaze";             // the shimmer of hot air in front of the camera (usecase:101515 - veil sight with weather)
 constexpr const char* GODOT_PLANT_GROUND = "PlantGround";         // the ground from the terrain samples
 constexpr const char* GODOT_PLANT_BODIES = "PlantBodies";         // the node the plants stand under, one child per body
 constexpr const char* GODOT_PLANT_BODY_PREFIX = "PlantBody";      // name of a plant's node: this and the object id of its patch
@@ -263,6 +301,50 @@ constexpr const char* GODOT_VIEW_KEY_FLATTEN = "flatten_m";       // view: radiu
  */
 constexpr float GODOT_EXPOSURE_DAY_LIGHT = 1.0f;   // light of the scene that needs no lift: the sun at noon plus its ambient share
 constexpr float GODOT_EXPOSURE_LIFT_MAX = 32.0f;   // largest lift of the exposure: the night stays at least this much darker than the day's light
+/**
+ * Sun and moon as discs in the sky (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11: sun, moon and the day cycle).
+ * Each disc stands along the direction of its record, at GODOT_SKY_DISC_DISTANCE from the camera, so it
+ * keeps its place in the sky however the camera moves - a body at infinity. It glows in the colour of its
+ * record, unshaded and outside the fog, and casts no shadow. The sun disc stands while the sun is above
+ * the horizon plane; a moon disc while the port carries a record for its slot, which ase-pl-sky files only
+ * for a visible moon. The radii are the look of the view, not a sky quantity: at the distance they
+ * give the sun about 2.9 and the moon about 2.3 degrees.
+ */
+constexpr float GODOT_SKY_DISC_DISTANCE = 1000.0f;  // metres from the camera to the centre of a disc
+constexpr float GODOT_SUN_DISC_RADIUS = 25.0f;      // metres: radius of the sun disc at GODOT_SKY_DISC_DISTANCE
+constexpr float GODOT_MOON_DISC_RADIUS = 20.0f;     // metres: radius of the moon disc at GODOT_SKY_DISC_DISTANCE
+constexpr int32_t GODOT_SKY_DISC_SEGMENTS = 32;     // radial segments of a disc's sphere
+constexpr int32_t GODOT_SKY_DISC_RINGS = 16;        // rings of a disc's sphere
+/**
+ * The comet in the sky (usecase:101274 - track the comets). Its head is a disc like a moon's, along the
+ * direction of its record; its tail a cone that starts at the head and runs along the tail direction of the
+ * record, as long as the arc the record gives (2·d·sin(length/2) at the disc distance d). ase-ephemeris
+ * holds no size of the head, so its radius is the look of the view, as the disc radii above are; head and
+ * tail glow in the comet's brightness.
+ */
+constexpr float GODOT_COMET_HEAD_RADIUS = 6.0f;     // metres: radius of the comet head at GODOT_SKY_DISC_DISTANCE (about 0.7 degrees)
+constexpr int32_t GODOT_COMET_TAIL_SEGMENTS = 16;   // radial segments of the tail cone
+/**
+ * The asteroid belt in the sky (usecase:2758 - generated asteroids): its arc is a row of glittering grains
+ * along the span of its record, turned about the upward axis from the record direction. The density of the
+ * record is the share of the grains that show; the number and the radius of the grains are the look of the
+ * view, as the disc radii are.
+ */
+constexpr uint32_t GODOT_BELT_GRAINS_MAX = 24u;     // grains of the belt arc at full density
+constexpr float GODOT_BELT_GRAIN_RADIUS = 1.5f;     // metres: radius of one grain at GODOT_SKY_DISC_DISTANCE
+/**
+ * The meteor shower in the sky (usecase:2760 - show meteorite in the nightsky): its streaks stand on a ring
+ * around the radiant of its record, each a short trail of glowing points running away from the radiant. The
+ * intensity of the record is the share of the streaks that show (ase-ephemeris sets the rate to intensity
+ * times the peak rate, so the share follows the rate); the number, the spread and the look of the streaks
+ * are the look of the view, as the grains of the belt are.
+ */
+constexpr uint32_t GODOT_SHOWER_STREAKS_MAX = 12u;    // streaks around the radiant at full intensity
+constexpr uint32_t GODOT_SHOWER_STREAK_POINTS = 4u;   // glowing points of one streak, from its head outwards
+constexpr float GODOT_SHOWER_STREAK_SPREAD = 0.30f;   // radians: distance of a streak head from the radiant
+constexpr float GODOT_SHOWER_STREAK_STEP = 0.04f;     // radians: distance between two points of one streak
+constexpr float GODOT_SHOWER_POINT_RADIUS = 1.0f;     // metres: radius of one streak point at GODOT_SKY_DISC_DISTANCE
+constexpr const char* GODOT_PLANT_SHOWER_POINT = "PlantShowerPoint";  // prefix of a streak point in the sky: this and the point number
 constexpr float GODOT_ZOOM_START = 1.0f;   // zoom of the near view at the start: the camera as the view section places it
 constexpr float GODOT_ZOOM_STEP = 0.8f;    // one wheel turn or pinch towards the birch: distance, height and look point times this
 constexpr float GODOT_ZOOM_MIN = 0.08f;    // closest zoom: 0.8 m from a seedling at the configured 10 m
@@ -362,8 +444,8 @@ constexpr uint32_t GODOT_COLOR_STAND_IN_FRUIT = 0x8A6A3EFFu;              // sta
 constexpr uint32_t GODOT_COLOR_STAND_IN_NUTLET = 0x9C7A44FFu;             // stand-in of GODOT_ROLE_NUTLET: a winged nutlet
 
 /**
- * The ground of the care view (usecase:100387 view the plant, operator order of 2026-10-25: "ein Terrain
- * hat je nach Schräglage andere Farben ... wo sieht man die Gitternetzlinien"). One ShaderMaterial per soil
+ * The ground of the care view (usecase:100387 view the plant): a terrain takes other colours by its slope,
+ * and its grid lines show its shape. One ShaderMaterial per soil
  * over the whole terrain mesh, its cover the material of the soil's role (godot_plant_look.cpp):
  * - THE SLOPE PAINTS: the world normal of a fragment gives its slope; above GODOT_GROUND_SLOPE_BANK_DEG the
  *   cover gives way to bare earth, above GODOT_GROUND_SLOPE_STEEP_DEG to the colour of an open bank.
@@ -525,6 +607,49 @@ constexpr const char* GODOT_BARK_BASE_ROUGHNESS = "base_roughness";  // bark sha
 constexpr const char* GODOT_BARK_BASE_UV = "base_uv";                // bark shader uniform: UV scale of the stem-base bark
 
 /**
+ * The shimmer of hot air (usecase:101515 - veil sight with weather, DSGN_130 130/FOGWR: from 313 K the rising
+ * warm air breaks the light unevenly and the horizon begins to waver, full at the heat damage limit of
+ * 323 K). ase-atmosphere computes its strength from the temperature (ATM_VIS_HEAT_HAZE), ase-pl-sky hands it
+ * on in the fog record; the view computes none of it. A quad in front of the camera reads the drawn image and
+ * shifts its rows sideways in a wave that runs up the screen. The shift grows with the distance of what the
+ * fragment shows, from where the fog of the same record begins to where it is full, so the near ground
+ * stands still and the horizon wavers; at a shimmer of 0 the quad is hidden.
+ */
+constexpr const char* GODOT_HAZE_SHADER_CODE =
+    "shader_type spatial;\n"
+    "render_mode unshaded, cull_disabled, depth_draw_never, depth_test_disabled, fog_disabled, shadows_disabled;\n"
+    "uniform sampler2D drawn : hint_screen_texture, filter_linear_mipmap;\n"
+    "uniform sampler2D depth : hint_depth_texture, filter_nearest;\n"
+    "uniform float shimmer = 0.0;\n"
+    "uniform float near_m = 0.0;\n"
+    "uniform float far_m = 0.0;\n"
+    "uniform float wave_rows = 0.0;\n"
+    "uniform float wave_speed = 0.0;\n"
+    "uniform float wave_reach = 0.0;\n"
+    "void vertex() {\n"
+    "    POSITION = vec4(VERTEX.xy, 1.0, 1.0);\n"
+    "}\n"
+    "void fragment() {\n"
+    "    vec4 seen = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth, SCREEN_UV).r, 1.0);\n"
+    "    float metres = -seen.z / seen.w;\n"
+    "    float far_share = smoothstep(near_m, max(far_m, near_m), metres);\n"
+    "    float strength = clamp(shimmer, 0.0, 1.0) * far_share;\n"
+    "    float shift = sin(SCREEN_UV.y * wave_rows + TIME * wave_speed) * wave_reach * strength;\n"
+    "    ALBEDO = texture(drawn, SCREEN_UV + vec2(shift, 0.0)).rgb;\n"
+    "}\n";
+constexpr const char* GODOT_HAZE_SHIMMER = "shimmer";        // haze shader uniform: shimmer of the fog record, 0..1
+constexpr const char* GODOT_HAZE_NEAR = "near_m";            // haze shader uniform: distance where the fog begins, metres - the shimmer starts there
+constexpr const char* GODOT_HAZE_FAR = "far_m";              // haze shader uniform: distance where the fog is full, metres - the shimmer is full there
+constexpr const char* GODOT_HAZE_ROWS = "wave_rows";         // haze shader uniform: phase of the wave over the screen height, radians
+constexpr const char* GODOT_HAZE_SPEED = "wave_speed";       // haze shader uniform: phase the wave runs per second, radians
+constexpr const char* GODOT_HAZE_REACH = "wave_reach";       // haze shader uniform: sideways shift at full shimmer, share of the screen width
+constexpr float GODOT_HAZE_WAVE_ROWS = 160.0f;               // radians over the screen height: about 25 rows of rising air across the view
+constexpr float GODOT_HAZE_WAVE_SPEED = 6.0f;                // radians per second: a row wavers about once a second
+constexpr float GODOT_HAZE_WAVE_REACH = 0.003f;              // share of the screen width at full shimmer: a few pixels, shapes blur, the view stays
+constexpr float GODOT_HAZE_QUAD_SIZE = 2.0f;                 // side of the quad: it spans clip space from -1 to 1
+constexpr float GODOT_HAZE_QUAD_DEPTH = 1.0f;                // metres in front of the camera the quad hangs, inside every frustum
+
+/**
  * Asset showcase (godot_asset_showcase.hpp, PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7).
  */
 constexpr const char* GODOT_SHOWCASE_LINE = "asset showcase";   // first words of the showcase's log line
@@ -558,6 +683,9 @@ constexpr uint8_t GODOT_STAGE_SPROUT = 1;     // a seedling
 constexpr uint8_t GODOT_STAGE_GROW = 2;       // a growing stand
 constexpr uint8_t GODOT_STAGE_MATURE = 3;     // a mature stand
 constexpr uint8_t GODOT_STAGE_COUNT = 4;      // stages the view has a word and a colour for
+constexpr uint8_t GODOT_STAGE_NONE = UINT8_MAX;  // debug button: no stage to lapse to, the button only switches the time lapse
+constexpr double GODOT_PACE_NONE = 0.0;       // pace request: the host's clock back on its default scale
+constexpr uint32_t GODOT_DEBUG_LAPSE_STEPS_MAX = UINT16_MAX;  // debug.lapse_steps: range of the read, so catch_up_steps + lapse_steps stays a uint32
 constexpr uint8_t GODOT_COND_HEALTHY = 0;     // a stand without a condition mark
 constexpr uint8_t GODOT_COND_WILTED = 1;      // a wilted stand
 constexpr uint8_t GODOT_COND_DEAD = 2;        // a dead stand
@@ -629,6 +757,8 @@ constexpr const char* GODOT_SELFTEST_KEY_SOIL = "soil";              // lay: gro
 constexpr const char* GODOT_SELFTEST_KEY_X = "x";                    // lay: centre of the patch, world metres east
 constexpr const char* GODOT_SELFTEST_KEY_Z = "z";                    // lay: centre of the patch, world metres north
 constexpr const char* GODOT_SELFTEST_KEY_HALF = "half_m";            // lay: half edge of the patch square, metres
+constexpr const char* GODOT_SELFTEST_KEY_VIEW = "view";              // action: place the eye of the view through the view port
+constexpr const char* GODOT_SELFTEST_KEY_Y = "y";                    // view: the eye, world metres up (x east, z north as for lay)
 constexpr const char* GODOT_SELFTEST_RECORD_CLOCK = "clock";         // record: the clock port
 constexpr const char* GODOT_SELFTEST_RECORD_PATCH = "patch";         // record: the patch port; an organ port by its GODOT_ORGAN_WORDS
 constexpr const char* GODOT_SELFTEST_OP_EQ = "eq";                   // |actual - value| <= tolerance
@@ -751,6 +881,7 @@ constexpr int32_t GODOT_FONT_SMALL = 20;                    // build line, patch
 constexpr int32_t GODOT_FONT_MIN = 12;                      // smallest size a line shrinks to so that it fits its width
 constexpr float GODOT_FRAME_WIDTH = 6.0f;                   // selection frame line width
 constexpr float GODOT_BORDER_WIDTH = 2.0f;                  // patch and button outline width
+constexpr float GODOT_BORDER_WIDTH_ACTIVE = 4.0f;           // outline of the debug button whose time lapse is running
 constexpr float GODOT_PATCH_INSET = 14.0f;                  // gap between patch edge and cover
 constexpr float GODOT_BAR_HEIGHT = 16.0f;                   // height of the soil water bar
 constexpr float GODOT_LABEL_OFFSET = 34.0f;                 // baseline of a label below a rect's top

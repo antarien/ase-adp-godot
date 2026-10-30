@@ -26,8 +26,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.01.00002
+ * @modified    2026-10-26
+ * @version     00.00.01.00003
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -99,7 +99,7 @@ bool VivariumView::load_config() {
     }
     const ::godot::Dictionary root = parsed;
     if (!load_host_config(root) || !load_layout(root) || !load_texts(root) || !load_modes(root) ||
-        !load_view(root)) {
+        !load_debug(root) || !load_view(root)) {
         return false;  // the failing key stands on the error panel already
     }
     if (!load_stage() || !load_assets(root)) {
@@ -202,6 +202,10 @@ bool VivariumView::load_modes(const ::godot::Dictionary& root) {
     ::godot::Dictionary assets;
     if (!read_section(modes, "assets", assets) || !read_text(assets, "argument", modes_.assets_argument)) {
         return fail_config("modes.assets");
+    }
+    ::godot::Dictionary debug;
+    if (!read_section(modes, "debug", debug) || !read_text(debug, "argument", modes_.debug_argument)) {
+        return fail_config("modes.debug");
     }
     return true;
 }

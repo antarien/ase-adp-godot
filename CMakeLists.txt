@@ -121,6 +121,7 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_prune.cpp        # VivariumView: cutting mode, the internode under the finger, the cut
     src/godot_vivarium_bed.cpp          # VivariumView: bed mode, the ground under the finger, the bed the player lays (03.8)
     src/godot_vivarium_flatten.cpp      # VivariumView: flatten mode, the disc the player levels where he taps (03.8)
+    src/godot_vivarium_debug.cpp        # VivariumView: debug buttons, the time lapse of this host's clock (usecase:101120 clock the growth cycle)
     src/godot_vivarium_draw.cpp         # VivariumView: placement on the visible surface and the canvas
     src/godot_vivarium_scene.cpp        # VivariumView: what a frame fills of the 3D scene (03.1)
     src/godot_vivarium_measure.cpp      # VivariumView: self-test and measurement modes (02.3)
@@ -129,13 +130,17 @@ add_library(ase-adp-godot SHARED
     src/godot_asset_loader.cpp   # the one loader of bound asset files: GLTFDocument, template mesh, material (03.2)
     src/godot_asset_showcase_scene.cpp  # the asset showcase in Godot: sphere, plane, model (04.7)
     src/godot_plant_scene.cpp    # the 3D scene of the care view: camera, sun, sky, ground, tubes, instances (03.1)
-    src/godot_plant_look.cpp     # the materials and organ template files of that scene, bound once (03.2)
+    src/godot_plant_sky.cpp      # the moon light and the discs of sun and moon in that scene (usecase:101384 place sun and moon spatially, 03.11)
+    src/godot_plant_haze.cpp     # the shimmer of hot air over that scene (usecase:101515 veil sight with weather, 03.11)
+    src/godot_plant_look.cpp    # the materials and organ template files of that scene, bound once (03.2)
 
     include/ase/adp/godot/godot_registration.hpp
     include/ase/adp/godot/godot_vivarium_node.hpp
     include/ase/adp/godot/godot_asset_loader.hpp
     include/ase/adp/godot/godot_asset_showcase_scene.hpp
     include/ase/adp/godot/godot_plant_scene.hpp
+    include/ase/adp/godot/godot_plant_sky.hpp
+    include/ase/adp/godot/godot_plant_haze.hpp
     include/ase/adp/godot/godot_plant_look.hpp
     include/ase/adp/godot/godot_config_read.hpp
     include/ase/adp/godot/godot_view_support.hpp

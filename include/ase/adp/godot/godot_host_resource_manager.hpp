@@ -18,8 +18,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-25
- * @version     00.00.04.00007 [seed]
+ * @modified    2026-10-28
+ * @version     00.00.04.00010 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -41,7 +41,7 @@
  *   resources.boot(config);                      // factory: create, data root, load the set, start
  *
  *   // VivariumView::process (Godot's _process)
- *   resources.advance(elapsed_s);                // the real time since the last frame, never capped
+ *   resources.advance(elapsed_s, lapse_s, lapse_steps);  // the real time since the last frame, never capped; the debug lapse on top
  *   const VivariumPatchView* patch = resources.get_patch(selected_id);
  *
  *   // Reiniciar and VivariumView::exit_tree() (Godot's _exit_tree)
@@ -158,12 +158,16 @@ struct VivariumStartConfig {
     std::string tile_port;           // host port of the bark tiling of the internodes (ase-pl-flora: flora.tile.v1)
     std::string level_port;          // host port the player levels a patch through (ase-pl-flora: flora.level.v1)
     std::string flatten_port;        // host port the player flattens the ground at a place through (ase-pl-flora: flora.flatten.v1)
-    std::string template_corner_port;    // host port of the corners of the organ templates (ase-pl-flora: flora.template.corner.v1)
+    std::string pace_port;           // host port the debug mode asks the pace of the game clock through (ase-pl-flora: flora.pace.v1)
+    std::string view_port;           // host port the view hands the place of its camera through (ase-pl-flora: flora.view.v1)
+    std::string template_corner_port;   // host port of the corners of the organ templates (ase-pl-flora: flora.template.corner.v1)
     std::string template_triangle_port;  // host port of the triangles of the organ templates (ase-pl-flora: flora.template.triangle.v1)
     std::string op_irrigate;         // submit operation that pours on one patch
     std::string op_prune;            // submit operation that cuts the branch an internode sits on (03.10 step 9)
     std::string op_level;            // submit operation that levels the ground of one patch (03.8 point 2)
     std::string op_flatten;          // submit operation that flattens a disc of the ground at a place (03.8)
+    std::string op_pace;             // submit operation that runs the host's game clock at a time scale (debug time lapse)
+    std::string op_view;             // submit operation that tells the engine where the view's camera stands (level of detail)
     std::string op_lay;              // submit operation that lays one patch, the ground square or a brook
     double      irrigate_amount_mm = 0.0;  // water one press of Regar pours, mm
     uint32_t    catch_up_steps = 0u;       // most ticks one frame may run while the host catches up
@@ -344,11 +348,121 @@ struct VivariumClockView {
  * The sky and the light of the scene as the last snapshot of the sky port showed them - a copy
  * (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3). ase-pl-sky computes all of it; the view sets its
  * directional light, its environment and its fog from these numbers and computes none of its own.
- * The sun direction points TOWARDS the sun in the world frame of the organ records (x east, y up,
- * z north); a directional light shines along its negative. Colours are shares 0..1.
+ * The sun and moon directions point TOWARDS their body in the world frame of the organ records (x east,
+ * y up, z north); a directional light shines along its negative. Colours are shares 0..1. Every moon
+ * record of the snapshot stands in one slot of `moon`, in the order the port carried them; `moons` says
+ * how many - 0 while no moon stands in the sky.
  */
+struct VivariumMoonView {
+    double x = 0.0;           // unit direction towards the moon, east share
+    double y = 0.0;           // unit direction towards the moon, upward share
+    double z = 0.0;           // unit direction towards the moon, north share
+    double r = 0.0;           // moonlight colour, red share
+    double g = 0.0;           // moonlight colour, green share
+    double b = 0.0;           // moonlight colour, blue share
+    double intensity = 0.0;   // strength of its light as ase-pl-sky files it: CEL_MOON_CONTRIB for Amilox, 0 for Scorpii
+    double size = 0.0;        // angular diameter of its disc, radians, as ase-ephemeris holds it
+};
+
+/**
+ * A visible comet as the comet record of the sky port carries it (usecase:101274 - track the comets):
+ * the unit direction towards it and the unit direction its tail runs on the sky, both in the world
+ * frame, its brightness and the angular length of its tail. ase-pl-sky turns the tail away from the sun
+ * and files the record only while the comet is visible and above the horizon.
+ */
+struct VivariumCometView {
+    double x = 0.0;           // unit direction towards the comet, east share
+    double y = 0.0;           // unit direction towards the comet, upward share
+    double z = 0.0;           // unit direction towards the comet, north share
+    double intensity = 0.0;   // brightness of the comet, 0..1 (EPH_COM_BRIGHTNESS)
+    double tail_x = 0.0;      // unit direction the tail runs on the sky, east share
+    double tail_y = 0.0;      // unit direction the tail runs on the sky, upward share
+    double tail_z = 0.0;      // unit direction the tail runs on the sky, north share
+    double length = 0.0;      // angular length of the tail on the sky, radians
+};
+
+/**
+ * Luca, the neighbour planet, as the planet record of the sky port carries it (usecase:101273 - track the
+ * neighbour planet): the unit direction towards it in the world frame, its angular diameter and its
+ * illuminated share. ase-pl-sky files the record only while the planet stands above the horizon.
+ */
+struct VivariumPlanetView {
+    double x = 0.0;           // unit direction towards the planet, east share
+    double y = 0.0;           // unit direction towards the planet, upward share
+    double z = 0.0;           // unit direction towards the planet, north share
+    double size = 0.0;        // angular diameter of its disc, radians, as ase-ephemeris holds it
+    double phase = 0.0;       // illuminated share of the disc, 0 new to 1 full
+};
+
+/**
+ * Arcturus, the companion star, as the companion record of the sky port carries it (usecase:101272 - track
+ * the companion star): the unit direction towards it in the world frame, its angular diameter and the
+ * strength of its nebula glow. ase-pl-sky files the record only while it stands above the horizon.
+ */
+struct VivariumCompanionView {
+    double x = 0.0;           // unit direction towards the companion star, east share
+    double y = 0.0;           // unit direction towards the companion star, upward share
+    double z = 0.0;           // unit direction towards the companion star, north share
+    double size = 0.0;        // angular diameter of its disc, radians, as ase-ephemeris holds it
+    double intensity = 0.0;   // strength of its nebula glow, 0..1
+};
+
+/**
+ * A half of the split moon Aurora as a fragment record of the sky port carries it (usecase:101384 - place sun
+ * and moon spatially): the unit direction towards it in the world frame, its angular diameter and its
+ * brightness. ase-pl-sky files both halves while Aurora stands above the horizon.
+ */
+struct VivariumFragmentView {
+    double x = 0.0;           // unit direction towards the moon half, east share
+    double y = 0.0;           // unit direction towards the moon half, upward share
+    double z = 0.0;           // unit direction towards the moon half, north share
+    double size = 0.0;        // angular diameter of its disc, radians
+    double intensity = 0.0;   // brightness of the half, 0..1
+};
+
+/**
+ * The asteroid belt as the belt record of the sky port carries it (usecase:2758 - generated asteroids): the
+ * unit direction towards the centre of its arc, the span of the arc along the orbit, the glitter of its grains
+ * and their density. ase-pl-sky files the record only while the belt shines above the horizon.
+ */
+struct VivariumBeltView {
+    double x = 0.0;           // unit direction towards the centre of the arc, east share
+    double y = 0.0;           // unit direction towards the centre of the arc, upward share
+    double z = 0.0;           // unit direction towards the centre of the arc, north share
+    double span = 0.0;        // angle the arc spans along the orbit, radians
+    double intensity = 0.0;   // glitter of the grains, 0..1
+    double density = 0.0;     // share of the grains that show, 0..1
+};
+
+/**
+ * The meteor shower as the shower record of the sky port carries it (usecase:2760 - show meteorite in the
+ * nightsky): the unit direction towards its radiant, its intensity and the meteors it throws per hour.
+ * ase-pl-sky files the record only while the shower throws and its radiant is above the horizon.
+ */
+struct VivariumShowerView {
+    double x = 0.0;           // unit direction towards the radiant, east share
+    double y = 0.0;           // unit direction towards the radiant, upward share
+    double z = 0.0;           // unit direction towards the radiant, north share
+    double intensity = 0.0;   // strength of the shower, 0..1
+    double rate = 0.0;        // meteors per hour
+};
+
 struct VivariumSkyView {
     bool   known = false;          // false until a snapshot carried all four records of the sky port
+    uint32_t showers = 0;          // shower records of the snapshot, at most GODOT_SKY_SHOWERS_MAX
+    VivariumShowerView shower[GODOT_SKY_SHOWERS_MAX] = {};  // the meteor showers throwing above the horizon
+    uint32_t belts = 0;            // belt records of the snapshot, at most GODOT_SKY_BELTS_MAX
+    VivariumBeltView belt[GODOT_SKY_BELTS_MAX] = {};  // the asteroid belts shining above the horizon
+    uint32_t fragments = 0;        // moon half records of the snapshot, at most GODOT_SKY_FRAGMENTS_MAX
+    VivariumFragmentView fragment[GODOT_SKY_FRAGMENTS_MAX] = {};  // the halves of Aurora, in the order of the port
+    uint32_t companions = 0;       // companion star records of the snapshot, at most GODOT_SKY_COMPANIONS_MAX
+    VivariumCompanionView companion[GODOT_SKY_COMPANIONS_MAX] = {};  // the companion stars above the horizon
+    uint32_t planets = 0;          // planet records of the snapshot, at most GODOT_SKY_PLANETS_MAX
+    VivariumPlanetView planet[GODOT_SKY_PLANETS_MAX] = {};  // the planets above the horizon, in the order of the port
+    uint32_t moons = 0;            // moon records of the snapshot, at most GODOT_SKY_MOONS_MAX
+    VivariumMoonView moon[GODOT_SKY_MOONS_MAX] = {};  // the visible moons, in the order of the port
+    uint32_t comets = 0;           // comet records of the snapshot, at most GODOT_SKY_COMETS_MAX
+    VivariumCometView comet[GODOT_SKY_COMETS_MAX] = {};  // the visible comets, in the order of the port
     double sun_x = 0.0;            // unit direction towards the sun, east share
     double sun_y = 0.0;            // unit direction towards the sun, upward share (the sine of its elevation)
     double sun_z = 0.0;            // unit direction towards the sun, north share
@@ -356,6 +470,10 @@ struct VivariumSkyView {
     double sun_g = 0.0;            // sunlight colour, green share
     double sun_b = 0.0;            // sunlight colour, blue share
     double sun_intensity = 0.0;    // strength of the sunlight
+    double sun_size = 0.0;         // angular diameter of the sun disc, radians (EPH_SUN_APPARENT_SIZE)
+    double sun_disc_r = 0.0;       // colour of the sun disc, red share - the sunlight darkened by an eclipse (usecase:101276)
+    double sun_disc_g = 0.0;       // colour of the sun disc, green share
+    double sun_disc_b = 0.0;       // colour of the sun disc, blue share
     double ambient_r = 0.0;        // ambient light colour, red share
     double ambient_g = 0.0;        // ambient light colour, green share
     double ambient_b = 0.0;        // ambient light colour, blue share
@@ -368,6 +486,7 @@ struct VivariumSkyView {
     double fog_b = 0.0;            // fog colour, blue share
     double fog_near = 0.0;         // distance where the fog begins, metres
     double fog_far = 0.0;          // distance where the fog is full, metres
+    double fog_shimmer = 0.0;      // shimmer of hot air, 0 none to 1 full (ATM_VIS_HEAT_HAZE; usecase:101515)
 };
 
 /**
@@ -469,8 +588,14 @@ public:
      * Hand the host `elapsed_s` of real time (never capped, never dropped - the world has no
      * pause) and read both snapshots. The host ticks at most catch_up_steps times in this call;
      * what remains waits in its backlog for the next frame (KernelEmbeddedHost::advance).
+     *
+     * THE LAPSE OF THE DEBUG MODE: `lapse_s` is time the view hands in beyond the real time of the
+     * frame, and `lapse_steps` the ticks it may run on top of catch_up_steps. The host ticks that time
+     * like any other - ordinary ticks of its own clock, every system in every one, nothing of the
+     * world skipped - only faster than the wall clock, as fast as the frame allows. 0 and 0 outside a
+     * lapse. Both count into simulation_seconds: the host simulated them.
      */
-    ase::kernel::HostStatus advance(double elapsed_s);
+    ase::kernel::HostStatus advance(double elapsed_s, double lapse_s, uint32_t lapse_steps);
     /** Pour irrigate_amount_mm on one patch; the plugin takes it in its next Reception run. */
     ase::kernel::HostStatus irrigate(uint32_t object_id);
     /**
@@ -495,6 +620,19 @@ public:
      * Reception run, ase-terrain levels the disc to the height of its centre.
      */
     ase::kernel::HostStatus flatten(double x, double z, double radius_m);
+    /**
+     * Run the host's own game clock at a time scale - the time lapse of the debug mode: a pace request on
+     * the pace port, GODOT_PACE_NONE for the default scale back. ase-pl-flora writes it as
+     * TIM_REQ_TIME_SCALE, ase-time runs this host's clock at it; no server clock is touched.
+     */
+    ase::kernel::HostStatus pace(double scale);
+    /**
+     * Tell the engine where the view's camera stands, world metres east, up and north - a view request on
+     * the view port. ase-pl-flora files it for ase-camera, whose camera the level of detail of
+     * ase-render-data measures from (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 point 7). Which place is valid
+     * is the plugin's to check.
+     */
+    ase::kernel::HostStatus view(double x, double y, double z);
     /** One line of the view itself (boot line, action, measurement) through the host's logger. */
     ase::kernel::HostStatus note(const char* text);
 

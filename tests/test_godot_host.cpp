@@ -5,7 +5,7 @@
  * @design      DSGN_021
  * @brief       Pins the one game host of GodotHostResourceManager against the real bundle: boot of the whole
  *              set, the log, pouring, the organ and instance ports, the cycle line, catching up without a
- *              pause and the teardown
+ *              pause, the debug lapse and the teardown
  * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG, the parts of L1, L3 and L5 that do not need a window, and
  *              PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.6 and 03.11. The manager boots the SAME bundle Godot
  *              loads: every unit's library and staged manifest, the data root and the index, side by side
@@ -24,8 +24,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-18
- * @version     00.00.04.00007
+ * @modified    2026-10-27
+ * @version     00.00.04.00010
  */
 
 #include "test_godot_host_support.hpp"
@@ -172,6 +172,27 @@ TEST_CASE("Nivelar: a level request is taken by the level port, and the ground o
     CHECK(resources.patch_count() == 4u);
 }
 
+TEST_CASE("the view request is taken by the view port, and a place outside the world places no camera") {
+    // 03.11 point 7: ase-pl-flora files the eye for ase-camera, whose camera the level of detail measures
+    // from. No port carries the camera back; the request is taken and the host keeps running.
+    AdapterEnvironment& env = environment();
+    REQUIRE(env.booted == ase::kernel::HostStatusOk);
+    GodotHostResourceManager& resources = env.resources;
+    const VivariumPatchView patch = patch_at(resources, 0u);
+    CHECK(resources.view(patch.x, patch.y + 3.0, patch.z + 6.0) == ase::kernel::HostStatusOk);
+    advance_frames(resources, 4u);
+    // A non-finite eye never reaches the plugin: the host port refuses every record with a value that is
+    // no number (kernel_host_port_registry.cpp, the record check of submit).
+    CHECK(resources.view(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0) ==
+          ase::kernel::HostStatusInvalidArgument);
+    // A finite place beyond the world is taken by the port and refused by the plugin, which keeps the
+    // camera where it stood: twice FLORA_WORLD_SPAN_M (ase-pl-flora, 1000 km) on the first axis.
+    constexpr double kBeyondWorldM = 2.0e6;
+    CHECK(resources.view(kBeyondWorldM, 0.0, 0.0) == ase::kernel::HostStatusOk);
+    advance_frames(resources, 4u);
+    CHECK(resources.patch_count() == 4u);
+}
+
 TEST_CASE("the poured seed sprouts, and its shoot and root reach the organ ports within a few frames") {
     AdapterEnvironment& env = environment();
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
@@ -302,11 +323,11 @@ TEST_CASE("L5 without a window: a long frame is caught up in ordinary steps, nev
     const double simulated_before = resources.simulation_seconds();
 
     // Ten seconds in the background come back as one frame: eight ticks now, the rest waits.
-    REQUIRE(resources.advance(10.0) == ase::kernel::HostStatusOk);
+    REQUIRE(resources.advance(10.0, 0.0, 0u) == ase::kernel::HostStatusOk);
     CHECK(resources.last_steps() == 8u);
     CHECK(resources.backlog_seconds() > 0.0);
     for (uint32_t frame = 0u; frame < 8u && resources.backlog_seconds() > 0.0; ++frame) {
-        REQUIRE(resources.advance(0.0) == ase::kernel::HostStatusOk);
+        REQUIRE(resources.advance(0.0, 0.0, 0u) == ase::kernel::HostStatusOk);
         CHECK(resources.last_steps() <= 8u);
     }
     CHECK(resources.backlog_seconds() == 0.0);
@@ -316,12 +337,50 @@ TEST_CASE("L5 without a window: a long frame is caught up in ordinary steps, nev
 
     // A broken frame is refused by the host, the host keeps running and nothing is counted.
     const uint64_t ticks = resources.tick_count();
-    CHECK(resources.advance(std::numeric_limits<double>::quiet_NaN()) == ase::kernel::HostStatusInvalidArgument);
-    CHECK(resources.advance(std::numeric_limits<double>::infinity()) == ase::kernel::HostStatusInvalidArgument);
-    CHECK(resources.advance(-0.25) == ase::kernel::HostStatusInvalidArgument);
+    CHECK(resources.advance(std::numeric_limits<double>::quiet_NaN(), 0.0, 0u) ==
+          ase::kernel::HostStatusInvalidArgument);
+    CHECK(resources.advance(std::numeric_limits<double>::infinity(), 0.0, 0u) ==
+          ase::kernel::HostStatusInvalidArgument);
+    CHECK(resources.advance(-0.25, 0.0, 0u) == ase::kernel::HostStatusInvalidArgument);
     CHECK(resources.tick_count() == ticks);
     CHECK(resources.running());
     CHECK(std::string(resources.failure_step()).empty());
+}
+
+TEST_CASE("L5 without a window: the debug lapse runs its time in ordinary ticks of the same clock, faster than real time") {
+    AdapterEnvironment& env = environment();
+    REQUIRE(env.booted == ase::kernel::HostStatusOk);
+    GodotHostResourceManager& resources = env.resources;
+    advance_frames(resources, 4u);
+    const double game_before = resources.get_clock().elapsed_s;
+    const uint64_t ticks_before = resources.tick_count();
+    const double simulated_before = resources.simulation_seconds();
+
+    // One frame of a quarter second with two seconds of lapse and eight lapse steps: the frame's own tick
+    // and eight more in the same frame - nine ordinary ticks, nothing left over.
+    REQUIRE(resources.advance(0.25, 2.0, 8u) == ase::kernel::HostStatusOk);
+    CHECK(resources.last_steps() == 9u);
+    CHECK(resources.backlog_seconds() == 0.0);
+
+    // More lapse than the frame may run (six seconds, 24 ticks, against eight plus eight steps): sixteen
+    // ticks now, the rest waits in the backlog - nothing is dropped and no tick grows.
+    REQUIRE(resources.advance(0.0, 6.0, 8u) == ase::kernel::HostStatusOk);
+    CHECK(resources.last_steps() == 16u);
+    CHECK(resources.backlog_seconds() == doctest::Approx(2.0));
+    REQUIRE(resources.advance(0.0, 0.0, 0u) == ase::kernel::HostStatusOk);
+    CHECK(resources.last_steps() == 8u);
+    CHECK(resources.backlog_seconds() == 0.0);
+
+    CHECK(resources.tick_count() - ticks_before == 33u);                                // 8.25 s in ticks of 0.25 s
+    CHECK(resources.simulation_seconds() - simulated_before == doctest::Approx(8.25));  // the lapse is simulated time
+    CHECK(resources.get_clock().elapsed_s > game_before);
+
+    // A broken lapse is refused like a broken frame.
+    const uint64_t ticks = resources.tick_count();
+    CHECK(resources.advance(0.25, std::numeric_limits<double>::quiet_NaN(), 8u) ==
+          ase::kernel::HostStatusInvalidArgument);
+    CHECK(resources.tick_count() == ticks);
+    CHECK(resources.running());
 }
 
 TEST_CASE("beside the game host the self-test refuses and leaves the game host untouched") {
@@ -355,7 +414,7 @@ TEST_CASE("clear_all ends the game host once, is idempotent and leaves no host b
     CHECK(resources.get_template_corners().empty());
     CHECK(resources.get_template_triangles().empty());
     CHECK(resources.template_generation() > templates);
-    CHECK(resources.advance(0.25) == ase::kernel::HostStatusInvalidState);
+    CHECK(resources.advance(0.25, 0.0, 0u) == ase::kernel::HostStatusInvalidState);
     CHECK(resources.note("after the host") == ase::kernel::HostStatusInvalidState);
 }
 

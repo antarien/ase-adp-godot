@@ -20,8 +20,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-24
- * @version     00.00.01.00002
+ * @modified    2026-10-28
+ * @version     00.00.01.00004
  */
 
 #include "test_godot_host_support.hpp"
@@ -128,17 +128,41 @@ TEST_CASE("03.11: the sky port lights the scene - a unit sun direction, colours 
     const float length = ase::math::sqrt(static_cast<float>(sky.sun_x * sky.sun_x + sky.sun_y * sky.sun_y +
                                                             sky.sun_z * sky.sun_z));
     CHECK(length == doctest::Approx(1.0).epsilon(1.0e-4));
-    for (const double share : {sky.sun_r, sky.sun_g, sky.sun_b, sky.ambient_r, sky.ambient_g, sky.ambient_b,
-                               sky.background_r, sky.background_g, sky.background_b, sky.fog_r, sky.fog_g,
-                               sky.fog_b}) {
+    for (const double share : {sky.sun_r, sky.sun_g, sky.sun_b, sky.sun_disc_r, sky.sun_disc_g, sky.sun_disc_b,
+                               sky.ambient_r, sky.ambient_g, sky.ambient_b, sky.background_r, sky.background_g,
+                               sky.background_b, sky.fog_r, sky.fog_g, sky.fog_b}) {
         CHECK(share >= 0.0);
         CHECK(share <= 1.0);
     }
+    // usecase:101276: the disc is the sunlight darkened by the obscuration of an eclipse, never brighter than it
+    CHECK(sky.sun_disc_r <= sky.sun_r);
+    CHECK(sky.sun_disc_g <= sky.sun_g);
+    CHECK(sky.sun_disc_b <= sky.sun_b);
     CHECK(sky.sun_intensity >= 0.0);
     CHECK(sky.ambient_intensity >= 0.0);
     CHECK(sky.fog_near >= 0.0);
     CHECK(sky.fog_far >= sky.fog_near);
+    // usecase:101515: the shimmer of hot air ase-atmosphere computes reaches the view as a share in the fog record
+    CHECK(sky.fog_shimmer >= 0.0);
+    CHECK(sky.fog_shimmer <= 1.0);
+    MESSAGE("shimmer of hot air " << sky.fog_shimmer);
     MESSAGE("sun towards " << sky.sun_x << ", " << sky.sun_y << ", " << sky.sun_z << " at " << sky.sun_intensity);
+    // C0455: a visible moon reaches the view as a unit direction with a colour and a light of its own; whether
+    // one stands in the sky depends on the hour and the phase of the run, so its properties are pinned when
+    // the port carries it
+    MESSAGE("moons in the sky: " << sky.moons);
+    CHECK(sky.moons <= GODOT_SKY_MOONS_MAX);
+    for (uint32_t m = 0u; m < sky.moons && m < GODOT_SKY_MOONS_MAX; ++m) {
+        const VivariumMoonView& moon = sky.moon[m];
+        const float moon_length = ase::math::sqrt(static_cast<float>(moon.x * moon.x + moon.y * moon.y + moon.z * moon.z));
+        CHECK(moon_length == doctest::Approx(1.0).epsilon(1.0e-4));
+        for (const double share : {moon.r, moon.g, moon.b}) {
+            CHECK(share >= 0.0);
+            CHECK(share <= 1.0);
+        }
+        CHECK(moon.intensity >= 0.0);
+        CHECK(moon.intensity <= 1.0);
+    }
 }
 
 TEST_CASE("03.11: the ground reaches the view - unit normals on every sample, cells whose corners stand on the terrain port") {

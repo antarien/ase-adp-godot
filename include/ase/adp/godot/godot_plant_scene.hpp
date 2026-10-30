@@ -42,8 +42,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-10-25
- * @version     00.00.05.00000
+ * @modified    2026-10-26
+ * @version     00.00.06.00000
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -65,8 +65,9 @@ namespace ase::adp::godot {
 
 /**
  * Builds the scene under `parent` and returns its root (GODOT_PLANT_SCENE_ROOT): the current camera, the
- * environment, the empty ground and the empty node the plants stand under (GODOT_PLANT_BODIES). The sun
- * is set by light_plant_scene once the sky port carried its records.
+ * environment, the empty ground, the empty node the plants stand under (GODOT_PLANT_BODIES), the moon light
+ * and the two hidden discs of sun and moon. The sun is set by light_plant_scene once the sky port carried
+ * its records.
  */
 ::godot::Node3D* build_plant_scene(::godot::Node* parent, const PlantSceneCamera& camera);
 
@@ -118,7 +119,12 @@ void mark_plant_stands(::godot::Node3D* scene, const std::unordered_map<uint32_t
 void fill_plant_seeds(::godot::Node3D* scene, const GodotHostResourceManager& resources,
                       const std::unordered_map<uint32_t, PlantOrigin>& origins, const PlantSceneLook& look);
 
-/** Sets the sun (with shadows), the sky colour behind the scene, the ambient light and the fog from the sky port. */
+/**
+ * Sets the sun (with shadows), the moon light, the sky colour behind the scene, the ambient light and the
+ * fog from the sky port, and stands the discs of sun and moon in the sky along their directions
+ * (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11: sun, moon and the day cycle). The moon light and its disc stand
+ * only while the port carries a moon record; the sun disc only while the sun is above the horizon plane.
+ */
 void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky);
 
 }  // namespace ase::adp::godot
