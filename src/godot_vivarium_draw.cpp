@@ -217,14 +217,21 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
     use_band(places.position.y);
     const float centre_x = places.get_center().x;
     const float line_y = places.get_center().y;
+    // The loading line is the anchor, and every gap is measured from its glyph box, never from its
+    // baseline: the line in title size rises a full ascent above the baseline and hangs a descent below
+    // it, so a gap taken from the baseline lets the spinner and the bar run into the letters.
+    const int32_t loading_size = fitting_size(texts_.loading, places.size.x, GODOT_FONT_TITLE);
+    const float loading_top = line_y - font->get_ascent(loading_size);
+    const float loading_bottom = line_y + font->get_descent(loading_size);
 
-    // the spinner: GODOT_SPINNER_DOTS dots on a circle, the leading one full, each one behind it dimmer
+    // the spinner: GODOT_SPINNER_DOTS dots on a circle, the leading one full, each one behind it dimmer,
+    // its centre GODOT_SPINNER_GAP above the top of the loading line
     const ::godot::Time* clock = ::godot::Time::get_singleton();
     const uint64_t now_ms = clock == nullptr ? 0u : clock->get_ticks_msec();
     const double turn = static_cast<double>(now_ms % GODOT_SPINNER_PERIOD_MS) /
                         static_cast<double>(GODOT_SPINNER_PERIOD_MS);
     const uint32_t leading = static_cast<uint32_t>(turn * static_cast<double>(GODOT_SPINNER_DOTS)) % GODOT_SPINNER_DOTS;
-    const ::godot::Vector2 hub(centre_x, line_y - GODOT_SPINNER_GAP);
+    const ::godot::Vector2 hub(centre_x, loading_top - GODOT_SPINNER_GAP);
     for (uint32_t dot = 0u; dot < GODOT_SPINNER_DOTS; ++dot) {
         const double angle = ase::math::TWO_PI * static_cast<double>(dot) / static_cast<double>(GODOT_SPINNER_DOTS);
         const ::godot::Vector2 at(hub.x + GODOT_SPINNER_RADIUS * static_cast<float>(ase::math::sin(angle)),
@@ -238,21 +245,23 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
     }
 
     node_->draw_string(font, ::godot::Vector2(places.position.x, line_y), texts_.loading,
-                       ::godot::HORIZONTAL_ALIGNMENT_CENTER, places.size.x,
-                       fitting_size(texts_.loading, places.size.x, GODOT_FONT_TITLE),
+                       ::godot::HORIZONTAL_ALIGNMENT_CENTER, places.size.x, loading_size,
                        ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
 
-    // the progress bar: the track over its whole width, the filled share over it
+    // the progress bar: GODOT_PROGRESS_GAP under the bottom of the loading line, the track over its
+    // whole width, the filled share over it
     const double progress = ase::math::clamp(initialisation_progress(), 0.0, 1.0);
     const float bar_width = places.size.x * GODOT_PROGRESS_WIDTH_SHARE;
-    const ::godot::Rect2 track(centre_x - bar_width * 0.5f, line_y + GODOT_PROGRESS_GAP, bar_width,
+    const ::godot::Rect2 track(centre_x - bar_width * 0.5f, loading_bottom + GODOT_PROGRESS_GAP, bar_width,
                                GODOT_PROGRESS_HEIGHT);
     node_->draw_rect(track, ::godot::Color::hex(GODOT_COLOR_PROGRESS_TRACK));
     node_->draw_rect(::godot::Rect2(track.position, ::godot::Vector2(bar_width * static_cast<float>(progress),
                                                                      GODOT_PROGRESS_HEIGHT)),
                      ::godot::Color::hex(GODOT_COLOR_PROGRESS));
     const ::godot::String percent = ::godot::String::num(progress * GODOT_PERCENT, 0) + " %";
-    node_->draw_string(font, ::godot::Vector2(places.position.x, track.get_end().y + GODOT_PROGRESS_GAP), percent,
+    // the percent line: its top GODOT_PROGRESS_GAP under the bar, so its baseline one ascent lower
+    const float percent_y = track.get_end().y + GODOT_PROGRESS_GAP + font->get_ascent(GODOT_FONT_BODY);
+    node_->draw_string(font, ::godot::Vector2(places.position.x, percent_y), percent,
                        ::godot::HORIZONTAL_ALIGNMENT_CENTER, places.size.x, GODOT_FONT_BODY,
                        ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
     use_canvas();
