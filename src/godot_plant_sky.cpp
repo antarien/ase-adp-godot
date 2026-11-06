@@ -15,7 +15,10 @@
  *              angular size of its record, glowing by its nebula (usecase:101272 - track the companion star).
  *              Every moon half slot has a disc for a half of the split moon Aurora. The asteroid belt is a
  *              row of grains along the span of its record, as many as its density (usecase:2758 - generated
- *              asteroids).
+ *              asteroids). The meteor shower is a ring of streaks of glowing points around its radiant. The
+ *              stars are one multimesh beside the camera, one instance per star record, each along its
+ *              direction at the disc distance, in its colour and as many pixels wide as its record says
+ *              (usecase:5606 - observe the sky).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -24,8 +27,8 @@
  * @usecase     usecase:101384 - place sun and moon spatially
  * @actor       cycle/DAY/NIGHT (semi/nbp) Day/Night Cycle
  * @created     2026-10-26
- * @modified    2026-10-28
- * @version     00.00.03.00000
+ * @modified    2026-11-06
+ * @version     00.00.04.00000
  */
 
 #include <ase/adp/godot/godot_plant_sky.hpp>
@@ -39,12 +42,16 @@
 #include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/light3d.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
+#include <godot_cpp/classes/multi_mesh.hpp>
+#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/sphere_mesh.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
+#include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/node_path.hpp>
+#include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector3.hpp>
@@ -234,6 +241,87 @@ void stand_comet_slot(::godot::Node3D* scene, uint32_t slot, bool shown, const V
     tail->set_transform(::godot::Transform3D(::godot::Basis(axis_x, axis_y, axis_z), head_at + axis_y * (chord * 0.5f)));
 }
 
+/**
+ * The starfield under `scene`: a multimesh of GODOT_SKY_STARS_MAX small spheres of unit diameter in an unshaded
+ * material outside the fog that takes its colour from each instance, casting no shadow. No instance shows
+ * until light_plant_sky stands one per star record.
+ */
+void add_starfield(::godot::Node3D* scene) {
+    ::godot::Ref<::godot::StandardMaterial3D> glow = sky_glow();
+    glow->set_flag(::godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+    ::godot::Ref<::godot::SphereMesh> point;
+    point.instantiate();
+    point->set_radius(0.5f);
+    point->set_height(1.0f);
+    point->set_radial_segments(GODOT_STAR_SEGMENTS);
+    point->set_rings(GODOT_STAR_RINGS);
+    point->set_material(glow);
+    ::godot::Ref<::godot::MultiMesh> field;
+    field.instantiate();
+    field->set_transform_format(::godot::MultiMesh::TRANSFORM_3D);
+    field->set_use_colors(true);
+    field->set_mesh(point);
+    field->set_instance_count(static_cast<int32_t>(GODOT_SKY_STARS_MAX));
+    field->set_visible_instance_count(0);
+    ::godot::MultiMeshInstance3D* stars = memnew(::godot::MultiMeshInstance3D);
+    stars->set_name(::godot::String(GODOT_PLANT_STARS));
+    stars->set_multimesh(field);
+    stars->set_cast_shadows_setting(::godot::GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+    scene->add_child(stars);
+}
+
+/**
+ * Stands the starfield: centred on the camera, one instance per star record along its direction at
+ * GODOT_SKY_DISC_DISTANCE, in its colour, as wide as the pixels of its record. A pixel at the disc distance
+ * spans 2·d·tan(fov/2) / viewport height metres - the camera's vertical field of view and the height of the
+ * viewport it draws into; that is view geometry, the size of the star is the record's. No starfield or no
+ * camera, nothing.
+ */
+void stand_starfield(::godot::Node3D* scene, const VivariumSkyView& sky) {
+    ::godot::MultiMeshInstance3D* stars = sky_part<::godot::MultiMeshInstance3D>(scene, ::godot::String(GODOT_PLANT_STARS));
+    const ::godot::Camera3D* eye = sky_part<::godot::Camera3D>(scene, ::godot::String(GODOT_PLANT_CAMERA));
+    if (stars == nullptr || eye == nullptr) {
+        return;
+    }
+    const ::godot::Ref<::godot::MultiMesh> field = stars->get_multimesh();
+    if (field.is_null()) {
+        return;
+    }
+    stars->set_position(eye->get_position());
+    float viewport_height = 0.0f;
+    const ::godot::Viewport* view = eye->get_viewport();
+    if (view != nullptr) {
+        viewport_height = view->get_visible_rect().size.y;
+    }
+    const float half_fov = static_cast<float>(eye->get_fov()) * 0.5f * ase::math::PI / 180.0f;
+    const float metres_per_pixel = viewport_height > 0.0f
+        ? 2.0f * GODOT_SKY_DISC_DISTANCE * ase::math::tan(half_fov) / viewport_height
+        : 0.0f;
+    // A star point is a sphere of GODOT_STAR_SEGMENTS sides and GODOT_STAR_RINGS rings, and a pixel is
+    // drawn only where the polygon covers its centre. A polygon of GODOT_STAR_POINT_MIN pixels across
+    // misses every centre when it falls between them, so the faint stars (1 px from ase-pl-sky) vanished.
+    // The smallest size that covers a centre wherever it falls is the diagonal of that pixel over the
+    // ratio of the polygon's inner circle to its outer one, taken at the coarser of its two steps.
+    const float side_half_step = ase::math::PI / static_cast<float>(GODOT_STAR_SEGMENTS);
+    const float ring_half_step = ase::math::PI / static_cast<float>(2 * (GODOT_STAR_RINGS + 1));
+    const float half_step = side_half_step > ring_half_step ? side_half_step : ring_half_step;
+    const float cover_min = GODOT_STAR_POINT_MIN * ase::math::sqrt(2.0f) / ase::math::cos(half_step);
+    const uint32_t shown = sky.stars < GODOT_SKY_STARS_MAX ? sky.stars : GODOT_SKY_STARS_MAX;
+    for (uint32_t i = 0u; i < shown; ++i) {
+        const VivariumStarView& star = sky.star[i];
+        const ::godot::Vector3 toward =
+            ::godot::Vector3(static_cast<float>(star.x), static_cast<float>(star.y), static_cast<float>(star.z)).normalized();
+        const float pixels = static_cast<float>(star.point) > cover_min ? static_cast<float>(star.point) : cover_min;
+        const float width = pixels * metres_per_pixel;
+        field->set_instance_transform(static_cast<int32_t>(i),
+                                      ::godot::Transform3D(::godot::Basis().scaled(::godot::Vector3(width, width, width)),
+                                                           toward * GODOT_SKY_DISC_DISTANCE));
+        field->set_instance_color(static_cast<int32_t>(i), ::godot::Color(static_cast<float>(star.r), static_cast<float>(star.g),
+                                                                          static_cast<float>(star.b)));
+    }
+    field->set_visible_instance_count(static_cast<int32_t>(shown));
+}
+
 }  // namespace
 
 void build_plant_sky(::godot::Node3D* scene) {
@@ -268,6 +356,12 @@ void build_plant_sky(::godot::Node3D* scene) {
     for (uint32_t grain = 0u; grain < GODOT_BELT_GRAINS_MAX; ++grain) {
         add_sky_disc(scene, slot_name(GODOT_PLANT_BELT_GRAIN, grain), GODOT_BELT_GRAIN_RADIUS);
     }
+    // the points of the meteor shower's streaks; hidden until the sky port carries a shower record
+    for (uint32_t point = 0u; point < GODOT_SHOWER_STREAKS_MAX * GODOT_SHOWER_STREAK_POINTS; ++point) {
+        add_sky_disc(scene, slot_name(GODOT_PLANT_SHOWER_POINT, point), GODOT_SHOWER_POINT_RADIUS);
+    }
+    // the stars; no instance shows until the sky port carries star records
+    add_starfield(scene);
 }
 
 void light_plant_sky(::godot::Node3D* scene, const VivariumSkyView& sky) {
@@ -379,6 +473,9 @@ void light_plant_sky(::godot::Node3D* scene, const VivariumSkyView& sky) {
                            2.0f * ase::math::atan2(GODOT_SHOWER_POINT_RADIUS, GODOT_SKY_DISC_DISTANCE));
         }
     }
+
+    // the stars (usecase:5606 - observe the sky): every star record of the port, the others stay hidden
+    stand_starfield(scene, sky);
 }
 
 }  // namespace ase::adp::godot

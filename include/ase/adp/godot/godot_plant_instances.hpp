@@ -20,7 +20,7 @@
  * @design      DSGN_066
  * @category    render/pipeline/stage
  * @usecase     usecase:101348 - hand organ instances to app
- * @actor       Plant Instance Perception Control (PLNTINST)
+ * @actor       Organ Instance Courier (ORGNINST)
  * @created     2026-10-26
  * @modified    2026-10-26
  * @version     00.00.01.00000
@@ -45,13 +45,16 @@ struct PlantBodyRows {
     std::vector<float> above;         // the organs of an order above it
     std::vector<float> up_to_custom;  // per organ of up_to its GODOT_INSTANCE_CUSTOM_VALUES: the bark share, then the tiles around, along and of the base bark
     std::vector<float> above_custom;  // per organ of above its GODOT_INSTANCE_CUSTOM_VALUES: the bark share, then the tiles around, along and of the base bark
+    std::vector<float> up_to_sway;    // per organ of up_to its GODOT_SWAY_VALUES: frequency, mean x and z, gust x and z, share at base and top, one spare
+    std::vector<float> above_sway;    // per organ of above its GODOT_SWAY_VALUES, the same order
 };
 
 /**
  * Sorts the records of one instance port by the body and the order their organ record names - the
  * organ record of the same object id carries both (VivariumInstanceView) - and beside each record its
  * custom data: the bark share its organ record carries (usecase:100395 age the bark; 0 for an organ
- * class without bark), then the bark tiling of its section, up to GODOT_INSTANCE_CUSTOM_VALUES. A record
+ * class without bark), then the bark tiling of its section, up to GODOT_INSTANCE_CUSTOM_VALUES, and its sway
+ * (usecase:101335 animate the branch sway; all zero for an organ without a sway record). A record
  * without an organ record is not drawn: both ports are read in the same snapshot, so the gap is a broken
  * port, never an organ of an unknown plant. GODOT_ORDER_EVERY as `split_order` puts every organ above it -
  * a class the order budget does not split.

@@ -19,8 +19,12 @@ ASE GODOT ADAPTER BUILD CONFIGURATION
 @layer       adapter (3rd-party isolation, consumed by L5 clients)
 @design      DSGN_021
 @created     2026-10-05
-@modified    2026-10-07
+@modified    2026-10-30
 ]]
+
+#[[ VERBOTEN: no module or plugin header and no unit of the embedded set - the adapter binds
+    godot::cpp, ase::kernel-embedded and header-only L0 libraries only, never ase::log (the log
+    runtime lives once, inside libase_kernel_embedded.so) ]]
 
 # Parse local VERSION (SSOT) if not building from root
 if(NOT DEFINED ASE_ADP_GODOT_VERSION)
@@ -55,28 +59,42 @@ endforeach()
 #    in any of them, so all are tested without a Godot process ──
 add_library(ase-adp-godot-host STATIC
     src/godot_host_resource_manager.cpp
+    src/godot_host_record.cpp        # the value under a key of a port record (usecase:101344 carry host records to app)
+    src/godot_organ_records.cpp      # organ, bark, tile, sway and instance records as views (usecase:100974 lay out organ records)
+    src/godot_terrain_samples.cpp    # terrain records as ground samples (usecase:100971 lay out terrain samples)
     src/godot_view_layout.cpp
     src/godot_plant_geometry.cpp
     src/godot_plant_instances.cpp    # the instance buffers of the plants (usecase:101348 hand organ instances to app, 03.11)
     src/godot_plant_templates.cpp    # the organ templates from the template ports (usecase:101342 hand organ shapes to app, 03.11)
     src/godot_plant_ground.cpp       # the ground mesh and the marks of its shader (usecase:101339 show the ground around plant, 03.8)
+    src/godot_plant_water.cpp        # the ribbon of water in every bed (usecase:100399 carry brook water, 03.11)
     src/godot_scene_exposure.cpp     # the exposure of the scene camera for the sky's light (usecase:101415 hand sky light to app, D1721)
     src/godot_order_budget.cpp
     src/godot_cycle_measure.cpp      # the measurement line of one cycle, also compiled into avt-headless (03.6)
     src/godot_garden_return.cpp      # the return from the background and its catch-up (usecase:100390 return to the garden, 03.6)
     src/godot_patch_focus.cpp        # the focused patch and the camera's near view onto it (usecase:100386 select a patch, 03.1)
     src/godot_new_seed.cpp           # the seed of every sowing, a new one with every Reiniciar (usecase:100388 sow a new seed, 03.1)
+    src/godot_client_window.cpp      # whether the client window opened and its log line (usecase:101019 start the client window)
     src/godot_asset_binding.cpp
     src/godot_asset_showcase.cpp     # the plan of the asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7)
 
     include/ase/adp/godot/godot_host_resource_manager.hpp
+    include/ase/adp/godot/godot_host_record.hpp
+    include/ase/adp/godot/godot_organ_records.hpp
+    include/ase/adp/godot/godot_terrain_samples.hpp
     include/ase/adp/godot/godot_view_layout.hpp
     include/ase/adp/godot/godot_plant_geometry.hpp
+    include/ase/adp/godot/godot_plant_instances.hpp
+    include/ase/adp/godot/godot_plant_templates.hpp
+    include/ase/adp/godot/godot_plant_ground.hpp
+    include/ase/adp/godot/godot_plant_water.hpp
+    include/ase/adp/godot/godot_scene_exposure.hpp
     include/ase/adp/godot/godot_order_budget.hpp
     include/ase/adp/godot/godot_cycle_measure.hpp
     include/ase/adp/godot/godot_garden_return.hpp
     include/ase/adp/godot/godot_patch_focus.hpp
     include/ase/adp/godot/godot_new_seed.hpp
+    include/ase/adp/godot/godot_client_window.hpp
     include/ase/adp/godot/godot_asset_binding.hpp
     include/ase/adp/godot/godot_asset_showcase.hpp
     include/ase/adp/godot/types.hpp
@@ -86,6 +104,7 @@ add_library(ase::adp::godot-host ALIAS ase-adp-godot-host)
 target_include_directories(ase-adp-godot-host
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
 )
 target_compile_features(ase-adp-godot-host PUBLIC cxx_std_20)
 target_link_libraries(ase-adp-godot-host
@@ -122,9 +141,11 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_bed.cpp          # VivariumView: bed mode, the ground under the finger, the bed the player lays (03.8)
     src/godot_vivarium_flatten.cpp      # VivariumView: flatten mode, the disc the player levels where he taps (03.8)
     src/godot_vivarium_debug.cpp        # VivariumView: debug buttons, the time lapse of this host's clock (usecase:101120 clock the growth cycle)
-    src/godot_vivarium_draw.cpp         # VivariumView: placement on the visible surface and the canvas
+    src/godot_vivarium_clock.cpp        # VivariumView: the opening of every boot and the debug seek to an hour of the game day (usecase:101120)
+    src/godot_vivarium_draw.cpp        # VivariumView: placement on the visible surface and the canvas
     src/godot_vivarium_scene.cpp        # VivariumView: what a frame fills of the 3D scene (03.1)
     src/godot_vivarium_measure.cpp      # VivariumView: self-test and measurement modes (02.3)
+    src/godot_vivarium_window.cpp       # VivariumView: the client window it opened in (usecase:101019 start the client window)
     src/godot_config_read.cpp           # readers of one key of the start configuration
     src/godot_view_support.cpp          # text conversion, font and editor check of the view
     src/godot_asset_loader.cpp   # the one loader of bound asset files: GLTFDocument, template mesh, material (03.2)
@@ -132,15 +153,18 @@ add_library(ase-adp-godot SHARED
     src/godot_plant_scene.cpp    # the 3D scene of the care view: camera, sun, sky, ground, tubes, instances (03.1)
     src/godot_plant_sky.cpp      # the moon light and the discs of sun and moon in that scene (usecase:101384 place sun and moon spatially, 03.11)
     src/godot_plant_haze.cpp     # the shimmer of hot air over that scene (usecase:101515 veil sight with weather, 03.11)
+    src/godot_plant_brook.cpp    # the water of the brooks in that scene (usecase:100399 carry brook water, 03.11)
     src/godot_plant_look.cpp    # the materials and organ template files of that scene, bound once (03.2)
 
     include/ase/adp/godot/godot_registration.hpp
     include/ase/adp/godot/godot_vivarium_node.hpp
+    include/ase/adp/godot/godot_vivarium_debug.hpp
     include/ase/adp/godot/godot_asset_loader.hpp
     include/ase/adp/godot/godot_asset_showcase_scene.hpp
     include/ase/adp/godot/godot_plant_scene.hpp
     include/ase/adp/godot/godot_plant_sky.hpp
     include/ase/adp/godot/godot_plant_haze.hpp
+    include/ase/adp/godot/godot_plant_brook.hpp
     include/ase/adp/godot/godot_plant_look.hpp
     include/ase/adp/godot/godot_config_read.hpp
     include/ase/adp/godot/godot_view_support.hpp
@@ -159,6 +183,13 @@ target_link_libraries(ase-adp-godot
         ase::math              # sqrt / floor of the drawing (header-only, L0)
         ase::utils             # boot_nanos: the real time of a frame, a suspend of the device included (header-only, L0)
         godot::cpp
+)
+
+# ── Installation: the headers of both libraries, for a client that embeds the adapter ─────
+include(GNUInstallDirs)
+
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 if(ASE_BUILD_TESTS)

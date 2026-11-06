@@ -16,7 +16,7 @@
  * @design      DSGN_066
  * @category    render/pipeline/stage
  * @usecase     usecase:101348 - hand organ instances to app
- * @actor       Plant Instance Perception Control (PLNTINST)
+ * @actor       Organ Instance Courier (ORGNINST)
  * @created     2026-10-26
  * @modified    2026-10-26
  * @version     00.00.01.00000
@@ -58,6 +58,16 @@ std::unordered_map<uint32_t, PlantBodyRows> rows_by_body(const std::vector<Vivar
         custom.push_back(static_cast<float>(organ.tile_around));
         custom.push_back(static_cast<float>(organ.tile_along));
         custom.push_back(static_cast<float>(organ.tile_base));
+        // the sway of the same instance, as the port carried it: the texels of the sway data texture
+        std::vector<float>& sway = above ? rows.above_sway : rows.up_to_sway;
+        sway.push_back(static_cast<float>(organ.sway_freq));
+        sway.push_back(static_cast<float>(organ.sway_mean_x));
+        sway.push_back(static_cast<float>(organ.sway_mean_z));
+        sway.push_back(static_cast<float>(organ.sway_gust_x));
+        sway.push_back(static_cast<float>(organ.sway_gust_z));
+        sway.push_back(static_cast<float>(organ.sway_base));
+        sway.push_back(static_cast<float>(organ.sway_top));
+        sway.push_back(static_cast<float>(GODOT_SWAY_NONE));
     }
     return bodies;
 }

@@ -16,7 +16,7 @@
  * @layer       5 (Adapter)
  * @category    ecs/module
  * @usecase     usecase:100364 - host the engine embedded
- * @actor       Entity Component System (ECS)
+ * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
  * @modified    2026-10-28
  * @version     00.00.04.00010 [seed]
@@ -112,6 +112,8 @@ struct VivariumGroundSpec {
     double z = 0.0;       // centre of the square, world metres north
     double half_m = 0.0;  // half edge of the square, metres
     double step_m = 0.0;  // distance of two samples, metres
+    double height_scale_m = 0.0;  // height amplitude of the relief, metres: one shape request on the elevation port (TER_GEN_HGT_SCL)
+    double base_height_m = 0.0;   // ground level of the relief above NN0, metres: the same request (TER_GEN_BAS_HGT)
 };
 
 /**
@@ -156,9 +158,13 @@ struct VivariumStartConfig {
     std::string sky_port;            // host port of the sky and the light of the scene (ase-pl-sky: sky.scene.v1)
     std::string seed_port;           // host port of the seed bodies of ase-physics (ase-pl-flora: flora.seed.v1)
     std::string tile_port;           // host port of the bark tiling of the internodes (ase-pl-flora: flora.tile.v1)
+    std::string sway_port;           // host port of the sway of the organs on a branch (ase-pl-flora: flora.sway.v1)
+    std::string stream_port;         // host port of the water of the brooks (ase-pl-flora: flora.stream.v1)
     std::string level_port;          // host port the player levels a patch through (ase-pl-flora: flora.level.v1)
     std::string flatten_port;        // host port the player flattens the ground at a place through (ase-pl-flora: flora.flatten.v1)
     std::string pace_port;           // host port the debug mode asks the pace of the game clock through (ase-pl-flora: flora.pace.v1)
+    std::string seek_port;           // host port the debug mode moves the game clock to a computed hour through (ase-pl-flora: flora.seek.v1)
+    std::string elevation_port;      // host port the relief of the ground is shaped through (ase-pl-flora: flora.elevation.v1)
     std::string view_port;           // host port the view hands the place of its camera through (ase-pl-flora: flora.view.v1)
     std::string template_corner_port;   // host port of the corners of the organ templates (ase-pl-flora: flora.template.corner.v1)
     std::string template_triangle_port;  // host port of the triangles of the organ templates (ase-pl-flora: flora.template.triangle.v1)
@@ -167,6 +173,8 @@ struct VivariumStartConfig {
     std::string op_level;            // submit operation that levels the ground of one patch (03.8 point 2)
     std::string op_flatten;          // submit operation that flattens a disc of the ground at a place (03.8)
     std::string op_pace;             // submit operation that runs the host's game clock at a time scale (debug time lapse)
+    std::string op_seek;             // submit operation that moves the host's game clock to an absolute game hour (a host joining a world)
+    std::string op_shape;            // submit operation that sets the height amplitude and the ground level of the relief
     std::string op_view;             // submit operation that tells the engine where the view's camera stands (level of detail)
     std::string op_lay;              // submit operation that lays one patch, the ground square or a brook
     double      irrigate_amount_mm = 0.0;  // water one press of Regar pours, mm
@@ -207,6 +215,22 @@ struct VivariumGroundCellView {
     uint32_t se = 0;          // object id of the south-east corner sample
     uint32_t ne = 0;          // object id of the north-east corner sample
     uint32_t nw = 0;          // object id of the north-west corner sample
+};
+
+/**
+ * One brook with water as the last read of the stream port showed it (usecase:100399 carry brook water): the
+ * course of its bed and the water ase-hydro lets run in it. A bed without measured water has no record.
+ */
+struct VivariumStreamView {
+    uint32_t object_id = 0;       // the brook, as the plugin names it on its port
+    double   x = 0.0;             // start of the bed, world metres east
+    double   z = 0.0;             // start of the bed, world metres north
+    double   end_x = 0.0;         // end of the bed, world metres east
+    double   end_z = 0.0;         // end of the bed, world metres north
+    double   half_m = 0.0;        // half width of the bed, metres
+    double   depth_m = 0.0;       // water depth, metres
+    double   velocity_m_s = 0.0;  // mean flow velocity, metres per second
+    double   discharge_m3_s = 0.0;  // discharge, cubic metres per second
 };
 
 /**
@@ -268,6 +292,13 @@ struct VivariumOrganView {
     double   tile_around = GODOT_TILE_NONE;  // tiles of the white bark around the tube (internode, tile port; else none)
     double   tile_along = GODOT_TILE_NONE;   // tiles of the white bark along the tube (internode, tile port; else none)
     double   tile_base = GODOT_TILE_NONE;    // tiles of the stem-base bark per white tile (internode, tile port; else none)
+    double   sway_freq = GODOT_SWAY_NONE;    // natural frequency of its branch, Hz (sway port; a root organ none)
+    double   sway_mean_x = GODOT_SWAY_NONE;  // east mean displacement of the tip of its branch, metres (sway port)
+    double   sway_mean_z = GODOT_SWAY_NONE;  // north mean displacement of the tip of its branch, metres (sway port)
+    double   sway_gust_x = GODOT_SWAY_NONE;  // east gust amplitude at the tip of its branch, metres (sway port)
+    double   sway_gust_z = GODOT_SWAY_NONE;  // north gust amplitude at the tip of its branch, metres (sway port)
+    double   sway_base = GODOT_SWAY_NONE;    // share of the tip displacement at its base (sway port)
+    double   sway_top = GODOT_SWAY_NONE;     // share of the tip displacement at its top (sway port)
 };
 
 /**
@@ -447,8 +478,25 @@ struct VivariumShowerView {
     double rate = 0.0;        // meteors per hour
 };
 
+/**
+ * A visible star as the star record of the sky port carries it (usecase:5606 - observe the sky): the unit
+ * direction towards it, its colour and the size it is drawn with. ase-pl-sky files the record only for a
+ * star above the horizon in a sky dark enough to show it.
+ */
+struct VivariumStarView {
+    double x = 0.0;       // unit direction towards the star, east share
+    double y = 0.0;       // unit direction towards the star, upward share
+    double z = 0.0;       // unit direction towards the star, north share
+    double r = 0.0;       // star colour, red share 0..1
+    double g = 0.0;       // star colour, green share 0..1
+    double b = 0.0;       // star colour, blue share 0..1
+    double point = 0.0;   // rendered size of the star point, pixels
+};
+
 struct VivariumSkyView {
     bool   known = false;          // false until a snapshot carried all four records of the sky port
+    uint32_t stars = 0;            // star records of the snapshot, at most GODOT_SKY_STARS_MAX
+    VivariumStarView star[GODOT_SKY_STARS_MAX] = {};  // the visible stars, in the order of the port
     uint32_t showers = 0;          // shower records of the snapshot, at most GODOT_SKY_SHOWERS_MAX
     VivariumShowerView shower[GODOT_SKY_SHOWERS_MAX] = {};  // the meteor showers throwing above the horizon
     uint32_t belts = 0;            // belt records of the snapshot, at most GODOT_SKY_BELTS_MAX
@@ -621,11 +669,27 @@ public:
      */
     ase::kernel::HostStatus flatten(double x, double z, double radius_m);
     /**
-     * Run the host's own game clock at a time scale - the time lapse of the debug mode: a pace request on
-     * the pace port, GODOT_PACE_NONE for the default scale back. ase-pl-flora writes it as
-     * TIM_REQ_TIME_SCALE, ase-time runs this host's clock at it; no server clock is touched.
+     * Run the host's own game clock at a multiple of ase-time's base pace - the time lapse of the debug
+     * mode: a pace request on the pace port with `factor` (1, 2, 4, 10, 100 ...), GODOT_PACE_NONE for the
+     * default pace back. ase-pl-flora multiplies it with the base pace it reads from the star and writes
+     * the product as TIM_REQ_TIME_SCALE, ase-time runs this host's clock at it; no server clock is touched.
      */
-    ase::kernel::HostStatus pace(double scale);
+    ase::kernel::HostStatus pace(double factor);
+    /**
+     * Set the host's own game clock to an absolute game hour, for a host that sets its clock from a
+     * world it joins: a seek request on the seek port with `game_hour` (day x hours per day + hour of the
+     * day). ase-pl-flora writes it as TIM_REQ_TIME_SEEK, ase-time moves this host's clock there, forward
+     * and within the running day. The jump of the Vivarium's debug mode does not use it: a jump computes
+     * every tick up to its target through advance(), the clock is never set.
+     */
+    ase::kernel::HostStatus seek(double game_hour);
+    /**
+     * Shape the relief of the whole ground - a shape request on the elevation port with the height
+     * amplitude `height_scale_m` and the ground level `base_height_m`, metres. ase-pl-flora writes them
+     * as TER_GEN_HGT_SCL and TER_GEN_BAS_HGT, ase-terrain derives every height from them; the seed keeps
+     * the shape of the landscape. Which values are valid is the plugin's to check.
+     */
+    ase::kernel::HostStatus shape(double height_scale_m, double base_height_m);
     /**
      * Tell the engine where the view's camera stands, world metres east, up and north - a view request on
      * the view port. ase-pl-flora files it for ase-camera, whose camera the level of detail of
@@ -673,6 +737,10 @@ public:
     [[nodiscard]] const std::vector<VivariumGroundCellView>& get_ground_cells() const;
     /** Grows by one every time the terrain views were read anew; the view rebuilds the ground then. */
     [[nodiscard]] uint64_t terrain_generation() const;
+    /** The brooks with water as the stream port showed them, read with every snapshot. */
+    [[nodiscard]] const std::vector<VivariumStreamView>& get_streams() const;
+    /** Grows by one every time the water of a brook differs from the last read; the view lays it anew then. */
+    [[nodiscard]] uint64_t stream_generation() const;
     /**
      * The corners of the organ templates as the template corner port showed them, every code together
      * (usecase:101011 tessellate the organ templates). ase-render-data builds the templates once when the host
@@ -766,6 +834,7 @@ private:
     ase::kernel::HostStatus read_snapshot();
     ase::kernel::HostStatus read_organs();
     ase::kernel::HostStatus read_terrain();
+    ase::kernel::HostStatus read_streams();
     ase::kernel::HostStatus read_templates();
     ase::kernel::HostStatus read_sky();
     ase::kernel::HostStatus read_seeds();
@@ -800,6 +869,8 @@ private:
     uint64_t                                         terrain_generation_ = 0;
     uint64_t                                         terrain_runs_ = 0;  // GODOT_TERRAIN_SCHEDULE runs at the last terrain read
     uint32_t                                         terrain_reads_due_ = 0;  // reads still owed for the last new run
+    std::vector<VivariumStreamView>                  streams_;  // the brooks with water, last read
+    uint64_t                                         stream_generation_ = 0;
     std::vector<VivariumTemplateCornerView>          template_corners_;    // the corners of the organ templates, every code
     std::vector<VivariumTemplateTriangleView>        template_triangles_;  // the triangles of the organ templates, every code
     uint64_t                                         template_generation_ = 0;

@@ -12,7 +12,7 @@
  * @layer       5 (Adapter)
  * @category    process/validation/check
  * @usecase     usecase:101348 - hand organ instances to app
- * @actor       Plant Instance Perception Control (PLNTINST)
+ * @actor       Organ Instance Courier (ORGNINST)
  * @created     2026-10-26
  * @modified    2026-10-26
  * @version     00.00.01.00000
@@ -66,6 +66,34 @@ TEST_CASE("03.11: the instance records go unchanged to the body and the side of 
     // no records, no plants; records without organ records, no plants either
     CHECK(rows_by_body({}, organs, 2.0).empty());
     CHECK(rows_by_body(instances, {}, 2.0).empty());
+}
+
+TEST_CASE("usecase:101335 animate the branch sway: every instance carries the sway of its organ unchanged, slot for slot") {
+    VivariumOrganView swaying = organ(11u, kPatch, 0.0);
+    swaying.sway_freq = 2.5;
+    swaying.sway_mean_x = 0.125;
+    swaying.sway_mean_z = -0.25;
+    swaying.sway_gust_x = 0.0625;
+    swaying.sway_gust_z = -0.125;
+    swaying.sway_base = 0.25;
+    swaying.sway_top = 0.75;
+    const VivariumOrganView still = organ(12u, kPatch, 3.0);  // no sway record: the view stands it still
+    const auto split = rows_by_body({instance(11u), instance(12u)}, {swaying, still}, 2.0);
+    const PlantBodyRows& plant = split.at(kPatch);
+
+    // one sway slot per instance of its side, in the order of the data texture
+    REQUIRE(plant.up_to_sway.size() == GODOT_SWAY_VALUES);
+    REQUIRE(plant.above_sway.size() == GODOT_SWAY_VALUES);
+    CHECK(plant.up_to_sway[0] == doctest::Approx(2.5));
+    CHECK(plant.up_to_sway[1] == doctest::Approx(0.125));
+    CHECK(plant.up_to_sway[2] == doctest::Approx(-0.25));
+    CHECK(plant.up_to_sway[3] == doctest::Approx(0.0625));
+    CHECK(plant.up_to_sway[4] == doctest::Approx(-0.125));
+    CHECK(plant.up_to_sway[5] == doctest::Approx(0.25));
+    CHECK(plant.up_to_sway[6] == doctest::Approx(0.75));
+    for (uint32_t v = 0u; v < GODOT_SWAY_VALUES; ++v) {
+        CHECK(plant.above_sway[v] == doctest::Approx(GODOT_SWAY_NONE));
+    }
 }
 
 }  // namespace ase::adp::godot

@@ -15,7 +15,7 @@
  * @layer       5 (Adapter)
  * @category    process/validation/check
  * @usecase     usecase:101348 - hand organ instances to app
- * @actor       Plant Instance Perception Control (PLNTINST)
+ * @actor       Organ Instance Courier (ORGNINST)
  * @created     2026-10-26
  * @modified    2026-10-26
  * @version     00.00.01.00000

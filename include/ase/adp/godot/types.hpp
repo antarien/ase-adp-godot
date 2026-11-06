@@ -22,8 +22,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-28
- * @version     00.00.10.00003
+ * @modified    2026-11-06
+ * @version     00.00.10.00005
  *
  * WHY THE PORT KEYS ARE WRITTEN A SECOND TIME
  *
@@ -66,7 +66,8 @@ constexpr const char* GODOT_KEY_SOIL_MM = "soil_mm";          // patch record: s
 constexpr const char* GODOT_KEY_SOIL_REL = "soil_rel";        // patch record: soil water over field capacity, 0..1
 constexpr const char* GODOT_KEY_CAPACITY_MM = "capacity_mm";  // patch record: field capacity, mm
 constexpr const char* GODOT_KEY_AMOUNT_MM = "amount_mm";      // irrigate request: water poured on the patch, mm
-constexpr const char* GODOT_KEY_SCALE = "scale";              // pace request: the time scale the host's game clock runs at, 0 = its default
+constexpr const char* GODOT_KEY_FACTOR = "factor";            // pace request: the multiple of ase-time's base pace the host's clock runs at, 0 = its default
+constexpr const char* GODOT_KEY_GAME_HOUR = "game_hour";      // seek request: the absolute game hour (day x hours per day + hour) the host's clock moves to
 constexpr const char* GODOT_KEY_ELAPSED = "elapsed_s";        // clock record: game time, seconds (TIM_ELAPSED_GAME)
 constexpr const char* GODOT_KEY_DAY = "day";                  // clock record: game day (TIM_DAY_COUNT)
 constexpr const char* GODOT_KEY_HOUR = "hour";                // clock record: hour of the game day (TIM_CURRENT_HOUR)
@@ -96,6 +97,46 @@ constexpr const char* GODOT_KEY_TILE_AROUND = "around";       // tile record: ti
 constexpr const char* GODOT_KEY_TILE_ALONG = "along";         // tile record: tiles of the white bark along the tube
 constexpr const char* GODOT_KEY_TILE_BASE = "base";           // tile record: tiles of the stem-base bark per tile of the white bark
 constexpr double GODOT_TILE_NONE = 1.0;                       // tiling of an internode without a tile record: the scale of the material itself
+// The sway of an organ on a branch (usecase:101335 animate the branch sway, DSGN_024 sway group 21/PMG/TP/WS), one
+// record per organ on the sway port, its object id the organ; ase-phytomer computed all seven, the view none.
+constexpr const char* GODOT_KEY_SWAY_FREQ = "freq";           // sway record: natural frequency of the branch, Hz
+constexpr const char* GODOT_KEY_SWAY_MEAN_X = "mean_x";       // sway record: east mean displacement of the tip of the branch, metres
+constexpr const char* GODOT_KEY_SWAY_MEAN_Z = "mean_z";       // sway record: north mean displacement of the tip of the branch, metres
+constexpr const char* GODOT_KEY_SWAY_GUST_X = "gust_x";       // sway record: east gust amplitude at the tip of the branch, metres
+constexpr const char* GODOT_KEY_SWAY_GUST_Z = "gust_z";       // sway record: north gust amplitude at the tip of the branch, metres
+constexpr const char* GODOT_KEY_SWAY_SHAPE_BASE = "shape_base";  // sway record: share of the tip displacement at the base of the organ
+constexpr const char* GODOT_KEY_SWAY_SHAPE_TOP = "shape_top";    // sway record: share of the tip displacement at the top of the organ
+constexpr double GODOT_SWAY_NONE = 0.0;                       // every sway value of an organ without a sway record: it stands still
+constexpr uint32_t GODOT_SWAY_TEXELS = 2u;                    // texels of one instance in the sway data texture
+constexpr uint32_t GODOT_SWAY_TEXEL_VALUES = 4u;              // values of one texel of the sway data texture (RGBA)
+constexpr uint32_t GODOT_SWAY_VALUES = GODOT_SWAY_TEXELS * GODOT_SWAY_TEXEL_VALUES;  // values of one instance: the seven of its record and one spare
+constexpr uint32_t GODOT_SWAY_ROW_INSTANCES = 1024u;          // instances in one row of the sway data texture: the row count stays far below every texture limit
+/**
+ * THE SWING OF AN ORGAN, one building block for every shader that draws an organ on a branch (bark, stand-in and
+ * bound organ, usecase:101335 animate the branch sway). Its seven values stand in a data texture beside the
+ * instances, GODOT_SWAY_TEXELS per instance (fill_instances, godot_plant_scene.cpp): the tip of the branch swings
+ * about its mean displacement by the gust amplitude with the natural frequency of the branch, and the template's
+ * y, 0 at the base of the organ and 1 at its top, takes the share of that displacement from the base to the top,
+ * so neighbouring internodes of a branch meet and a leaf, whose two shares are one, moves whole with its place.
+ * ase-phytomer computed the values; the frequency is real, so the swing runs on TIME and never on the game clock.
+ * An instance without a record, and every mesh without the texture, reads zeros and stands still. A shader carries
+ * the two slots below, and swaying_code (godot_plant_look.cpp) sets the block into them when the shader is made.
+ */
+constexpr const char* GODOT_SWAY_SLOT_UNIFORMS = "// sway uniforms\n";   // line of a shader the uniforms of the swing take
+constexpr const char* GODOT_SWAY_SLOT_SWING = "// sway swing\n";         // line of a vertex() the swing itself takes
+constexpr const char* GODOT_SWAY_SHADER_UNIFORMS =
+    "uniform sampler2D sway_data : hint_default_black, filter_nearest, repeat_disable;\n"
+    "uniform int sway_row = 1;\n";
+constexpr const char* GODOT_SWAY_SHADER_SWING =
+    "    ivec2 sway_at = ivec2((INSTANCE_ID % sway_row) * 2, INSTANCE_ID / sway_row);\n"
+    "    vec4 sway_wave = texelFetch(sway_data, sway_at, 0);\n"
+    "    vec4 sway_form = texelFetch(sway_data, sway_at + ivec2(1, 0), 0);\n"
+    "    vec2 sway_tip = sway_wave.gb + vec2(sway_wave.a, sway_form.r) * sin(TAU * sway_wave.r * TIME);\n"
+    "    float sway_share = mix(sway_form.g, sway_form.b, clamp(VERTEX.y, 0.0, 1.0));\n"
+    "    VERTEX += inverse(mat3(MODEL_MATRIX)) * vec3(sway_tip.x, 0.0, sway_tip.y) * sway_share;\n";
+constexpr int32_t GODOT_ORGAN_SWAY_SURFACES = 1;              // surfaces of a bound template the organ shader can draw: the material is set for the whole mesh
+constexpr const char* GODOT_SWAY_DATA = "sway_data";          // uniform of every swinging shader: the sway data texture of the instance node
+constexpr const char* GODOT_SWAY_ROW = "sway_row";            // uniform of every swinging shader: GODOT_SWAY_ROW_INSTANCES
 
 /**
  * The organ ports of ase-pl-flora (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.3): one port per organ class,
@@ -152,11 +193,16 @@ constexpr const char* GODOT_KEY_M23 = "m23";                  // instance record
  */
 constexpr const char* GODOT_KEY_HALF = "half_m";              // lay requests: half edge of a patch or ground square, half width of a bed; patch record: half edge
 constexpr const char* GODOT_KEY_STEP = "step_m";              // ground lay request: distance of two terrain samples, metres
+constexpr const char* GODOT_KEY_HEIGHT_SCALE = "height_scale_m";  // shape request: height amplitude of the relief, metres (TER_GEN_HGT_SCL)
+constexpr const char* GODOT_KEY_BASE_HEIGHT = "base_height_m";    // shape request: ground level of the relief above NN0, metres (TER_GEN_BAS_HGT)
 constexpr const char* GODOT_KEY_END_X = "end_x";              // brook lay request: east end of the bed, world metres
 constexpr const char* GODOT_KEY_END_Z = "end_z";              // brook lay request: north end of the bed, world metres
 constexpr const char* GODOT_KEY_DEPTH = "depth_m";            // brook lay request: depth of the bed below the ground, metres
 constexpr const char* GODOT_KEY_BASE = "base_m3_s";           // brook lay request: base flow of the brook without rain, m3/s (ase-hydro)
 constexpr const char* GODOT_KEY_CATCHMENT = "catchment_m2";   // brook lay request: area whose rain runs into the brook, m2 (ase-hydro)
+constexpr const char* GODOT_KEY_WATER_DEPTH = "water_depth_m";  // stream record: water depth in the bed, metres (HYD_STREAM_DEPTH)
+constexpr const char* GODOT_KEY_VELOCITY = "velocity_m_s";      // stream record: mean flow velocity, metres per second (HYD_STREAM_VELOCITY)
+constexpr const char* GODOT_KEY_DISCHARGE = "discharge_m3_s";   // stream record: discharge, cubic metres per second (HYD_STREAM_DISCHARGE)
 constexpr const char* GODOT_KEY_HEIGHT = "height";            // terrain record: ground height at the sample, metres
 constexpr const char* GODOT_KEY_NX = "nx";                    // terrain record: unit normal of the ground, east share (ase-render-data); corner record: its normal, x share
 constexpr const char* GODOT_KEY_NY = "ny";                    // terrain record: unit normal of the ground, upward share; corner record: its normal, y share
@@ -204,7 +250,7 @@ constexpr uint32_t GODOT_SKY_RECORD_BACKGROUND = 3u;          // sky record obje
 constexpr uint32_t GODOT_SKY_RECORD_FOG = 4u;                 // sky record object id: the fog - colour, near and far distance
 constexpr uint32_t GODOT_SKY_RECORD_MOON = 5u;                // sky record object id: a visible moon - direction towards it, colour, strength of its light
 constexpr uint32_t GODOT_SKY_RECORD_COUNT = 4u;               // records of one sky publication without its moons: sun, ambient, background, fog
-constexpr uint32_t GODOT_SKY_MOONS_MAX = 2u;                  // moons one publication may carry: Scorpii and Amilox (CAUSA_ASE_SKY)
+constexpr uint32_t GODOT_SKY_MOONS_MAX = 3u;                  // moons one publication may carry: Scorpii, Amilox and Aurora (CAUSA_ASE_SKY, CEL_MOON_*_CONTRIB)
 constexpr uint32_t GODOT_SKY_RECORD_COMET = 6u;               // sky record object id: the visible comet - direction towards it, brightness, tail direction and length
 constexpr uint32_t GODOT_SKY_COMETS_MAX = 1u;                 // comets one publication may carry: ase-ephemeris hands one comet as EPH_COM_* rows
 constexpr const char* GODOT_KEY_TAIL_X = "tail_x";            // comet record: east share of the unit direction the tail runs on the sky
@@ -224,6 +270,9 @@ constexpr const char* GODOT_KEY_DENSITY = "density";          // belt record: ap
 constexpr uint32_t GODOT_SKY_RECORD_SHOWER = 11u;             // sky record object id: the meteor shower while it throws - direction to its radiant, intensity, rate
 constexpr uint32_t GODOT_SKY_SHOWERS_MAX = 1u;                // showers one publication may carry: ase-ephemeris hands one shower as EPH_MTR_* rows
 constexpr const char* GODOT_KEY_RATE = "rate";                // shower record: meteors per hour out of the radiant
+constexpr uint32_t GODOT_SKY_RECORD_STAR = 12u;               // sky record object id: a visible star - unit direction towards it, colour, rendered size in pixels
+constexpr uint32_t GODOT_SKY_STARS_MAX = 512u;                // stars one publication may carry: the 181 catalogue stars and the 300 generated ones of ase-pl-sky, with room
+constexpr const char* GODOT_KEY_POINT = "point";              // star record: rendered size of the star point, pixels (ase-pl-sky STAR_SIZE_*)
 constexpr const char* GODOT_KEY_R = "r";                      // sky records: red share of the colour, 0..1
 constexpr const char* GODOT_KEY_G = "g";                      // sky records: green share of the colour, 0..1
 constexpr const char* GODOT_KEY_B = "b";                      // sky records: blue share of the colour, 0..1
@@ -266,6 +315,7 @@ constexpr const char* GODOT_PLANT_BELT_GRAIN = "PlantBeltGrain";          // pre
 constexpr const char* GODOT_PLANT_ENVIRONMENT = "PlantEnvironment";  // sky colour, ambient light and fog of the sky port
 constexpr const char* GODOT_PLANT_HAZE = "PlantHaze";             // the shimmer of hot air in front of the camera (usecase:101515 - veil sight with weather)
 constexpr const char* GODOT_PLANT_GROUND = "PlantGround";         // the ground from the terrain samples
+constexpr const char* GODOT_PLANT_WATER = "PlantWater";           // the water of the brooks in their beds (usecase:101339 - show the ground around plant)
 constexpr const char* GODOT_PLANT_BODIES = "PlantBodies";         // the node the plants stand under, one child per body
 constexpr const char* GODOT_PLANT_BODY_PREFIX = "PlantBody";      // name of a plant's node: this and the object id of its patch
 constexpr const char* GODOT_PLANT_TUBES = "PlantTubes";           // the internodes up to the shown orders, on the fine cylinder
@@ -345,6 +395,16 @@ constexpr float GODOT_SHOWER_STREAK_SPREAD = 0.30f;   // radians: distance of a 
 constexpr float GODOT_SHOWER_STREAK_STEP = 0.04f;     // radians: distance between two points of one streak
 constexpr float GODOT_SHOWER_POINT_RADIUS = 1.0f;     // metres: radius of one streak point at GODOT_SKY_DISC_DISTANCE
 constexpr const char* GODOT_PLANT_SHOWER_POINT = "PlantShowerPoint";  // prefix of a streak point in the sky: this and the point number
+/**
+ * The stars in the sky (usecase:5606 - observe the sky): one instance of a multimesh per star record,
+ * along its direction at GODOT_SKY_DISC_DISTANCE, glowing in the record colour, unshaded and outside the
+ * fog. The record gives the size of the star in pixels; the view turns it into metres at the disc distance
+ * with its own field of view and viewport height, which is view geometry, not a sky quantity.
+ */
+constexpr const char* GODOT_PLANT_STARS = "PlantStars";  // node name of the starfield multimesh in the sky
+constexpr float GODOT_STAR_POINT_MIN = 1.0f;             // pixels: smallest size a star point is drawn with, so no star falls between two pixels
+constexpr int32_t GODOT_STAR_SEGMENTS = 6;               // radial segments of a star point's sphere
+constexpr int32_t GODOT_STAR_RINGS = 3;                  // rings of a star point's sphere
 constexpr float GODOT_ZOOM_START = 1.0f;   // zoom of the near view at the start: the camera as the view section places it
 constexpr float GODOT_ZOOM_STEP = 0.8f;    // one wheel turn or pinch towards the birch: distance, height and look point times this
 constexpr float GODOT_ZOOM_MIN = 0.08f;    // closest zoom: 0.8 m from a seedling at the configured 10 m
@@ -396,11 +456,13 @@ constexpr const char* GODOT_SHADER_CONDITION = "condition";                 // i
  * drawn in its GODOT_COLOR_STAND_IN_* colour through this shader, so the scene reads as meadow, bark and leaf
  * before Phase 04 delivers a file. The ground darkens with the soil water of the focused patch
  * (GODOT_SHADER_SOIL_REL, -1 while unknown), a leaf takes the wilted or the dead colour by the condition of
- * its patch (GODOT_SHADER_CONDITION). Both faces are drawn: the stand-in leaf is a card without thickness.
+ * its patch (GODOT_SHADER_CONDITION). Both faces are drawn: the stand-in leaf is a card without thickness. Its
+ * two slots take the swing of the branch (GODOT_SWAY_SHADER_SWING), so a stand-in organ hangs on its twig.
  */
 constexpr const char* GODOT_STAND_IN_SHADER_CODE =
     "shader_type spatial;\n"
     "render_mode cull_disabled;\n"
+    "// sway uniforms\n"
     "uniform vec4 stand_in_color : source_color = vec4(1.0);\n"
     "uniform vec4 wilted_color : source_color = vec4(1.0);\n"
     "uniform vec4 dead_color : source_color = vec4(1.0);\n"
@@ -410,6 +472,9 @@ constexpr const char* GODOT_STAND_IN_SHADER_CODE =
     "uniform float stand_in_roughness = 1.0;\n"
     "instance uniform float soil_rel = -1.0;\n"
     "instance uniform float condition = 0.0;\n"
+    "void vertex() {\n"
+    "// sway swing\n"
+    "}\n"
     "void fragment() {\n"
     "    vec3 color = stand_in_color.rgb;\n"
     "    if (soil_rel >= 0.0) {\n"
@@ -431,6 +496,45 @@ constexpr const char* GODOT_STAND_IN_WILTED_CODE = "wilted_code";         // sta
 constexpr const char* GODOT_STAND_IN_DEAD_CODE = "dead_code";             // stand-in shader uniform: GODOT_COND_DEAD
 constexpr const char* GODOT_STAND_IN_WET = "wet_shade";                   // stand-in shader uniform: GODOT_STAND_IN_WET_SHADE
 constexpr const char* GODOT_STAND_IN_ROUGH = "stand_in_roughness";        // stand-in shader uniform: GODOT_STAND_IN_ROUGHNESS
+/**
+ * A bound organ template on a branch (leaf, catkin, fruit stand; godot_plant_look.cpp): its glTF material is a
+ * BaseMaterial3D, and a BaseMaterial3D cannot swing. This shader draws the one surface of such a template with what
+ * the material carries - colour, the albedo, normal, roughness and backlight textures, the UV scale and the alpha
+ * scissor - and takes the swing of the branch in its two slots.
+ */
+constexpr const char* GODOT_ORGAN_SHADER_CODE =
+    "shader_type spatial;\n"
+    "render_mode cull_disabled;\n"
+    "// sway uniforms\n"
+    "uniform vec4 organ_color : source_color = vec4(1.0);\n"
+    "uniform sampler2D organ_albedo : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;\n"
+    "uniform sampler2D organ_normal : hint_normal, filter_linear_mipmap, repeat_enable;\n"
+    "uniform sampler2D organ_rough : hint_default_white, filter_linear_mipmap, repeat_enable;\n"
+    "uniform sampler2D organ_light : source_color, hint_default_black, filter_linear_mipmap, repeat_enable;\n"
+    "uniform float organ_roughness = 1.0;\n"
+    "uniform vec2 organ_uv = vec2(1.0);\n"
+    "uniform float organ_cut = 0.0;\n"
+    "void vertex() {\n"
+    "// sway swing\n"
+    "}\n"
+    "void fragment() {\n"
+    "    vec2 at = UV * organ_uv;\n"
+    "    vec4 albedo = texture(organ_albedo, at) * organ_color;\n"
+    "    ALBEDO = albedo.rgb;\n"
+    "    ALPHA = albedo.a;\n"
+    "    ALPHA_SCISSOR_THRESHOLD = organ_cut;\n"
+    "    NORMAL_MAP = texture(organ_normal, at).rgb;\n"
+    "    ROUGHNESS = texture(organ_rough, at).r * organ_roughness;\n"
+    "    BACKLIGHT = texture(organ_light, at).rgb;\n"
+    "}\n";
+constexpr const char* GODOT_ORGAN_COLOR = "organ_color";          // organ shader uniform: albedo colour of the bound material
+constexpr const char* GODOT_ORGAN_ALBEDO = "organ_albedo";        // organ shader uniform: albedo texture
+constexpr const char* GODOT_ORGAN_NORMAL = "organ_normal";        // organ shader uniform: normal texture
+constexpr const char* GODOT_ORGAN_ROUGH = "organ_rough";          // organ shader uniform: roughness texture
+constexpr const char* GODOT_ORGAN_LIGHT = "organ_light";          // organ shader uniform: backlight texture
+constexpr const char* GODOT_ORGAN_ROUGHNESS = "organ_roughness";  // organ shader uniform: roughness of the bound material
+constexpr const char* GODOT_ORGAN_UV = "organ_uv";                // organ shader uniform: UV scale of the bound material
+constexpr const char* GODOT_ORGAN_CUT = "organ_cut";              // organ shader uniform: alpha scissor threshold, 0 for an opaque material
 constexpr float GODOT_STAND_IN_WET_SHADE = 0.55f;                         // share of its colour the ground keeps at field capacity: wet earth is darker
 constexpr float GODOT_STAND_IN_ROUGHNESS = 0.9f;                          // roughness of every stand-in surface: matt, no texture to carry a sheen
 constexpr uint32_t GODOT_COLOR_STAND_IN_BARK = 0xE6E1D3FFu;               // stand-in of GODOT_ROLE_BARK: the white bark of the birch
@@ -442,6 +546,61 @@ constexpr uint32_t GODOT_COLOR_STAND_IN_MALE = 0xA38A4CFFu;               // sta
 constexpr uint32_t GODOT_COLOR_STAND_IN_FEMALE = 0x7D8C3FFFu;             // stand-in of GODOT_ROLE_FEMALE: a female catkin
 constexpr uint32_t GODOT_COLOR_STAND_IN_FRUIT = 0x8A6A3EFFu;              // stand-in of GODOT_ROLE_FRUIT: a ripe fruit stand
 constexpr uint32_t GODOT_COLOR_STAND_IN_NUTLET = 0x9C7A44FFu;             // stand-in of GODOT_ROLE_NUTLET: a winged nutlet
+
+/**
+ * The water of the care view (usecase:101339 - show the ground around plant). The water stands at NN0 and nowhere
+ * else: one plane at GODOT_WATER_TABLE_M over every ground cell below it (build_water_table,
+ * godot_plant_water.hpp), so a dug hole, a carved bed and a hollow of the ground below NN0 hold water. The vertex
+ * colour carries the water in the range a colour holds: red the velocity of the stream whose bed holds the vertex
+ * over GODOT_WATER_VELOCITY_FULL_M_S, green the depth of the table over GODOT_WATER_DEPTH_FULL_M, blue and alpha
+ * the course of that stream. The velocity moves the ripples along the course, the depth turns the shallow colour
+ * to the deep one; the view computes no water. The ribbon of a river along a course above the table
+ * (build_water, GODOT_WATER_STATIONS sections) is drawn by no view now.
+ * The two colours are those of brook water, not of the sea: murky, dark, and slightly green from the
+ * algae and the suspended silt a lowland brook carries; the shallow colour shows the bed through it.
+ */
+constexpr float GODOT_WATER_TABLE_M = 0.0f;              // NN0, the water table: the datum ase-terrain generates its ground around (GEN_DEFAULT_BASE_HEIGHT)
+constexpr uint32_t GODOT_WATER_STATIONS = 32u;           // sections of the ribbon along one bed
+constexpr float GODOT_WATER_VELOCITY_FULL_M_S = 2.0f;    // velocity the red channel reads 1 at, a fast mountain brook
+constexpr float GODOT_WATER_DEPTH_FULL_M = 0.5f;         // depth the green channel reads 1 at, the deep colour
+constexpr float GODOT_WATER_SWING_SHARE = 1.0f;          // farthest the ribbon follows the deepest line of a winding bed off its filed course, as a share of the bed width
+constexpr const char* GODOT_WATER_VELOCITY_FULL = "velocity_full";  // uniform of GODOT_WATER_SHADER_CODE: GODOT_WATER_VELOCITY_FULL_M_S
+constexpr const char* GODOT_WATER_SHADER_CODE =
+    "shader_type spatial;\n"
+    "render_mode cull_back;\n"
+    "uniform vec4 shallow_color : source_color = vec4(0.15, 0.23, 0.17, 1.0);\n"
+    "uniform vec4 deep_color : source_color = vec4(0.05, 0.12, 0.10, 1.0);\n"
+    "uniform float velocity_full = 2.0;\n"
+    "varying float flow;\n"
+    "varying float deep;\n"
+    "varying vec2 course;\n"
+    "float ripple_hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\n"
+    "float ripple_at(vec2 p) {\n"
+    "    vec2 i = floor(p);\n"
+    "    vec2 f = fract(p);\n"
+    "    vec2 u = f * f * (3.0 - 2.0 * f);\n"
+    "    return mix(mix(ripple_hash(i), ripple_hash(i + vec2(1.0, 0.0)), u.x),\n"
+    "               mix(ripple_hash(i + vec2(0.0, 1.0)), ripple_hash(i + vec2(1.0, 1.0)), u.x), u.y);\n"
+    "}\n"
+    "void vertex() {\n"
+    "    flow = COLOR.r * velocity_full;\n"
+    "    deep = COLOR.g;\n"
+    "    course = vec2(COLOR.b, COLOR.a) * 2.0 - 1.0;\n"
+    "}\n"
+    "void fragment() {\n"
+    "    vec2 dir = length(course) > 0.001 ? normalize(course) : vec2(0.0, 1.0);\n"
+    "    vec2 frame = vec2(dot(UV, vec2(dir.y, -dir.x)), dot(UV, dir));\n"
+    "    vec2 at = vec2(frame.x * 3.0, (frame.y - TIME * flow) * 1.6);\n"
+    "    float step_size = 0.08;\n"
+    "    float here = ripple_at(at);\n"
+    "    float across = ripple_at(at + vec2(step_size, 0.0)) - here;\n"
+    "    float along = ripple_at(at + vec2(0.0, step_size)) - here;\n"
+    "    NORMAL = normalize(NORMAL + (VIEW_MATRIX * vec4(across, 0.0, along, 0.0)).xyz * 1.5);\n"
+    "    ALBEDO = mix(shallow_color.rgb, deep_color.rgb, clamp(deep, 0.0, 1.0));\n"
+    "    ALPHA = mix(0.82, 0.95, clamp(deep, 0.0, 1.0));\n"
+    "    ROUGHNESS = 0.18;\n"
+    "    SPECULAR = 0.6;\n"
+    "}\n";
 
 /**
  * The ground of the care view (usecase:100387 view the plant): a terrain takes other colours by its slope,
@@ -561,10 +720,12 @@ constexpr float GODOT_GROUND_LEVEL_TOLERANCE_M = 0.01f;                    // a 
  * full roughness. The tiling of the section stands in the rest of the custom data (INSTANCE_CUSTOM.gba,
  * computed by ase-render-data): the texture coordinates of the unit cylinder are multiplied by the tiles of
  * the white bark around and along the tube, and those of the base bark once more by its tiles per white
- * tile. An internode without a tile record carries GODOT_TILE_NONE, the scale of the material itself.
+ * tile. An internode without a tile record carries GODOT_TILE_NONE, the scale of the material itself. Its two
+ * slots take the swing of the branch (GODOT_SWAY_SHADER_SWING).
  */
 constexpr const char* GODOT_BARK_SHADER_CODE =
     "shader_type spatial;\n"
+    "// sway uniforms\n"
     "uniform vec4 white_color : source_color = vec4(1.0);\n"
     "uniform sampler2D white_albedo : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;\n"
     "uniform sampler2D white_normal : hint_normal, filter_linear_mipmap, repeat_enable;\n"
@@ -582,6 +743,7 @@ constexpr const char* GODOT_BARK_SHADER_CODE =
     "void vertex() {\n"
     "    base_share = clamp(INSTANCE_CUSTOM.r, 0.0, 1.0);\n"
     "    tiles = INSTANCE_CUSTOM.gba;\n"
+    "// sway swing\n"
     "}\n"
     "void fragment() {\n"
     "    vec2 uw = UV * tiles.xy * white_uv;\n"
@@ -683,8 +845,9 @@ constexpr uint8_t GODOT_STAGE_SPROUT = 1;     // a seedling
 constexpr uint8_t GODOT_STAGE_GROW = 2;       // a growing stand
 constexpr uint8_t GODOT_STAGE_MATURE = 3;     // a mature stand
 constexpr uint8_t GODOT_STAGE_COUNT = 4;      // stages the view has a word and a colour for
-constexpr uint8_t GODOT_STAGE_NONE = UINT8_MAX;  // debug button: no stage to lapse to, the button only switches the time lapse
-constexpr double GODOT_PACE_NONE = 0.0;       // pace request: the host's clock back on its default scale
+constexpr uint8_t GODOT_STAGE_NONE = UINT8_MAX;  // debug jump: no stage to jump to, the jump names an hour
+constexpr double GODOT_HOUR_NONE = -1.0;      // debug jump: no hour of the game day to jump to, the jump names a stage
+constexpr double GODOT_PACE_NONE = 0.0;       // pace request: the host's clock back on its default pace
 constexpr uint32_t GODOT_DEBUG_LAPSE_STEPS_MAX = UINT16_MAX;  // debug.lapse_steps: range of the read, so catch_up_steps + lapse_steps stays a uint32
 constexpr uint8_t GODOT_COND_HEALTHY = 0;     // a stand without a condition mark
 constexpr uint8_t GODOT_COND_WILTED = 1;      // a wilted stand
@@ -803,6 +966,7 @@ constexpr const char* GODOT_STEP_DATA_ROOT = "data_root";  // KernelEmbeddedHost
 constexpr const char* GODOT_STEP_LOAD = "load_units";      // KernelEmbeddedHost::load_units
 constexpr const char* GODOT_STEP_PORT = "port";            // a configured port is not offered
 constexpr const char* GODOT_STEP_START = "start";          // KernelEmbeddedHost::start
+constexpr const char* GODOT_STEP_ELEVATION = "elevation";  // the shape request of the configured relief was refused
 constexpr const char* GODOT_STEP_LAY = "lay";              // the lay request of a configured patch was refused
 constexpr const char* GODOT_STEP_GROUND = "ground";        // the lay request of the configured ground square was refused
 constexpr const char* GODOT_STEP_BROOK = "brook";          // the lay request of a configured brook was refused
@@ -854,9 +1018,27 @@ constexpr uint64_t GODOT_WATER_WAIT_STEPS = 3u;  // Dissemination runs a pour ma
 constexpr double GODOT_WATER_ARRIVED_SHARE = 0.5;  // share of the expected rise (the pour, or the room up to field capacity if smaller) the soil water must gain before the pour counts as arrived; drift between press and arrival moves it by thousandths of a millimetre
 
 /**
+ * The start screen of AseVivariumView: it covers the initialisation and lifts when the first frame shows everything.
+ */
+constexpr uint32_t GODOT_INIT_RENDER_FRAMES = 10u;          // frames in a row the complete scene renders under the start screen without a new pipeline compilation before it lifts
+constexpr uint32_t GODOT_INIT_SCENE_PARTS = 5u;             // parts the scene must stand with: terrain, streams, templates, organs, camera focus
+constexpr double GODOT_INIT_STEPS = 4.0;                    // equal steps of the progress bar: patches, brooks, scene parts, quiet frames
+constexpr float GODOT_PROGRESS_WIDTH_SHARE = 0.6f;          // width of the progress bar as share of the place area
+constexpr float GODOT_PROGRESS_HEIGHT = 14.0f;              // height of the progress bar (logical pixels)
+constexpr float GODOT_PROGRESS_GAP = 36.0f;                 // gap between the loading line and the progress bar, and the bar and its percent line
+constexpr uint32_t GODOT_SPINNER_DOTS = 8u;                 // dots of the spinner above the loading line
+constexpr float GODOT_SPINNER_RADIUS = 34.0f;               // radius of the spinner circle (logical pixels)
+constexpr float GODOT_SPINNER_DOT = 6.0f;                   // radius of one spinner dot (logical pixels)
+constexpr float GODOT_SPINNER_GAP = 70.0f;                  // gap between the spinner centre and the loading line
+constexpr uint64_t GODOT_SPINNER_PERIOD_MS = 1200u;         // milliseconds of one spinner turn
+constexpr float GODOT_SPINNER_DIM = 0.2f;                   // opacity of the dot farthest behind the leading one
+
+/**
  * Drawing style of AseVivariumView - RGBA, 8 bit per channel (Godot Color::hex).
  */
 constexpr uint32_t GODOT_COLOR_BACKGROUND = 0x14181AFFu;    // surface behind everything
+constexpr uint32_t GODOT_COLOR_PROGRESS = 0x8BC34AFFu;      // filled part of the start screen progress bar
+constexpr uint32_t GODOT_COLOR_PROGRESS_TRACK = 0x37474FFFu;  // empty part of the start screen progress bar
 constexpr uint32_t GODOT_COLOR_HEADER = 0x1F2A2EFFu;        // band behind title and build line
 constexpr uint32_t GODOT_COLOR_SOIL = 0x5B4030FFu;          // bare soil of a patch
 constexpr uint32_t GODOT_COLOR_SEED = 0x9C7A44FFu;          // seed dots on bare soil
@@ -888,6 +1070,9 @@ constexpr float GODOT_LABEL_OFFSET = 34.0f;                 // baseline of a lab
 constexpr float GODOT_HALF = 0.5f;                          // centre of a span
 constexpr float GODOT_LAYOUT_SCALE_MAX = 1.0f;              // a layout is never magnified: spare space is distributed, not filled
 constexpr const char* GODOT_FEATURE_MOBILE = "mobile";      // Godot feature of a handheld OS: the window is the screen, its safe area applies
+constexpr const char* GODOT_DISPLAY_HEADLESS = "headless";  // name of the display server that opens no window (usecase:101019 start the client window)
+constexpr uint32_t GODOT_WINDOW_NUMBER_CHARS = 32u;         // text room of one measured value in the window line
+constexpr uint32_t GODOT_WINDOW_DECIMALS = 2u;              // decimals of a surface size or screen scale in the window line
 constexpr float GODOT_SEED_DOT_RADIUS = 5.0f;               // radius of one seed dot on bare soil
 constexpr int32_t GODOT_SEED_DOTS = 3;                      // seed dots per row and per column
 constexpr int32_t GODOT_ERROR_LINES = 6;                    // most lines the error panel wraps to

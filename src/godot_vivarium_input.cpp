@@ -38,6 +38,10 @@ void VivariumView::unhandled_input(const ::godot::Ref<::godot::InputEvent>& even
     if (in_editor() || !node_->is_visible_in_tree()) {
         return;
     }
+    // Under the start screen nothing is tapped: the world is still being initialised (follow_initialisation).
+    if (!initialised_ && failure_text_.is_empty()) {
+        return;
+    }
     // ONE PATH PER PHYSICAL TAP: touch arrives as ScreenTouch, a mouse as MouseButton - the
     // project switches Godot's touch-to-mouse emulation off, so an Android tap waters once.
     // make_input_local maps through the inverse canvas transform onto the visible surface; tap()

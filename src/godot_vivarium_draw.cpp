@@ -35,6 +35,7 @@
 
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/rect2i.hpp>
@@ -147,6 +148,12 @@ void VivariumView::draw() {
     if (!(placement_.scale > 0.0f)) {
         return;  // a surface without room for the layout: the background stands alone
     }
+    if (!initialised_ && failure_text_.is_empty()) {
+        // The world is initialised under the start screen (follow_initialisation): nothing of the scene
+        // and nothing of the view is seen before the first complete picture.
+        draw_start_screen(visible);
+        return;
+    }
     // The header colour runs over the whole width and up to the top edge - over a camera
     // cut-out too - and ends where the placed header band ends.
     node_->draw_rect(::godot::Rect2(0.0f, 0.0f, visible.size.x,
@@ -188,6 +195,66 @@ void VivariumView::draw() {
     draw_button(layout_.flatten_rect, texts_.flatten, can_flatten());
     use_band(layout_.reset_rect.position.y);
     draw_button(layout_.reset_rect, texts_.reset, true);
+    use_canvas();
+}
+
+void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
+    // Opaque over the whole surface and over the 3D scene behind the canvas: the title, a turning spinner
+    // above the loading line, and under it the progress bar with its percent line. The bar shows
+    // initialisation_progress(), read from the same state follow_initialisation lifts the screen on, so
+    // it stands full in the frame the screen lifts. The view redraws every frame (process), and the
+    // spinner turns with the wall clock, so the screen moves while the host loads.
+    use_canvas();
+    node_->draw_rect(visible, ::godot::Color::hex(GODOT_COLOR_BACKGROUND));
+    const ::godot::Ref<::godot::Font> font = view_font();
+    use_band(layout_.title_at.y);
+    node_->draw_string(font, layout_.title_at, texts_.title, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
+                       GODOT_FONT_TITLE, ::godot::Color::hex(GODOT_COLOR_TEXT));
+    ::godot::Rect2 places = layout_.place_rects.front();
+    for (const ::godot::Rect2& rect : layout_.place_rects) {
+        places = places.merge(rect);
+    }
+    use_band(places.position.y);
+    const float centre_x = places.get_center().x;
+    const float line_y = places.get_center().y;
+
+    // the spinner: GODOT_SPINNER_DOTS dots on a circle, the leading one full, each one behind it dimmer
+    const ::godot::Time* clock = ::godot::Time::get_singleton();
+    const uint64_t now_ms = clock == nullptr ? 0u : clock->get_ticks_msec();
+    const double turn = static_cast<double>(now_ms % GODOT_SPINNER_PERIOD_MS) /
+                        static_cast<double>(GODOT_SPINNER_PERIOD_MS);
+    const uint32_t leading = static_cast<uint32_t>(turn * static_cast<double>(GODOT_SPINNER_DOTS)) % GODOT_SPINNER_DOTS;
+    const ::godot::Vector2 hub(centre_x, line_y - GODOT_SPINNER_GAP);
+    for (uint32_t dot = 0u; dot < GODOT_SPINNER_DOTS; ++dot) {
+        const double angle = ase::math::TWO_PI * static_cast<double>(dot) / static_cast<double>(GODOT_SPINNER_DOTS);
+        const ::godot::Vector2 at(hub.x + GODOT_SPINNER_RADIUS * static_cast<float>(ase::math::sin(angle)),
+                                  hub.y - GODOT_SPINNER_RADIUS * static_cast<float>(ase::math::cos(angle)));
+        const uint32_t behind = (leading + GODOT_SPINNER_DOTS - dot) % GODOT_SPINNER_DOTS;
+        const float fade = 1.0f - (1.0f - GODOT_SPINNER_DIM) * static_cast<float>(behind) /
+                                      static_cast<float>(GODOT_SPINNER_DOTS - 1u);
+        ::godot::Color colour = ::godot::Color::hex(GODOT_COLOR_PROGRESS);
+        colour.a = fade;
+        node_->draw_circle(at, GODOT_SPINNER_DOT, colour);
+    }
+
+    node_->draw_string(font, ::godot::Vector2(places.position.x, line_y), texts_.loading,
+                       ::godot::HORIZONTAL_ALIGNMENT_CENTER, places.size.x,
+                       fitting_size(texts_.loading, places.size.x, GODOT_FONT_TITLE),
+                       ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
+
+    // the progress bar: the track over its whole width, the filled share over it
+    const double progress = ase::math::clamp(initialisation_progress(), 0.0, 1.0);
+    const float bar_width = places.size.x * GODOT_PROGRESS_WIDTH_SHARE;
+    const ::godot::Rect2 track(centre_x - bar_width * 0.5f, line_y + GODOT_PROGRESS_GAP, bar_width,
+                               GODOT_PROGRESS_HEIGHT);
+    node_->draw_rect(track, ::godot::Color::hex(GODOT_COLOR_PROGRESS_TRACK));
+    node_->draw_rect(::godot::Rect2(track.position, ::godot::Vector2(bar_width * static_cast<float>(progress),
+                                                                     GODOT_PROGRESS_HEIGHT)),
+                     ::godot::Color::hex(GODOT_COLOR_PROGRESS));
+    const ::godot::String percent = ::godot::String::num(progress * GODOT_PERCENT, 0) + " %";
+    node_->draw_string(font, ::godot::Vector2(places.position.x, track.get_end().y + GODOT_PROGRESS_GAP), percent,
+                       ::godot::HORIZONTAL_ALIGNMENT_CENTER, places.size.x, GODOT_FONT_BODY,
+                       ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
     use_canvas();
 }
 

@@ -68,8 +68,10 @@
  *              godot_vivarium_prune.cpp (the cutting mode), godot_vivarium_bed.cpp (the bed mode and the
  *              ground under the finger), godot_vivarium_flatten.cpp (the flatten mode),
  *              godot_vivarium_draw.cpp (placement and canvas), godot_vivarium_scene.cpp (the 3D scene per
- *              frame), godot_vivarium_debug.cpp (the debug buttons and the time lapse of this host's clock)
- *              and godot_vivarium_measure.cpp (self-test and measurement).
+ *              frame), godot_vivarium_debug.cpp (the debug buttons, the time lapse and the jump of this
+ *              host's clock), godot_vivarium_clock.cpp (the hour length, the rate and the feed of a jump)
+ *              and godot_vivarium_measure.cpp (self-test and measurement). The records of the debug mode
+ *              stand in godot_vivarium_debug.hpp.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -77,8 +79,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-28
- * @version     00.00.06.00008
+ * @modified    2026-11-06
+ * @version     00.00.06.00012
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
@@ -87,8 +89,10 @@
 #include <ase/adp/godot/godot_order_budget.hpp>
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_view_layout.hpp>
+#include <ase/adp/godot/godot_vivarium_debug.hpp>
 #include <ase/adp/godot/types.hpp>
 
+#include <godot_cpp/classes/font_file.hpp>
 #include <godot_cpp/classes/input_event.hpp>
 #include <godot_cpp/classes/node2d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
@@ -142,41 +146,7 @@ struct VivariumModes {
     double          measure_warmup_seconds = 0.0;  // foreground seconds before the recording starts
     double          measure_record_seconds = 0.0;  // foreground seconds recorded
     ::godot::String assets_argument;         // shows every asset of the list beside the game host (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7)
-    ::godot::String debug_argument;          // shows the debug buttons: the time lapse of this host's clock (godot_vivarium_debug.cpp)
-};
-
-/**
- * One button of the debug mode (section "debug" of the start configuration): it asks this host's game
- * clock for a time scale, and when it names a stage the lapse runs until the selected patch reached it.
- */
-struct VivariumDebugButton {
-    ::godot::Rect2  rect;
-    ::godot::String label;
-    double          scale = GODOT_PACE_NONE;    // the time scale the button asks; GODOT_PACE_NONE gives the default back
-    uint8_t         stage = GODOT_STAGE_NONE;   // the stage the lapse runs to on the selected patch; NONE: the lapse only
-};
-
-/**
- * The debug mode: drawn and answered only when the launch names modes.debug.argument. The time lapse is
- * this host's alone - the request goes through the pace port to ase-time of this process and never
- * reaches a server clock; a restart boots a host at its default scale.
- *
- * A LAPSE TO A STAGE RUNS FASTER THAN THE FRAMES: on top of the frame's real time the view hands the host
- * lapse_s and lets it run lapse_steps more ticks in that frame (GodotHostResourceManager::advance). Every
- * tick stays an ordinary tick of the client's own clock - the client computes the years itself, nothing
- * is loaded and no server clock moves.
- */
-struct VivariumDebug {
-    bool            on = false;                 // launched with modes.debug.argument
-    ::godot::Color  fill;                       // face of a debug button (debug.fill), unlike every game button
-    ::godot::Color  text;                       // label and outline of a debug button (debug.text)
-    double          keep_soil_rel = 0.0;        // during a lapse to a stage the patch is watered below this share of its capacity
-    double          lapse_s = 0.0;              // real seconds a frame of a lapse to a stage hands the host beyond its own (debug.lapse_s)
-    uint32_t        lapse_steps = 0u;           // ticks a frame of a lapse to a stage may run beyond catch_up_steps (debug.lapse_steps)
-    std::vector<VivariumDebugButton> buttons;
-    double          scale = GODOT_PACE_NONE;    // the scale asked of the running host, GODOT_PACE_NONE = its default
-    uint8_t         target_stage = GODOT_STAGE_NONE;  // the stage the running lapse ends at, NONE = no end
-    uint32_t        target_place = GODOT_NO_PLACE;    // the place whose patch the lapse watches
+    ::godot::String debug_argument;          // shows the debug buttons: the time lapse and the jump of this host's clock (godot_vivarium_debug.hpp)
 };
 
 /**
@@ -230,6 +200,7 @@ struct VivariumTexts {
     ::godot::String flatten;
     ::godot::String reset;
     ::godot::String separator;   // between the parts of one line, e.g. "área 2 · Broto"
+    ::godot::String loading;     // the line of the start screen while the world is initialised
 };
 
 /**
@@ -302,8 +273,17 @@ private:
     void toggle_flattening();             // the button Aplanar: the flatten mode on or off (03.8)
     void flatten(const ::godot::Vector2& at);  // in the flatten mode: level a disc of the ground under the tap
     [[nodiscard]] bool debug_tap(const ::godot::Vector2& at);  // a tap on a debug button, answered; false: none was hit
-    void ask_pace(const VivariumDebugButton& button);  // the time lapse of the button, its end at a stage
-    void follow_debug();                  // the lapse to a stage: keep the soil watered, end it at the stage
+    void ask_pace(const VivariumDebugButton& button);  // the time lapse of the button: the factor of the base pace
+    void ask_jump(const VivariumDebugJump& jump, uint32_t index);  // the jump of the button to a stage or an hour
+    void ask_shape(const VivariumDebugRelief& relief);  // the relief of the whole ground the button asks (usecase:6018)
+    void follow_debug();                  // the running jump: keep the soil watered, end it at its target
+    void follow_hour_length();            // the game seconds of one game hour and the clock's rate, from two readings
+    void follow_initialisation();         // lifts the start screen once the world stands complete, compiled and rendered
+    [[nodiscard]] uint32_t scene_parts_built() const;  // the parts of the scene that stand, of GODOT_INIT_SCENE_PARTS
+    [[nodiscard]] double initialisation_progress() const;  // the share of the initialisation done, 0..1
+    void draw_start_screen(const ::godot::Rect2& visible);  // the opaque start screen over the whole surface
+    [[nodiscard]] double jump_feed() const;     // real seconds this frame hands the host beyond its own for the running jump
+    void announce_window();               // the client window the view opened in, one log line (usecase:101019 start the client window)
     void announce_patches();
     void follow_stages();
     void follow_water();
@@ -348,7 +328,8 @@ private:
     VivariumLayout           layout_;
     VivariumTexts            texts_;
     VivariumModes            modes_;
-    VivariumDebug            debug_;           // the debug buttons and the running time lapse (modes.debug)
+    VivariumDebug            debug_;           // the debug buttons, the asked factor and the running jump (modes.debug)
+    VivariumHourLength       hour_length_;     // the measured length of a game hour and rate of the clock, read by the jump
     VivariumMeasurement      measurement_;
     ViewSurface              drawn_surface_;   // the surface the last frame was placed on
     ViewPlacement            placement_;       // the layout's placement on that surface
@@ -368,6 +349,7 @@ private:
     std::unordered_map<uint32_t, PlantOrigin> scene_origins_;  // stem base per patch object, last placed
     uint64_t                 scene_organs_ = 0;    // organ generation the plant was last filled from
     uint64_t                 scene_terrain_ = 0;   // terrain generation the ground was last built from
+    uint64_t                 scene_streams_ = 0;   // stream generation the brook water was last laid from (usecase:100399 carry brook water)
     int64_t                  scene_hour_ = -1;     // whole game hour of the day of the last `scene hour` line, -1 before the clock
     uint64_t                 scene_templates_ = 0; // template generation the plant was last filled from (usecase:101011 tessellate the organ templates)
     uint32_t                 scene_focus_ = GODOT_NO_PLACE;  // the place the camera last looked at
@@ -393,6 +375,9 @@ private:
     std::vector<uint8_t>     stages_;          // last logged stage per place
     std::vector<uint8_t>     conditions_;      // last logged condition per place
     bool                     patches_announced_ = false;  // every place's record stood once and got its line
+    bool                     initialised_ = false;        // the world stands complete and rendered: the start screen lifted
+    uint32_t                 init_render_frames_ = 0;     // frames rendered in a row under the start screen with the world complete and no new pipeline
+    uint64_t                 init_pipelines_ = 0;         // pipeline compilations of the rendering server counted in the previous frame
     uint32_t                 selected_place_ = GODOT_NO_PLACE;
     uint32_t                 water_pending_place_ = GODOT_NO_PLACE;  // watered, its arrival not yet seen
     double                   water_pending_from_ = 0.0;              // its soil water when watered, mm

@@ -19,7 +19,7 @@
  * @design      DSGN_066
  * @category    render/pipeline/stage
  * @usecase     usecase:101339 - show the ground around plant
- * @actor       Application Layer Perception Control (ALPCTL)
+ * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-10-26
  * @modified    2026-10-26
  * @version     00.00.01.00000

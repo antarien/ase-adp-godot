@@ -29,6 +29,7 @@
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_asset_showcase_scene.hpp>
 #include <ase/adp/godot/godot_plant_haze.hpp>
+#include <ase/adp/godot/godot_plant_brook.hpp>
 #include <ase/adp/godot/godot_plant_instances.hpp>
 #include <ase/adp/godot/godot_plant_sky.hpp>
 #include <ase/adp/godot/godot_plant_templates.hpp>
@@ -41,6 +42,8 @@
 #include <godot_cpp/classes/directional_light3d.hpp>
 #include <godot_cpp/classes/environment.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
+#include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/multi_mesh.hpp>
@@ -154,11 +157,13 @@ T* add_part(::godot::Node3D* scene, const char* name) {
  * Puts the 3x4 records of `rows` - twelve values each, as the instance port carried them - on the
  * MultiMesh of `node`, each drawing `shape`; `material` overrides its surfaces, an empty one leaves the
  * template's own. With `custom`, every instance carries its GODOT_INSTANCE_CUSTOM_VALUES after its twelve
- * values (INSTANCE_CUSTOM in the shader: the bark share of an internode). No node, nothing.
+ * values (INSTANCE_CUSTOM in the shader: the bark share of an internode). With `sway`, the node gets a material of
+ * its own, made from `material`, that carries the sway of its instances as a data texture (usecase:101335 animate
+ * the branch sway): the texture belongs to this node, so one material cannot serve two nodes. No node, nothing.
  */
 void fill_instances(::godot::MultiMeshInstance3D* node, const ::godot::Ref<::godot::Mesh>& shape,
                     const std::vector<float>& rows, const std::vector<float>* custom,
-                    const ::godot::Ref<::godot::Material>& material) {
+                    const ::godot::Ref<::godot::Material>& material, const std::vector<float>* sway) {
     if (node == nullptr) {
         return;
     }
@@ -184,7 +189,32 @@ void fill_instances(::godot::MultiMeshInstance3D* node, const ::godot::Ref<::god
     }
     multimesh->set_buffer(buffer);
     node->set_multimesh(multimesh);
-    node->set_material_override(material);
+    if (sway == nullptr || count == 0u) {
+        node->set_material_override(material);
+        return;
+    }
+    const ::godot::Ref<::godot::ShaderMaterial> shared = material;
+    if (shared.is_null()) {
+        node->set_material_override(material);
+        return;
+    }
+    // full rows of GODOT_SWAY_ROW_INSTANCES instances; the rest of the last row stays at zero and is never read
+    const std::size_t per_row = GODOT_SWAY_ROW_INSTANCES;
+    const std::size_t texture_rows = (count + per_row - 1u) / per_row;
+    const std::size_t row_values = per_row * GODOT_SWAY_VALUES;
+    ::godot::PackedFloat32Array texels;
+    texels.resize(static_cast<int64_t>(texture_rows * row_values));
+    texels.fill(static_cast<float>(GODOT_SWAY_NONE));
+    for (std::size_t v = 0u; v < count * GODOT_SWAY_VALUES; ++v) {
+        texels.set(static_cast<int64_t>(v), (*sway)[v]);
+    }
+    const ::godot::Ref<::godot::Image> image = ::godot::Image::create_from_data(
+        static_cast<int32_t>(per_row * GODOT_SWAY_TEXELS), static_cast<int32_t>(texture_rows), false,
+        ::godot::Image::FORMAT_RGBAF, texels.to_byte_array());
+    const ::godot::Ref<::godot::ShaderMaterial> own = shared->duplicate();
+    own->set_shader_parameter(GODOT_SWAY_DATA, ::godot::ImageTexture::create_from_image(image));
+    own->set_shader_parameter(GODOT_SWAY_ROW, static_cast<int32_t>(GODOT_SWAY_ROW_INSTANCES));
+    node->set_material_override(own);
 }
 
 /** The name of the node a plant stands as: GODOT_PLANT_BODY_PREFIX and the object id of its patch. */
@@ -243,6 +273,7 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
     world->set_camera_attributes(exposure);
 
     (void)add_part<::godot::MeshInstance3D>(scene, GODOT_PLANT_GROUND);
+    build_plant_water(scene);
     (void)add_part<::godot::Node3D>(scene, GODOT_PLANT_BODIES);
     (void)add_part<::godot::MultiMeshInstance3D>(scene, GODOT_PLANT_SEEDS);
     build_plant_sky(scene);
@@ -320,24 +351,29 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
         const double split = c == GODOT_ORGAN_SEGMENT ? static_cast<double>(shown_orders) : GODOT_ORDER_EVERY;
         rows[c] = rows_by_body(resources.get_instances(c), resources.get_organs(c), split);
     }
-    // the internodes carry their bark share as custom data, the other classes none
+    // the internodes carry their bark share as custom data, every class its sway as a data texture
     struct Bundle {
         const char* node;
         uint32_t organ_class;
         std::vector<float> PlantBodyRows::*half;
         std::vector<float> PlantBodyRows::*custom;
+        std::vector<float> PlantBodyRows::*sway;
         const ::godot::Ref<::godot::Mesh>* shape;
         const ::godot::Ref<::godot::Material>* material;
     };
     const Bundle bundles[] = {
-        {GODOT_PLANT_TUBES, GODOT_ORGAN_SEGMENT, &PlantBodyRows::up_to, &PlantBodyRows::up_to_custom, &fine,
-         &look.bark},
-        {GODOT_PLANT_TWIGS, GODOT_ORGAN_SEGMENT, &PlantBodyRows::above, &PlantBodyRows::above_custom, &coarse,
-         &look.bark},
-        {GODOT_PLANT_LEAVES, GODOT_ORGAN_LEAF, &PlantBodyRows::above, nullptr, &leaf, &look.leaf.material},
-        {GODOT_PLANT_MALE, GODOT_ORGAN_MALE, &PlantBodyRows::above, nullptr, &male, &look.male.material},
-        {GODOT_PLANT_FEMALE, GODOT_ORGAN_FEMALE, &PlantBodyRows::above, nullptr, &female, &look.female.material},
-        {GODOT_PLANT_FRUIT, GODOT_ORGAN_FRUIT, &PlantBodyRows::above, nullptr, &fruit, &look.fruit.material},
+        {GODOT_PLANT_TUBES, GODOT_ORGAN_SEGMENT, &PlantBodyRows::up_to, &PlantBodyRows::up_to_custom,
+         &PlantBodyRows::up_to_sway, &fine, &look.bark},
+        {GODOT_PLANT_TWIGS, GODOT_ORGAN_SEGMENT, &PlantBodyRows::above, &PlantBodyRows::above_custom,
+         &PlantBodyRows::above_sway, &coarse, &look.bark},
+        {GODOT_PLANT_LEAVES, GODOT_ORGAN_LEAF, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &leaf,
+         &look.leaf.material},
+        {GODOT_PLANT_MALE, GODOT_ORGAN_MALE, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &male,
+         &look.male.material},
+        {GODOT_PLANT_FEMALE, GODOT_ORGAN_FEMALE, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &female,
+         &look.female.material},
+        {GODOT_PLANT_FRUIT, GODOT_ORGAN_FRUIT, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &fruit,
+         &look.fruit.material},
     };
 
     // every plant at the stem base of its body, its records as the ports carried them
@@ -350,7 +386,7 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
             const PlantBodyRows& body_rows = found == rows[bundle.organ_class].end() ? none : found->second;
             const std::vector<float>* custom = bundle.custom == nullptr ? nullptr : &(body_rows.*bundle.custom);
             fill_instances(part_of<::godot::MultiMeshInstance3D>(plant, bundle.node), *bundle.shape,
-                           body_rows.*bundle.half, custom, *bundle.material);
+                           body_rows.*bundle.half, custom, *bundle.material, &(body_rows.*bundle.sway));
         }
     }
 }
@@ -405,7 +441,7 @@ void fill_plant_seeds(::godot::Node3D* scene, const GodotHostResourceManager& re
             rows.push_back(at[r]);
         }
     }
-    fill_instances(node, shape, rows, nullptr, look.nutlet.material);
+    fill_instances(node, shape, rows, nullptr, look.nutlet.material, nullptr);
 }
 
 void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky) {
@@ -440,6 +476,7 @@ void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky) {
                                                     static_cast<float>(sky.fog_b)));
     environment->set_fog_depth_begin(static_cast<float>(sky.fog_near));
     environment->set_fog_depth_end(static_cast<float>(sky.fog_far));
+    environment->set_fog_sky_affect(GODOT_FOG_SKY_AFFECT);
     // the shimmer of hot air ase-atmosphere computes, carried in the fog record (usecase:101515)
     veil_plant_scene(scene, sky);
     const ::godot::Ref<::godot::CameraAttributes> exposure = world->get_camera_attributes();

@@ -163,6 +163,25 @@ TEST_CASE("03.11: the sky port lights the scene - a unit sun direction, colours 
         CHECK(moon.intensity >= 0.0);
         CHECK(moon.intensity <= 1.0);
     }
+
+    // once known, the sky stays known while bodies rise: a publication with two moons, a comet, a planet, a
+    // companion, the halves of Aurora, a belt and a shower is still one sky, each kind within its own maximum
+    constexpr uint32_t kHoldFrames = 64u;
+    uint32_t dark_frames = 0u;
+    uint32_t most_bodies = 0u;
+    for (uint32_t frame = 0u; frame < kHoldFrames; ++frame) {
+        advance_frames(resources, 1u);
+        const VivariumSkyView& held = resources.get_sky();
+        if (!held.known) {
+            dark_frames += 1u;
+            continue;
+        }
+        const uint32_t bodies = held.moons + held.comets + held.planets + held.companions + held.fragments +
+                                held.belts + held.showers;
+        most_bodies = bodies > most_bodies ? bodies : most_bodies;
+    }
+    MESSAGE("most bodies in one sky publication: " << most_bodies);
+    CHECK(dark_frames == 0u);
 }
 
 TEST_CASE("03.11: the ground reaches the view - unit normals on every sample, cells whose corners stand on the terrain port") {

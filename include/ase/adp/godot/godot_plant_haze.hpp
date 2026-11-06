@@ -20,7 +20,7 @@
  * @design      DSGN_130
  * @category    render/pipeline/stage
  * @usecase     usecase:101515 - veil sight with weather
- * @actor       Fog of War (FOW)
+ * @actor       Weather Veil Controller (WEATVEICON)
  * @created     2026-10-28
  * @modified    2026-10-28
  * @version     00.00.01.00000

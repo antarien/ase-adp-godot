@@ -3,6 +3,7 @@
  *
  * @file        godot_vivarium_node.cpp
  * @brief       VivariumView - lifecycle, host boot, the frame and the one log stream of the Vivarium frontend
+ * @design      DSGN_066
  * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.3/01.4. The view reads its configuration as data
  *              (res://config/vivarium_start.json), boots one embedded host through
  *              GodotHostResourceManager from the bundle Godot loaded this library from - the whole
@@ -39,8 +40,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-10-26
- * @version     00.00.04.00011
+ * @modified    2026-11-06
+ * @version     00.00.04.00013
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -95,6 +96,8 @@ void VivariumView::ready() {
         node_->set_process(false);
         return;
     }
+    // usecase:101019 start the client window: name the window the view opened in before anything draws into it
+    announce_window();
     configured_ = load_config();
     if (configured_) {
         // PLAN 02.3: the self-test runs on one test host of its own BEFORE the game host exists, and
@@ -152,6 +155,11 @@ void VivariumView::boot_host() {
     player_flats_.clear();  // and only the ground it lays
     // The first frame after a boot starts the clock: the time the boot took is no simulation time.
     last_frame_ns_ = 0;
+    // Every boot starts without a jump and measures the game hour and the clock rate anew - the first one
+    // and every Reiniciar, whose new seed starts as a seed again; a jump runs only when its debug button asks.
+    debug_.jump = VivariumJump{};
+    hour_length_ = VivariumHourLength{};
+    init_pipelines_ = 0u;
     garden_return_ = GardenReturn{};
     // sow a new seed (03.1 point 2, V7): the first boot sows the seeds of the start configuration, every
     // Reiniciar a new seed per patch (godot_new_seed.hpp) - a new birch of the same species in another shape.
@@ -183,6 +191,9 @@ void VivariumView::boot_host() {
     stages_.assign(layout_.place_rects.size(), GODOT_CODE_UNKNOWN);
     conditions_.assign(layout_.place_rects.size(), GODOT_CODE_UNKNOWN);
     patches_announced_ = false;
+    // Every boot, a Reiniciar too, initialises the world anew under the start screen.
+    initialised_ = false;
+    init_render_frames_ = 0u;
     note(boot_line());
     // V7: every patch names the seed it was sown with, so a Reiniciar shows its new seed in the log.
     for (const VivariumPatchSpec& patch : sown.patches) {
@@ -225,10 +236,9 @@ void VivariumView::restart() {
     // pending pour and drawing values of the old run go with it.
     note("restart " + measure(GODOT_NO_PLACE));
     resources_.clear_all();
-    // The new host boots at the default scale of its clock: a running time lapse ends with the old one.
-    debug_.scale = GODOT_PACE_NONE;
-    debug_.target_stage = GODOT_STAGE_NONE;
-    debug_.target_place = GODOT_NO_PLACE;
+    // The new host boots at the default pace of its clock: a time lapse and a jump end with the old one.
+    debug_.factor = GODOT_PACE_NONE;
+    debug_.jump = VivariumJump{};
     drain_log();
     if (!configured_) {
         configured_ = load_config();
@@ -318,12 +328,10 @@ void VivariumView::process(double delta) {
     const double elapsed_s =
         static_cast<double>(frame_ns - last_frame_ns_) / static_cast<double>(ase::utils::NANOS_PER_SECOND);
     last_frame_ns_ = frame_ns;
-    // A lapse to a stage hands the host more time than the frame took and lets it run more ticks
-    // (godot_vivarium_debug.cpp) - topped up only while the backlog holds less than one feed, so a
-    // frame that could not run all of it never piles up more than the next one runs.
-    const bool lapsing = debug_.target_stage != GODOT_STAGE_NONE;
-    const double lapse_s = lapsing && resources_.backlog_seconds() < debug_.lapse_s ? debug_.lapse_s : 0.0;
-    const uint32_t lapse_steps = lapsing ? debug_.lapse_steps : 0u;
+    // A jump hands the host more time than the frame took and lets it run more ticks (jump_feed,
+    // godot_vivarium_clock.cpp) - every one an ordinary tick at the running pace, which the jump never touches.
+    const double lapse_s = jump_feed();
+    const uint32_t lapse_steps = debug_.jump.running ? debug_.lapse_steps : 0u;
     // Host time (advance + snapshots) is measured apart from the whole _process interval (PLAN 02.3).
     const HostStatus status = resources_.advance(elapsed_s, lapse_s, lapse_steps);
     const uint64_t host_usec = clock->get_ticks_usec() - frame_start_usec;
@@ -332,8 +340,10 @@ void VivariumView::process(double delta) {
         follow_catch_up(elapsed_s, static_cast<double>(frame_ns) / static_cast<double>(ase::utils::NANOS_PER_SECOND));
         follow_stages();
         follow_debug();
+        follow_hour_length();
         follow_water();
         follow_scene(elapsed_s);
+        follow_initialisation();
         // The asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7) is lit by the sun of the host's
         // sky port; until the port carried all four records the showcase keeps its light unset.
         const VivariumSkyView& sky = resources_.get_sky();

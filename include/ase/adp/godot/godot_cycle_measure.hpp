@@ -28,7 +28,7 @@
  * @design      DSGN_024
  * @category    process/validation/check
  * @usecase     usecase:6540 - generate plant organs
- * @actor       Procedural Phyllotaxis Generation (PPG)
+ * @actor       Organ Arrangement Generator (ORGAARRGEN)
  * @created     2026-10-10
  * @modified    2026-10-10
  * @version     00.00.01.00001

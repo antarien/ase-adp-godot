@@ -248,6 +248,7 @@ bool VivariumView::load_texts(const ::godot::Dictionary& root) {
         {"restart_note", &texts_.restart_note},
         {"error", &texts_.error},
         {"separator", &texts_.separator},
+        {"loading", &texts_.loading},
     };
     for (const auto& entry : wanted) {
         if (!read_text(texts, entry.key, *entry.out)) {

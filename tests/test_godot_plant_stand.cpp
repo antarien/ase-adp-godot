@@ -12,7 +12,7 @@
  * @layer       5 (Adapter)
  * @category    process/validation/check
  * @usecase     usecase:101340 - show the bed condition
- * @actor       Application Layer Perception Control (ALPCTL)
+ * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-10-26
  * @modified    2026-10-26
  * @version     00.00.01.00000

@@ -26,6 +26,7 @@
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/godot_plant_geometry.hpp>
 #include <ase/adp/godot/godot_plant_scene.hpp>
+#include <ase/adp/godot/godot_plant_brook.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
 
@@ -65,7 +66,22 @@ bool same_origins(const std::unordered_map<uint32_t, PlantOrigin>& now,
  */
 ::godot::String scene_counts(const GodotHostResourceManager& resources) {
     const VivariumSkyView& sky = resources.get_sky();
+    // the relief the ground is drawn from: lowest and highest sample and the steepest normal; a flat
+    // field (every height equal, every normal straight up) shows here before it shows in the picture
+    double low = 0.0;
+    double high = 0.0;
+    double flattest = 1.0;
+    bool first = true;
+    for (const VivariumTerrainView& sample : resources.get_terrain()) {
+        low = first || sample.height < low ? sample.height : low;
+        high = first || sample.height > high ? sample.height : high;
+        flattest = sample.ny < flattest ? sample.ny : flattest;
+        first = false;
+    }
     return "ground_samples=" + ::godot::String::num_uint64(resources.get_terrain().size()) +
+           " ground_low=" + ::godot::String::num(low, GODOT_LOG_DECIMALS) +
+           " ground_high=" + ::godot::String::num(high, GODOT_LOG_DECIMALS) +
+           " ground_min_ny=" + ::godot::String::num(flattest, GODOT_LOG_DECIMALS) +
            " ground_cells=" + ::godot::String::num_uint64(resources.get_ground_cells().size()) +
            " segments=" + ::godot::String::num_uint64(resources.get_organs(GODOT_ORGAN_SEGMENT).size()) +
            " leaves=" + ::godot::String::num_uint64(resources.get_organs(GODOT_ORGAN_LEAF).size()) +
@@ -79,7 +95,10 @@ bool same_origins(const std::unordered_map<uint32_t, PlantOrigin>& now,
            ::godot::String::num(sky.sun_g, GODOT_LOG_DECIMALS) + "/" + ::godot::String::num(sky.sun_b, GODOT_LOG_DECIMALS) +
            " sky_rgb=" + ::godot::String::num(sky.background_r, GODOT_LOG_DECIMALS) + "/" +
            ::godot::String::num(sky.background_g, GODOT_LOG_DECIMALS) + "/" +
-           ::godot::String::num(sky.background_b, GODOT_LOG_DECIMALS);
+           ::godot::String::num(sky.background_b, GODOT_LOG_DECIMALS) +
+           // the star records of the sky port, the instances of the starfield (stand_starfield): a night
+           // picture without stars says by this count whether the port carried none or the picture hid them
+           " stars=" + ::godot::String::num_uint64(sky.stars);
 }
 
 }  // namespace
@@ -96,6 +115,16 @@ void VivariumView::follow_scene(double elapsed_s) {
         fill_ground();
         // an event: the terrain port changed (a levelling, a carved bed), never once per frame
         note("scene ground " + scene_counts(resources_) + " " + measure(GODOT_NO_PLACE));
+    }
+    // the water table at NN0 (usecase:100399 carry brook water): laid anew when ase-hydro changed a stream or
+    // the ground under the table moved, never once per frame
+    const uint64_t streams = resources_.stream_generation();
+    if (ground_moved || streams != scene_streams_) {
+        scene_streams_ = streams;
+        const uint32_t wet = fill_plant_water(scene_, resources_.get_streams(), resources_.get_terrain(),
+                                              resources_.get_ground_cells());
+        note("scene water cells " + ::godot::String::num_int64(static_cast<int64_t>(wet)) + " brooks " +
+             ::godot::String::num_int64(static_cast<int64_t>(resources_.get_streams().size())));
     }
     // an event of the clock: a new game hour of the day. The ground and organ lines come with a rebuild
     // only, so without this line the scene of noon and of the night stood in no line at all (run

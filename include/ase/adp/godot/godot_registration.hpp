@@ -28,7 +28,7 @@
  * @design      DSGN_016
  * @category    ecs/module
  * @usecase     usecase:100364 - host the engine embedded
- * @actor       Entity Component System (ECS)
+ * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
  * @modified    2026-10-12
  * @version     00.00.01.00002

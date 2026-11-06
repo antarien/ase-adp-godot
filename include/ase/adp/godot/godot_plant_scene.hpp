@@ -63,6 +63,12 @@
 
 namespace ase::adp::godot {
 
+// THE FOG VEILS THE GROUND, NEVER THE SKY: Godot lays its depth fog over the background with the factor
+// fog_sky_affect, 1 by default, and the background stands at infinite depth - the whole sky turned the fog
+// colour, and the sky colour ase-pl-sky computes (the background record) never reached the screen. It stands
+// here and not in types.hpp, which nearly every unit of the adapter includes.
+constexpr float GODOT_FOG_SKY_AFFECT = 0.0f;  // share of the depth fog laid over the sky background: none
+
 /**
  * Builds the scene under `parent` and returns its root (GODOT_PLANT_SCENE_ROOT): the current camera, the
  * environment, the empty ground, the empty node the plants stand under (GODOT_PLANT_BODIES), the moon light
@@ -122,7 +128,8 @@ void fill_plant_seeds(::godot::Node3D* scene, const GodotHostResourceManager& re
 /**
  * Sets the sun (with shadows), the moon light, the sky colour behind the scene, the ambient light and the
  * fog from the sky port, and stands the discs of sun and moon in the sky along their directions
- * (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11: sun, moon and the day cycle). The moon light and its disc stand
+ * (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11: sun, moon and the day cycle). The fog veils the ground only
+ * (GODOT_FOG_SKY_AFFECT): the sky shows the background record, and the stars stand before it. The moon light and its disc stand
  * only while the port carries a moon record; the sun disc only while the sun is above the horizon plane.
  */
 void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky);

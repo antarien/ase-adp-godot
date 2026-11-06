@@ -14,7 +14,7 @@
  * @layer       5 (Adapter)
  * @category    ecs/module
  * @usecase     usecase:100364 - host the engine embedded
- * @actor       Entity Component System (ECS)
+ * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
  * @modified    2026-10-26
  * @version     00.00.01.00003
@@ -101,6 +101,18 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.tile");
     }
     start_.tile_port = utf8_of(text);
+    // The sway of the organs on a branch (usecase:101335 animate the branch sway): ase-phytomer computed it, the view
+    // swings the instances by it in their shaders and computes none of its values.
+    if (!read_text(ports, "sway", text)) {
+        return fail_config("ports.sway");
+    }
+    start_.sway_port = utf8_of(text);
+    // The water of the brooks (usecase:100399 carry brook water): ase-hydro computed it, the view lays it into the
+    // bed and computes none of its values.
+    if (!read_text(ports, "stream", text)) {
+        return fail_config("ports.stream");
+    }
+    start_.stream_port = utf8_of(text);
     // The level requests of the player (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8 point 2): a port of their
     // own, the patch port takes only pours.
     if (!read_text(ports, "level", text)) {
@@ -118,6 +130,18 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.pace");
     }
     start_.pace_port = utf8_of(text);
+    // The seek requests of the debug mode (this host's clock moved to a computed moment): a port of
+    // their own beside the time lapse, they name no object.
+    if (!read_text(ports, "seek", text)) {
+        return fail_config("ports.seek");
+    }
+    start_.seek_port = utf8_of(text);
+    // The relief of the ground (the height amplitude and the ground level of the whole terrain): a port
+    // of its own, it names no object.
+    if (!read_text(ports, "elevation", text)) {
+        return fail_config("ports.elevation");
+    }
+    start_.elevation_port = utf8_of(text);
     // The place of the view's camera (03.11 point 7, the level of detail): a port of its own, it names no
     // object.
     if (!read_text(ports, "view", text)) {
@@ -164,6 +188,14 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("operations.pace");
     }
     start_.op_pace = utf8_of(text);
+    if (!read_text(operations, "seek", text)) {
+        return fail_config("operations.seek");
+    }
+    start_.op_seek = utf8_of(text);
+    if (!read_text(operations, "shape", text)) {
+        return fail_config("operations.shape");
+    }
+    start_.op_shape = utf8_of(text);
     if (!read_text(operations, "view", text)) {
         return fail_config("operations.view");
     }
@@ -280,6 +312,16 @@ bool VivariumView::load_ground(const ::godot::Dictionary& root) {
     }
     if (!read_number(ground, "step_m", start_.ground.step_m) || !(start_.ground.step_m > 0.0)) {
         return fail_config("ground.step_m");
+    }
+    // THE RELIEF OF THE WHOLE GROUND: the height amplitude and the ground level ase-terrain derives every
+    // height from. Their spans are ase-pl-flora's to check; here only that both are finite numbers.
+    if (!read_number(ground, "height_scale_m", start_.ground.height_scale_m) ||
+        !std::isfinite(start_.ground.height_scale_m)) {
+        return fail_config("ground.height_scale_m");
+    }
+    if (!read_number(ground, "base_height_m", start_.ground.base_height_m) ||
+        !std::isfinite(start_.ground.base_height_m)) {
+        return fail_config("ground.base_height_m");
     }
     return true;
 }

@@ -48,6 +48,13 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
     return found == roles.end() ? std::string() : found->second;
 }
 
+/** The code of a shader with the swing of a branch set into its two slots (usecase:101335 animate the branch sway). */
+::godot::String swaying_code(const char* code) {
+    return ::godot::String(code)
+        .replace(GODOT_SWAY_SLOT_UNIFORMS, GODOT_SWAY_SHADER_UNIFORMS)
+        .replace(GODOT_SWAY_SLOT_SWING, GODOT_SWAY_SHADER_SWING);
+}
+
 /**
  * The stand-in material of a name whose file is missing (operator order of 2026-10-23): a ShaderMaterial of
  * GODOT_STAND_IN_SHADER_CODE in the colour the asset list gives the name. The ground darkens with the soil
@@ -57,7 +64,7 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
 ::godot::Ref<::godot::Material> stand_in_of(const VivariumAssetBinding& binding, const std::string& name) {
     ::godot::Ref<::godot::Shader> shader;
     shader.instantiate();
-    shader->set_code(GODOT_STAND_IN_SHADER_CODE);
+    shader->set_code(swaying_code(GODOT_STAND_IN_SHADER_CODE));
     ::godot::Ref<::godot::ShaderMaterial> material;
     material.instantiate();
     material->set_shader(shader);
@@ -86,8 +93,41 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
 }
 
 /**
- * An organ template role: the mesh of its file; while the file is missing no mesh and the stand-in material,
- * a file that does not load no mesh and the error material of the loader.
+ * The material a bound template swings in (usecase:101335 animate the branch sway): a ShaderMaterial of
+ * GODOT_ORGAN_SHADER_CODE that takes what the BaseMaterial3D of its one surface carries. Empty for a template of
+ * several surfaces or a material of another form: such a template draws its own surfaces and stands still.
+ */
+::godot::Ref<::godot::Material> swaying_organ_of(const ::godot::Ref<::godot::Mesh>& shape) {
+    if (shape->get_surface_count() != GODOT_ORGAN_SWAY_SURFACES) {
+        return ::godot::Ref<::godot::Material>();
+    }
+    const ::godot::Ref<::godot::BaseMaterial3D> pbr = shape->surface_get_material(0);
+    if (pbr.is_null()) {
+        return ::godot::Ref<::godot::Material>();
+    }
+    ::godot::Ref<::godot::Shader> shader;
+    shader.instantiate();
+    shader->set_code(swaying_code(GODOT_ORGAN_SHADER_CODE));
+    ::godot::Ref<::godot::ShaderMaterial> organ;
+    organ.instantiate();
+    organ->set_shader(shader);
+    organ->set_shader_parameter(GODOT_ORGAN_COLOR, pbr->get_albedo());
+    organ->set_shader_parameter(GODOT_ORGAN_ALBEDO, pbr->get_texture(::godot::BaseMaterial3D::TEXTURE_ALBEDO));
+    organ->set_shader_parameter(GODOT_ORGAN_NORMAL, pbr->get_texture(::godot::BaseMaterial3D::TEXTURE_NORMAL));
+    organ->set_shader_parameter(GODOT_ORGAN_ROUGH, pbr->get_texture(::godot::BaseMaterial3D::TEXTURE_ROUGHNESS));
+    organ->set_shader_parameter(GODOT_ORGAN_LIGHT, pbr->get_texture(::godot::BaseMaterial3D::TEXTURE_BACKLIGHT));
+    organ->set_shader_parameter(GODOT_ORGAN_ROUGHNESS, pbr->get_roughness());
+    const ::godot::Vector3 uv = pbr->get_uv1_scale();
+    organ->set_shader_parameter(GODOT_ORGAN_UV, ::godot::Vector2(uv.x, uv.y));
+    if (pbr->get_transparency() == ::godot::BaseMaterial3D::TRANSPARENCY_ALPHA_SCISSOR) {
+        organ->set_shader_parameter(GODOT_ORGAN_CUT, pbr->get_alpha_scissor_threshold());
+    }
+    return organ;
+}
+
+/**
+ * An organ template role: the mesh of its file in the material it swings in; while the file is missing no mesh and
+ * the stand-in material, a file that does not load no mesh and the error material of the loader.
  */
 PlantSceneTemplate template_of(const VivariumAssetBinding& binding, const ::godot::String& asset_root,
                                const std::string& name) {
@@ -96,7 +136,9 @@ PlantSceneTemplate template_of(const VivariumAssetBinding& binding, const ::godo
     if (role.shape.is_null()) {
         role.material = binding.files.count(name) == 0u ? stand_in_of(binding, name)
                                                         : ::godot::Ref<::godot::Material>(error_material(binding, name));
+        return role;
     }
+    role.material = swaying_organ_of(role.shape);
     return role;
 }
 
@@ -113,7 +155,7 @@ PlantSceneTemplate template_of(const VivariumAssetBinding& binding, const ::godo
                                             const ::godot::Ref<::godot::Material>& base) {
     ::godot::Ref<::godot::Shader> shader;
     shader.instantiate();
-    shader->set_code(GODOT_BARK_SHADER_CODE);
+    shader->set_code(swaying_code(GODOT_BARK_SHADER_CODE));
     ::godot::Ref<::godot::ShaderMaterial> mix;
     mix.instantiate();
     mix->set_shader(shader);

@@ -45,7 +45,7 @@ namespace ase::adp::godot {
 /** One organ template role: the mesh its file carries and the material it is drawn with. */
 struct PlantSceneTemplate {
     ::godot::Ref<::godot::Mesh> shape;         // the bound template; empty while its file is missing - the port template stands in
-    ::godot::Ref<::godot::Material> material;  // empty for a bound template, which draws its own surfaces; else the error material
+    ::godot::Ref<::godot::Material> material;  // the organ material of a bound template (usecase:101335), empty when it draws its own surfaces; else the stand-in or error material
 };
 
 /**

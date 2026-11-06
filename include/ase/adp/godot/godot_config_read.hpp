@@ -17,7 +17,7 @@
  * @layer       5 (Adapter)
  * @category    ecs/module
  * @usecase     usecase:100360 - parse a json document
- * @actor       Entity Component System (ECS)
+ * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
  * @modified    2026-10-18
  * @version     00.00.01.00001

@@ -88,10 +88,16 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.seed_port = "flora.seed.v1";
     // The bark tiling of the internodes (03.11 step 2): boot() asks the set for this port as well.
     config.tile_port = "flora.tile.v1";
+    // The sway of the internodes (usecase:101335): boot() asks the set for this port as well.
+    config.sway_port = "flora.sway.v1";
+    // The water of the brooks (usecase:100399): boot() asks the set for this port as well.
+    config.stream_port = "flora.stream.v1";
     // The level requests of the player (03.8 point 2): boot() asks the set for this port as well.
     config.level_port = "flora.level.v1";
     // The flatten requests of the player at a place (03.8): boot() asks the set for this port as well.
     config.flatten_port = "flora.flatten.v1";
+    // The relief of the ground: boot() shapes it on this port before the first patch is laid.
+    config.elevation_port = "flora.elevation.v1";
     // The place of the view's camera (03.11 point 7, the level of detail): view() submits on this port.
     config.view_port = "flora.view.v1";
     // The organ templates of ase-render-data (usecase:101011 tessellate the organ templates): both ports as well.
@@ -115,6 +121,7 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.op_prune = "prune";
     config.op_level = "level";
     config.op_flatten = "flatten";
+    config.op_shape = "shape";
     config.op_view = "view";
     config.op_lay = "lay";
     config.irrigate_amount_mm = 25.0;
@@ -125,6 +132,9 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.ground.z = 16.0;
     config.ground.half_m = 12.0;
     config.ground.step_m = 0.5;
+    // The relief of the client's start configuration (config/vivarium_start.json, "ground"): a floodplain.
+    config.ground.height_scale_m = 0.9;
+    config.ground.base_height_m = 0.35;
     // Four patches on the places 0 to 3, the set every case finds by place; place 3 on the forest floor,
     // so the ground travels through the port both ways. Each lies in the world - a lay request without a
     // centre and a positive half edge is refused by ase-pl-flora and places nothing

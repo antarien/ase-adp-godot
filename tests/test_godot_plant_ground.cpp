@@ -15,18 +15,21 @@
  * @layer       5 (Adapter)
  * @category    process/validation/check
  * @usecase     usecase:101339 - show the ground around plant
- * @actor       Application Layer Perception Control (ALPCTL)
+ * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-10-25
- * @modified    2026-10-26
- * @version     00.00.01.00001
+ * @modified    2026-11-05
+ * @version     00.00.01.00002
  */
 
 #include <doctest/doctest.h>
 
 #include <ase/adp/godot/godot_plant_ground.hpp>
+#include <ase/adp/godot/godot_terrain_samples.hpp>
 #include <ase/adp/godot/types.hpp>
+#include <ase/kernel/kernel_host_port.hpp>
 #include <ase/math/math.hpp>
 #include <ase/math/scalar.hpp>
+#include <ase/utils/strops.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -169,6 +172,50 @@ TEST_CASE("03.8: the ground shader takes slope, marks and grid from its uniforms
     CHECK(GODOT_GROUND_SLOPE_STEEP_SHARE ==
           doctest::Approx(1.0f - ase::math::cos(GODOT_GROUND_SLOPE_STEEP_DEG * radians_per_degree)).epsilon(0.001));
     CHECK(GODOT_GROUND_SLOPE_BANK_SHARE < GODOT_GROUND_SLOPE_STEEP_SHARE);
+}
+
+TEST_CASE("03.11: a terrain record with all nine keys is one sample, a record with a gap is none") {
+    // usecase:100971 - lay out terrain samples: the record as FloraHostTernExptSystem lays it
+    ase::kernel::KernelHostRecord record;
+    record.object_id = 42u;
+    const auto put = [&record](const char* key, double value) {
+        ase::kernel::KernelHostValue& slot = record.values[record.value_count++];
+        ase::utils::str_copy(slot.key, ase::kernel::HostKeyBytes, key);
+        slot.value = value;
+    };
+    put(GODOT_KEY_BODY, 7.0);
+    put(GODOT_KEY_X, 12.5);
+    put(GODOT_KEY_Z, -3.0);
+    put(GODOT_KEY_HEIGHT, 5.25);
+    put(GODOT_KEY_NX, 0.1);
+    put(GODOT_KEY_NY, 0.99);
+    put(GODOT_KEY_NZ, -0.05);
+    put(GODOT_KEY_U, 12.5);
+    put(GODOT_KEY_V, -3.0);
+    VivariumTerrainView view;
+    REQUIRE(terrain_view_of(record, view));
+    CHECK(view.object_id == 42u);
+    CHECK(view.body == 7u);
+    CHECK(view.x == doctest::Approx(12.5));
+    CHECK(view.z == doctest::Approx(-3.0));
+    CHECK(view.height == doctest::Approx(5.25));
+    CHECK(view.nx == doctest::Approx(0.1));
+    CHECK(view.ny == doctest::Approx(0.99));
+    CHECK(view.nz == doctest::Approx(-0.05));
+    CHECK(view.u == doctest::Approx(12.5));
+    CHECK(view.v == doctest::Approx(-3.0));
+
+    // a missing key is a broken port, never ground at height zero
+    ase::kernel::KernelHostRecord gap = record;
+    gap.value_count -= 1u;  // drops the texture coordinate v
+    CHECK_FALSE(terrain_view_of(gap, view));
+
+    // the body names a patch: a fraction or a negative number names none
+    ase::kernel::KernelHostRecord split = record;
+    split.values[0].value = 7.5;
+    CHECK_FALSE(terrain_view_of(split, view));
+    split.values[0].value = -1.0;
+    CHECK_FALSE(terrain_view_of(split, view));
 }
 
 }  // namespace ase::adp::godot

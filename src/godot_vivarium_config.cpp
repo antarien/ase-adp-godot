@@ -24,10 +24,10 @@
  * @design      DSGN_016
  * @category    ecs/module
  * @usecase     usecase:100364 - host the engine embedded
- * @actor       Entity Component System (ECS)
+ * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-10-26
- * @version     00.00.01.00003
+ * @modified    2026-11-06
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
