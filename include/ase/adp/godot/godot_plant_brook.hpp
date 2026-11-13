@@ -5,9 +5,10 @@
  *
  * @file        godot_plant_brook.hpp
  * @brief       The node of the water in the care view's 3D scene and its fill
- * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3: the water stands at NN0. build_water_table
- *              (godot_plant_water.hpp) lays the one plane over every ground cell below the table; the stream
- *              port (FloraHostStrmExptSystem) marks where the plane flows. This file hangs it into the scene
+ * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3, B0281: the water stands where ase-hydro puts it.
+ *              build_water_table (godot_plant_water.hpp) lays the plane in the bed of every brook at its bed
+ *              plus the depth ase-hydro gives it; the stream port (FloraHostStrmExptSystem) carries depth,
+ *              velocity and course. This file hangs it into the scene
  *              in a ShaderMaterial of GODOT_WATER_SHADER_FILE. Nothing of the water is computed here.
  *              THE COLOUR OF THE WATER: the material sets the two colour uniforms of the shader to the
  *              green of a lowland brook (algae and fine silt), so the water reads green under a grey or a

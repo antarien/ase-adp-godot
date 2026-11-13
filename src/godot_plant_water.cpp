@@ -309,7 +309,7 @@ uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const
                 continue;
             }
             wet = wet || ground.positions[at * 3u + 1u] < level_of[at];
-            cell_level = cell_flooded && cell_level > level_of[at] ? cell_level : level_of[at];
+            cell_level = cell_flooded && cell_level < level_of[at] ? cell_level : level_of[at];
             cell_flooded = true;
         }
         if (!known || !wet) {
@@ -325,7 +325,8 @@ uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const
             const float x = ground.positions[at * 3u];
             const float height = ground.positions[at * 3u + 1u];
             const float z = ground.positions[at * 3u + 2u];
-            // a corner on the bank, outside the bed, carries the water of the cell, its ground above it hides it
+            // a corner on the bank, outside every bed, carries the lowest water of the cell's bed corners, so no
+            // bank is flooded by the level of the station upstream; its ground above that water hides it
             const float level = flooded[at] != 0u ? level_of[at] : cell_level;
             const float green = channel_of(level - height, GODOT_WATER_DEPTH_FULL_M);
             float red = 0.0f;

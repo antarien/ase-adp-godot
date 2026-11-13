@@ -3,10 +3,11 @@
  *
  * @file        test_godot_plant_water.cpp
  * @design      DSGN_066
- * @brief       Pins the water table at NN0 and the ribbon of water along a course
- * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3: the vertices and triangles build_water_table
- *              lays at NN0 over the cells of the ground mesh below it (build_ground over the terrain and
- *              ground cell ports), and those build_water lays along a course, as they go to ArrayMesh.
+ * @brief       Pins the water plane at the ase-hydro level of each bed and the ribbon of water along a course
+ * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3, B0281: the vertices and triangles
+ *              build_water_table lays in the bed of every stream at its bed plus the ase-hydro depth over the
+ *              cells of the ground mesh (build_ground over the terrain and ground cell ports), none outside a
+ *              bed, and those build_water lays along a course, as they go to ArrayMesh.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -238,70 +239,105 @@ PlantMeshArrays table_mesh(const std::vector<VivariumTerrainView>& samples,
 
 }  // namespace
 
-TEST_CASE("the water table lies at NN0 over the cells dug below it and over no dry cell") {
-    PlantMeshArrays arrays;
+namespace {
+
+/**
+ * A bed along z 0 falling east, its bank along z 1 one metre above it. Ids: 0 (0,0) 1 (1,0) 2 (2,0) bed at
+ * 1, 0.5 and -0.25; 3 (0,1) 4 (1,1) 5 (2,1) bank at 2, 1.5 and 0.75.
+ */
+std::vector<VivariumTerrainView> bed_ground() {
+    return {table_sample(0u, 0.0, 0.0, 1.0),  table_sample(1u, 1.0, 0.0, 0.5),
+            table_sample(2u, 2.0, 0.0, -0.25), table_sample(3u, 0.0, 1.0, 2.0),
+            table_sample(4u, 1.0, 1.0, 1.5),  table_sample(5u, 2.0, 1.0, 0.75)};
+}
+
+/** The brook ase-hydro reckons in that bed: x 0 to 2 along z 0, a quarter metre to either side, 0.2 m deep. */
+VivariumStreamView bed_brook() {
+    VivariumStreamView stream;
+    stream.object_id = 9u;
+    stream.x = 0.0;
+    stream.z = 0.0;
+    stream.end_x = 2.0;
+    stream.end_z = 0.0;
+    stream.half_m = 0.25;
+    stream.depth_m = 0.2;
+    stream.velocity_m_s = 1.0;
+    return stream;
+}
+
+}  // namespace
+
+TEST_CASE("without a stream of ase-hydro no water stands, not in a hollow below NN0 nor in a dry bed") {
     const std::vector<VivariumGroundCellView> cells = {table_cell(0u, 1u, 4u, 3u), table_cell(1u, 2u, 5u, 4u)};
-    REQUIRE(build_water_table({}, table_mesh(table_ground(), cells), arrays) == 1u);
-    REQUIRE(arrays.positions.size() == 4u * 3u);
-    REQUIRE(arrays.indices.size() == 6u);
-    for (std::size_t v = 0u; v < 4u; ++v) {
-        CHECK(arrays.positions[v * 3u + 1u] == doctest::Approx(GODOT_WATER_TABLE_M));
+    PlantMeshArrays arrays;
+    CHECK(build_water_table({}, table_mesh(table_ground(), cells), arrays) == 0u);
+    VivariumStreamView dry = bed_brook();
+    dry.depth_m = 0.0;
+    CHECK(build_water_table({dry}, table_mesh(bed_ground(), cells), arrays) == 0u);
+    CHECK(arrays.positions.empty());
+    CHECK(arrays.indices.empty());
+}
+
+TEST_CASE("the water stands in the bed at the bed plus the depth ase-hydro gives the stream") {
+    const std::vector<VivariumGroundCellView> cells = {table_cell(0u, 1u, 4u, 3u), table_cell(1u, 2u, 5u, 4u)};
+    PlantMeshArrays arrays;
+    REQUIRE(build_water_table({bed_brook()}, table_mesh(bed_ground(), cells), arrays) == 2u);
+    REQUIRE(arrays.positions.size() == 6u * 3u);
+    REQUIRE(arrays.indices.size() == 12u);
+    // the vertices in the order the cells name them: (0,0) (1,0) (1,1) (0,1), then (2,0) (2,1)
+    CHECK(arrays.positions[0u * 3u + 1u] == doctest::Approx(1.2f));
+    CHECK(arrays.positions[1u * 3u + 1u] == doctest::Approx(0.7f));
+    CHECK(arrays.positions[4u * 3u + 1u] == doctest::Approx(-0.05f));
+    // a bank corner carries the lowest water of its cell's bed corners; its ground stands above it
+    CHECK(arrays.positions[2u * 3u + 1u] == doctest::Approx(0.7f));
+    CHECK(arrays.positions[3u * 3u + 1u] == doctest::Approx(0.7f));
+    CHECK(arrays.positions[5u * 3u + 1u] == doctest::Approx(-0.05f));
+    for (std::size_t v = 0u; v < 6u; ++v) {
         CHECK(arrays.normals[v * 3u + 1u] == doctest::Approx(1.0f));
     }
     // the corners in the cell's order sw, se, ne, nw: the first triangle (sw, se, ne) as the ground's
-    CHECK(arrays.positions[0] == doctest::Approx(1.0f));
-    CHECK(arrays.positions[3] == doctest::Approx(2.0f));
+    CHECK(arrays.positions[0] == doctest::Approx(0.0f));
+    CHECK(arrays.positions[3] == doctest::Approx(1.0f));
     CHECK(arrays.indices[0] == 0);
     CHECK(arrays.indices[1] == 1);
     CHECK(arrays.indices[2] == 2);
     CHECK(arrays.indices[5] == 3);
     // the texture coordinates are the world metres east and north
-    CHECK(arrays.uvs[2] == doctest::Approx(2.0f));
+    CHECK(arrays.uvs[2] == doctest::Approx(1.0f));
     CHECK(arrays.uvs[5] == doctest::Approx(1.0f));
 }
 
-TEST_CASE("the depth of the table above the ground goes into green, none where the ground stands above it") {
+TEST_CASE("the depth of the water above the ground goes into green, none where the bank stands above it") {
+    const std::vector<VivariumGroundCellView> cells = {table_cell(0u, 1u, 4u, 3u), table_cell(1u, 2u, 5u, 4u)};
     PlantMeshArrays arrays;
-    REQUIRE(build_water_table({}, table_mesh(table_ground(), {table_cell(1u, 2u, 5u, 4u)}), arrays) == 1u);
-    CHECK(arrays.colors[1] == doctest::Approx(0.0f));
-    CHECK(arrays.colors[4u + 1u] == doctest::Approx(0.25f / GODOT_WATER_DEPTH_FULL_M));
-    // no stream: still water, the course north
-    CHECK(arrays.colors[4u] == doctest::Approx(0.0f));
-    CHECK(arrays.colors[4u + 2u] == doctest::Approx(0.5f));
-    CHECK(arrays.colors[4u + 3u] == doctest::Approx(1.0f));
+    REQUIRE(build_water_table({bed_brook()}, table_mesh(bed_ground(), cells), arrays) == 2u);
+    CHECK(arrays.colors[0u * 4u + 1u] == doctest::Approx(0.2f / GODOT_WATER_DEPTH_FULL_M));
+    CHECK(arrays.colors[4u * 4u + 1u] == doctest::Approx(0.2f / GODOT_WATER_DEPTH_FULL_M));
+    CHECK(arrays.colors[2u * 4u + 1u] == doctest::Approx(0.0f));
 }
 
-TEST_CASE("the table carries velocity and course of the stream whose bed holds the vertex") {
-    VivariumStreamView east;
-    east.object_id = 9u;
-    east.x = 0.0;
-    east.z = 0.0;
-    east.end_x = 4.0;
-    east.end_z = 0.0;
-    east.half_m = 0.25;
-    east.depth_m = 0.2;
-    east.velocity_m_s = 1.0;
+TEST_CASE("the water carries velocity and course of the stream whose bed holds the vertex") {
+    const std::vector<VivariumGroundCellView> cells = {table_cell(0u, 1u, 4u, 3u), table_cell(1u, 2u, 5u, 4u)};
     PlantMeshArrays arrays;
-    REQUIRE(build_water_table({east}, table_mesh(table_ground(), {table_cell(1u, 2u, 5u, 4u)}), arrays) == 1u);
-    // the south corners lie on the bed: velocity share and the course east
+    REQUIRE(build_water_table({bed_brook()}, table_mesh(bed_ground(), cells), arrays) == 2u);
+    // the bed corners: velocity share and the course east
     CHECK(arrays.colors[0] == doctest::Approx(1.0f / GODOT_WATER_VELOCITY_FULL_M_S));
     CHECK(arrays.colors[2] == doctest::Approx(1.0f));
     CHECK(arrays.colors[3] == doctest::Approx(0.5f));
-    // the north corners lie one metre off, beyond half the width plus the swing: still water
-    CHECK(arrays.colors[8] == doctest::Approx(0.0f));
-    CHECK(arrays.colors[8u + 3u] == doctest::Approx(1.0f));
+    // the bank corner lies one metre off, beyond half the width plus the swing: still water, the course north
+    CHECK(arrays.colors[2u * 4u] == doctest::Approx(0.0f));
+    CHECK(arrays.colors[2u * 4u + 2u] == doctest::Approx(0.5f));
+    CHECK(arrays.colors[2u * 4u + 3u] == doctest::Approx(1.0f));
 }
 
 TEST_CASE("a cell with a corner the port does not carry draws no water, and shared corners are one vertex") {
     PlantMeshArrays arrays;
-    CHECK(build_water_table({}, table_mesh(table_ground(), {table_cell(1u, 2u, 99u, 4u)}), arrays) == 0u);
+    CHECK(build_water_table({bed_brook()}, table_mesh(bed_ground(), {table_cell(1u, 2u, 99u, 4u)}), arrays) == 0u);
     CHECK(arrays.positions.empty());
-    std::vector<VivariumTerrainView> wet = table_ground();
-    for (VivariumTerrainView& sample : wet) {
-        sample.height = -1.0;
-    }
+    VivariumStreamView wide = bed_brook();
+    wide.half_m = 1.0;
     const std::vector<VivariumGroundCellView> cells = {table_cell(0u, 1u, 4u, 3u), table_cell(1u, 2u, 5u, 4u)};
-    REQUIRE(build_water_table({}, table_mesh(wet, cells), arrays) == 2u);
+    REQUIRE(build_water_table({wide}, table_mesh(table_ground(), cells), arrays) == 2u);
     CHECK(arrays.positions.size() == 6u * 3u);
     CHECK(arrays.indices.size() == 12u);
 }

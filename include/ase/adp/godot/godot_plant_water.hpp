@@ -62,7 +62,7 @@ uint32_t build_water(const std::vector<VivariumStreamView>& streams, const std::
  * plus GODOT_WATER_SWING_SHARE of it from the line between its ends) plus the depth ase-hydro gives the stream,
  * never sinking toward the source under the level below it; a dry stream holds no water. A ground vertex in a
  * bed carries the highest level of the streams whose beds hold it. For every cell with such a corner below its
- * level, the quad of that cell at the level, a bank corner outside every bed at the highest level of the cell's
+ * level, the quad of that cell at the level, a bank corner outside every bed at the lowest level of the cell's bed
  * corners, its two triangles in the ground's order (the front face looking up). One vertex per ground vertex a
  * wet cell names, shared by the cells that name it; its texture coordinates the world metres east and north. The
  * vertex colour carries the water: red the velocity share of the fastest stream whose bed holds the vertex, green
