@@ -23,8 +23,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-26
- * @version     00.00.01.00004
+ * @modified    2026-11-13
+ * @version     00.00.01.00007
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -48,6 +48,37 @@
 namespace ase::adp::godot {
 
 namespace {
+
+/** The short name of a day period code of ase-time, empty for a code outside ASO..NOX. */
+::godot::String period_name(double code) {
+    const char* const names[] = {GODOT_PERIOD_ASO, GODOT_PERIOD_VEL, GODOT_PERIOD_RAL,
+                                 GODOT_PERIOD_CRE, GODOT_PERIOD_PEX, GODOT_PERIOD_NOX};
+    const int index = static_cast<int>(ase::math::floor(static_cast<float>(code)));
+    if (index < GODOT_PERIOD_FIRST || index > GODOT_PERIOD_LAST) {
+        return {};
+    }
+    return names[index];
+}
+
+/** One whole part of the SURA number - every part is a count, the hour is its whole hour. */
+::godot::String sura_part(double value) {
+    return ::godot::String::num_int64(static_cast<int64_t>(ase::math::floor(static_cast<float>(value))));
+}
+
+/**
+ * The SURA date line "<PERIOD> VECTUM.AETRIX.CYCLUM.LUNBREX.TUMBRAE.HORAX" (ARCH_ASE_CALENDAR 2.9.1),
+ * empty while the clock record carries no date. Every part comes from ase-calendar and ase-time
+ * through the clock record; the view counts nothing itself.
+ */
+::godot::String sura_line(const VivariumClockView& clock) {
+    if (!clock.known || !clock.date_known) {
+        return {};
+    }
+    return period_name(clock.period) + GODOT_SURA_PERIOD_GAP + sura_part(clock.year) + GODOT_SURA_PART_GAP +
+           sura_part(clock.epoch) + GODOT_SURA_PART_GAP + sura_part(clock.cycle) + GODOT_SURA_PART_GAP +
+           sura_part(clock.month) + GODOT_SURA_PART_GAP + sura_part(clock.month_day) + GODOT_SURA_PART_GAP +
+           sura_part(clock.hour);
+}
 
 /** A share held inside 0..1 - a drawn share, never a simulation value. */
 double share(double value) {
@@ -154,6 +185,19 @@ void VivariumView::draw() {
         draw_start_screen(visible);
         return;
     }
+    // THE CARE VIEW'S HUD (godot_vivarium_hud.cpp): it takes the canvas over the scene; only a HUD that could not
+    // draw falls through to the error panel below, which names why and keeps Reiniciar.
+    if (hud_live()) {
+        const uint64_t hud_begin_usec = ::godot::Time::get_singleton()->get_ticks_usec();
+        const uint64_t hud_begin_cpu_usec = thread_cpu_usec();  // P0690: CPU against wall, the rest waits for a core
+        draw_hud();
+        ground_watch_.last_draw_cpu_usec = thread_cpu_usec() - hud_begin_cpu_usec;
+        ground_watch_.last_draw_usec = ::godot::Time::get_singleton()->get_ticks_usec() - hud_begin_usec;
+        if (failure_text_.is_empty()) {
+            return;
+        }
+        use_canvas();
+    }
     // The header colour runs over the whole width and up to the top edge - over a camera
     // cut-out too - and ends where the placed header band ends.
     node_->draw_rect(::godot::Rect2(0.0f, 0.0f, visible.size.x,
@@ -163,6 +207,20 @@ void VivariumView::draw() {
     use_band(layout_.title_at.y);
     node_->draw_string(font, layout_.title_at, texts_.title, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
                        GODOT_FONT_TITLE, ::godot::Color::hex(GODOT_COLOR_TEXT));
+    // The SURA date stands on the title line, right-aligned in the width the title leaves free.
+    const ::godot::String date_line = sura_line(resources_.get_clock());
+    if (!date_line.is_empty()) {
+        const float title_width =
+            font->get_string_size(texts_.title, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f, GODOT_FONT_TITLE).x;
+        const float date_from = layout_.title_at.x + title_width + layout_.title_at.x;
+        const float date_width = layout_.size.x - layout_.title_at.x - date_from;
+        if (date_width > 0.0f) {
+            node_->draw_string(font, ::godot::Vector2(date_from, layout_.title_at.y), date_line,
+                               ::godot::HORIZONTAL_ALIGNMENT_RIGHT, date_width,
+                               fitting_size(date_line, date_width, GODOT_FONT_BODY),
+                               ::godot::Color::hex(GODOT_COLOR_TEXT));
+        }
+    }
     use_band(layout_.build_at.y);
     node_->draw_string(font, layout_.build_at, build_line_, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
                        build_font_size_, ::godot::Color::hex(GODOT_COLOR_TEXT_DIM));
@@ -224,18 +282,20 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
     const float loading_top = line_y - font->get_ascent(loading_size);
     const float loading_bottom = line_y + font->get_descent(loading_size);
 
-    // the spinner: GODOT_SPINNER_DOTS dots on a circle, the leading one full, each one behind it dimmer,
-    // its centre GODOT_SPINNER_GAP above the top of the loading line
+    // the spinner: GODOT_SPINNER_DOTS dots on a circle, the leading one full, each one behind it dimmer.
+    // GODOT_SPINNER_GAP is the clear space between the lowest edge of the spinner (its radius and one dot
+    // below the centre) and the top of the loading line: taken from the centre, the dots of the lower
+    // half came down to 30 px over the letters and the spinner sat on the text
     const ::godot::Time* clock = ::godot::Time::get_singleton();
     const uint64_t now_ms = clock == nullptr ? 0u : clock->get_ticks_msec();
     const double turn = static_cast<double>(now_ms % GODOT_SPINNER_PERIOD_MS) /
                         static_cast<double>(GODOT_SPINNER_PERIOD_MS);
     const uint32_t leading = static_cast<uint32_t>(turn * static_cast<double>(GODOT_SPINNER_DOTS)) % GODOT_SPINNER_DOTS;
-    const ::godot::Vector2 hub(centre_x, loading_top - GODOT_SPINNER_GAP);
+    const ::godot::Vector2 hub(centre_x, loading_top - GODOT_SPINNER_GAP - GODOT_SPINNER_RADIUS - GODOT_SPINNER_DOT);
     for (uint32_t dot = 0u; dot < GODOT_SPINNER_DOTS; ++dot) {
-        const double angle = ase::math::TWO_PI * static_cast<double>(dot) / static_cast<double>(GODOT_SPINNER_DOTS);
-        const ::godot::Vector2 at(hub.x + GODOT_SPINNER_RADIUS * static_cast<float>(ase::math::sin(angle)),
-                                  hub.y - GODOT_SPINNER_RADIUS * static_cast<float>(ase::math::cos(angle)));
+        const float angle = ase::math::TWO_PI * static_cast<float>(dot) / static_cast<float>(GODOT_SPINNER_DOTS);
+        const ::godot::Vector2 at(hub.x + GODOT_SPINNER_RADIUS * ase::math::sin(angle),
+                                  hub.y - GODOT_SPINNER_RADIUS * ase::math::cos(angle));
         const uint32_t behind = (leading + GODOT_SPINNER_DOTS - dot) % GODOT_SPINNER_DOTS;
         const float fade = 1.0f - (1.0f - GODOT_SPINNER_DIM) * static_cast<float>(behind) /
                                       static_cast<float>(GODOT_SPINNER_DOTS - 1u);

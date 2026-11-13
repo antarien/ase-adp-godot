@@ -13,8 +13,8 @@
  * @usecase     usecase:6540 - generate plant organs
  * @actor       Organ Arrangement Generator (ORGAARRGEN)
  * @created     2026-10-10
- * @modified    2026-10-10
- * @version     00.00.01.00001
+ * @modified    2026-11-13
+ * @version     00.00.02.00000
  *
  * WHY THE TIME IS A DIFFERENCE: KernelEmbeddedHost::unit_time answers running totals that only grow
  * (EcsAppStaModTimComponent). A measure that read them as they are would write the time since the
@@ -89,17 +89,22 @@ bool cycle_measure_valid(const CycleMeasure& measure) {
 }
 
 bool cycle_measure_begin(CycleMeasure& measure, const ase::kernel::KernelEmbeddedHost& host) {
-    measure.seen_us.assign(measure.units.size() * measure.schedules.size(), 0u);
+    const std::size_t pairs = measure.units.size() * measure.schedules.size();
+    measure.seen_us.assign(pairs, 0u);
+    measure.seen_runs.assign(pairs, 0u);
     measure.cycle = 0u;
     for (std::size_t u = 0u; u < measure.units.size(); ++u) {
         for (std::size_t s = 0u; s < measure.schedules.size(); ++s) {
             uint64_t total = 0u;
-            if (host.unit_time(measure.units[u].c_str(), measure.schedules[s].c_str(), &total, nullptr) !=
+            uint64_t runs = 0u;
+            if (host.unit_time(measure.units[u].c_str(), measure.schedules[s].c_str(), &total, &runs) !=
                 ase::kernel::HostStatusOk) {
-                measure.seen_us.assign(measure.units.size() * measure.schedules.size(), 0u);
+                measure.seen_us.assign(pairs, 0u);
+                measure.seen_runs.assign(pairs, 0u);
                 return false;
             }
             measure.seen_us[u * measure.schedules.size() + s] = total;
+            measure.seen_runs[u * measure.schedules.size() + s] = runs;
         }
     }
     return true;
@@ -136,29 +141,35 @@ bool cycle_measure_line(CycleMeasure& measure, ase::kernel::KernelEmbeddedHost& 
 
     // COMPUTE TIME: the difference of every running total against its cursor. The cursors move
     // only once every read succeeded, so a refused read leaves the next line its whole cycle.
-    if (measure.seen_us.size() != measure.units.size() * measure.schedules.size()) {
+    const std::size_t pairs = measure.units.size() * measure.schedules.size();
+    if (measure.seen_us.size() != pairs || measure.seen_runs.size() != pairs) {
         line += " refused=begin";
         return false;
     }
-    std::vector<uint64_t> now(measure.seen_us.size(), 0u);
+    std::vector<uint64_t> now(pairs, 0u);
+    std::vector<uint64_t> now_runs(pairs, 0u);
     std::string times;
     uint64_t cycle_us = 0u;
     for (std::size_t u = 0u; u < measure.units.size(); ++u) {
         for (std::size_t s = 0u; s < measure.schedules.size(); ++s) {
             const std::size_t at = u * measure.schedules.size() + s;
-            if (host.unit_time(measure.units[u].c_str(), measure.schedules[s].c_str(), &now[at], nullptr) !=
+            if (host.unit_time(measure.units[u].c_str(), measure.schedules[s].c_str(), &now[at], &now_runs[at]) !=
                 ase::kernel::HostStatusOk) {
                 line += " refused=time:" + measure.units[u] + "@" + measure.schedules[s];
                 return false;
             }
             const uint64_t spent = now[at] >= measure.seen_us[at] ? now[at] - measure.seen_us[at] : 0u;
+            const uint64_t ran =
+                now_runs[at] >= measure.seen_runs[at] ? now_runs[at] - measure.seen_runs[at] : 0u;
             if (spent > 0u) {
-                times += " " + measure.units[u] + "@" + measure.schedules[s] + "=" + std::to_string(spent);
+                times += " " + measure.units[u] + "@" + measure.schedules[s] + "=" + std::to_string(spent) + "/" +
+                         std::to_string(ran);
                 cycle_us += spent;
             }
         }
     }
     measure.seen_us = now;
+    measure.seen_runs = now_runs;
     measure.cycle += 1u;
     line += " time_us" + times + " time_us_cycle=" + std::to_string(cycle_us);
 

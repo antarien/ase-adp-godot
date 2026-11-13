@@ -15,8 +15,8 @@
  * @usecase     usecase:100386 - select a patch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-26
- * @modified    2026-10-26
- * @version     00.00.01.00000
+ * @modified    2026-11-07
+ * @version     00.00.02.00000
  */
 
 #include <doctest/doctest.h>
@@ -55,6 +55,16 @@ TEST_CASE("select a patch: the view looks at the tapped place, without a tap at 
     CHECK(aim.target_x == doctest::Approx(16.0f));
     CHECK(aim.target_y == doctest::Approx(2.9f));
     CHECK(aim.target_z == doctest::Approx(16.0f));
+
+    // the heading turns the eye around the stem base at the same distance and height; a quarter turn shows it
+    // exactly (west of the stem base, x smaller), the configuration itself allows only a small pan
+    camera.heading_deg = 90.0f;
+    const PatchFocusAim east = patch_focus_aim(camera, origin);
+    CHECK(east.eye_x == doctest::Approx(10.0f));
+    CHECK(east.eye_y == doctest::Approx(2.0f));
+    CHECK(east.eye_z == doctest::Approx(16.0f).epsilon(0.001));
+    CHECK(east.target_x == doctest::Approx(16.0f));
+    CHECK(east.target_z == doctest::Approx(16.0f));
 }
 
 TEST_CASE("select a patch: the zoom brings the camera to the seedling and back to the whole ground, held at its bounds") {
@@ -72,7 +82,9 @@ TEST_CASE("select a patch: the zoom brings the camera to the seedling and back t
     camera.height_m = 7.0f;
     camera.look_m = 0.5f;
     camera.fov_deg = 55.0f;
+    camera.heading_deg = 70.0f;
     const PlantSceneCamera near_view = patch_focus_zoomed(camera, GODOT_ZOOM_MIN);
+    CHECK(near_view.heading_deg == doctest::Approx(70.0f));
     CHECK(near_view.distance_m == doctest::Approx(10.0f * GODOT_ZOOM_MIN));
     CHECK(near_view.height_m == doctest::Approx(7.0f * GODOT_ZOOM_MIN));
     CHECK(near_view.look_m == doctest::Approx(0.5f * GODOT_ZOOM_MIN));

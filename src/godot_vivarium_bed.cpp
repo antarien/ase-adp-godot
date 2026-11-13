@@ -20,8 +20,8 @@
  * @usecase     usecase:5939 - adapt area terrain
  * @actor       Game Areal Plate (AREAL)
  * @created     2026-10-25
- * @modified    2026-10-25
- * @version     00.00.01.00000
+ * @modified    2026-11-12
+ * @version     00.00.01.00001
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -92,14 +92,14 @@ bool VivariumView::pick_ground(const ::godot::Vector2& at, float& x, float& z, f
     return hit;
 }
 
-void VivariumView::bed(const ::godot::Vector2& at) {
+bool VivariumView::bed(const ::godot::Vector2& at) {
     float x = 0.0f;
     float z = 0.0f;
     float nearest_px = -1.0f;
     if (!pick_ground(at, x, z, nearest_px)) {
         note("bed at " + ::godot::String::num(at.x, 0) + "," + ::godot::String::num(at.y, 0) +
              " result=none nearest_px=" + ::godot::String::num(nearest_px, 1));
-        return;
+        return false;
     }
     if (!bed_started_) {
         bed_started_ = true;
@@ -107,7 +107,7 @@ void VivariumView::bed(const ::godot::Vector2& at) {
         bed_z_ = z;
         note("bed start x=" + ::godot::String::num(x, 2) + " z=" + ::godot::String::num(z, 2));
         node_->queue_redraw();
-        return;
+        return false;  // the first tap only marks where the bed starts: nothing laid, no toast (applyTerr's bedA)
     }
     bed_started_ = false;
     // the bed of the player: the two ends tapped, width, depth and water of the first configured brook
@@ -124,6 +124,7 @@ void VivariumView::bed(const ::godot::Vector2& at) {
          " to x=" + ::godot::String::num(brook.end_x, 2) + " z=" + ::godot::String::num(brook.end_z, 2) +
          " result=" + GodotHostResourceManager::status_name(status));
     node_->queue_redraw();
+    return status == ase::kernel::HostStatusOk;  // LEITO ABERTO only once the port laid the bed
 }
 
 }  // namespace ase::adp::godot

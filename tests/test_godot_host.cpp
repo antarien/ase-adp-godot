@@ -4,8 +4,8 @@
  * @file        test_godot_host.cpp
  * @design      DSGN_021
  * @brief       Pins the one game host of GodotHostResourceManager against the real bundle: boot of the whole
- *              set, the log, pouring, the organ and instance ports, the cycle line, catching up without a
- *              pause, the debug lapse and the teardown
+ *              set, the log, pouring, the organ and instance ports, the cycle line, the return from the
+ *              background as one filed real position, the time lapse as a pace and the teardown
  * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG, the parts of L1, L3 and L5 that do not need a window, and
  *              PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.6 and 03.11. The manager boots the SAME bundle Godot
  *              loads: every unit's library and staged manifest, the data root and the index, side by side
@@ -24,8 +24,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-10-27
- * @version     00.00.04.00010
+ * @modified    2026-11-13
+ * @version     00.00.04.00013
  */
 
 #include "test_godot_host_support.hpp"
@@ -124,7 +124,8 @@ TEST_CASE("L3: a pour arrives as more soil water of that patch - after the modul
     const VivariumPatchView before_poured = patch_at(resources, 0u);
     const VivariumPatchView before_other = patch_at(resources, 1u);
 
-    CHECK(resources.irrigate(before_poured.object_id) == ase::kernel::HostStatusOk);
+    const double amount_mm = vivarium_config(env.bundle).irrigate_amount_mm;  // the pour of the button Regar
+    CHECK(resources.irrigate(before_poured.object_id, amount_mm) == ase::kernel::HostStatusOk);
     // Nothing optimistic: the view still shows what the port reported.
     CHECK(patch_at(resources, 0u).soil_mm == doctest::Approx(before_poured.soil_mm));
 
@@ -134,7 +135,7 @@ TEST_CASE("L3: a pour arrives as more soil water of that patch - after the modul
     CHECK(patch_at(resources, 1u).soil_mm <= before_other.soil_mm);         // the other one only loses
 
     // An object the plugin does not know is taken by the port and poured nowhere.
-    CHECK(resources.irrigate(GODOT_NO_OBJECT - 1u) == ase::kernel::HostStatusOk);
+    CHECK(resources.irrigate(GODOT_NO_OBJECT - 1u, amount_mm) == ase::kernel::HostStatusOk);
     advance_frames(resources, 8u);
     CHECK(resources.patch_count() == 4u);
 }
@@ -302,6 +303,18 @@ TEST_CASE("03.6: the cycle line counts the organs on the ports and the time the 
     CHECK(line.find(" time_us_cycle=0 ") == std::string::npos);
     CHECK(line.find(" pss_kib=") != std::string::npos);
     CHECK(measure.cycle == 1u);
+    // Every named pair carries the passes that spent its time: <us>/<runs>, and a pair that took time
+    // ran at least once - a pair with time and no pass would be a cursor that moved one total only.
+    const std::size_t times_at = line.find(" time_us ");
+    REQUIRE(times_at != std::string::npos);
+    const std::size_t first_pair = times_at + std::string(" time_us ").size();
+    const std::string first = line.substr(first_pair, line.find(' ', first_pair) - first_pair);
+    CAPTURE(first);
+    const std::size_t slash = first.find('/');
+    REQUIRE(slash != std::string::npos);
+    CHECK(first.find('=') < slash);
+    CHECK(first.substr(slash + 1u) != "0");
+    CHECK(line.find("/0 ") == std::string::npos);
 
     // A measure without its names never runs, and a refused read names what it refused.
     CycleMeasure empty;
@@ -309,11 +322,12 @@ TEST_CASE("03.6: the cycle line counts the organs on the ports and the time the 
     CycleMeasure wrong = measure;
     wrong.units.push_back("ase-not-in-the-bundle");
     wrong.seen_us.assign(wrong.units.size() * wrong.schedules.size(), 0u);
+    wrong.seen_runs.assign(wrong.units.size() * wrong.schedules.size(), 0u);
     CHECK(!resources.measure_cycle(wrong, line));
     CHECK(line.find("refused=time:ase-not-in-the-bundle@") != std::string::npos);
 }
 
-TEST_CASE("L5 without a window: a long frame is caught up in ordinary steps, never capped and never dropped") {
+TEST_CASE("L5 without a window: a long frame is one tick and one filed real position, laid by ase-time in one write") {
     AdapterEnvironment& env = environment();
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
     GodotHostResourceManager& resources = env.resources;
@@ -322,65 +336,61 @@ TEST_CASE("L5 without a window: a long frame is caught up in ordinary steps, nev
     const uint64_t ticks_before = resources.tick_count();
     const double simulated_before = resources.simulation_seconds();
 
-    // Ten seconds in the background come back as one frame: eight ticks now, the rest waits.
-    REQUIRE(resources.advance(10.0, 0.0, 0u) == ase::kernel::HostStatusOk);
-    CHECK(resources.last_steps() == 8u);
+    // Ten seconds in the background come back as one frame: one tick, and the real position moves by the
+    // whole span on flora.real.v1. Nothing is replayed; the seconds wait as the backlog until the clock
+    // record shows the position laid (real_laid_s), which ase-time does at its Dissemination run of 1 Hz.
+    REQUIRE(resources.advance(10.0) == ase::kernel::HostStatusOk);
+    CHECK(resources.last_steps() == 1u);
     CHECK(resources.backlog_seconds() > 0.0);
-    for (uint32_t frame = 0u; frame < 8u && resources.backlog_seconds() > 0.0; ++frame) {
-        REQUIRE(resources.advance(0.0, 0.0, 0u) == ase::kernel::HostStatusOk);
-        CHECK(resources.last_steps() <= 8u);
+    uint32_t frames = 0u;
+    for (; frames < 8u && resources.backlog_seconds() > 0.0; ++frames) {
+        REQUIRE(resources.advance(0.25) == ase::kernel::HostStatusOk);
+        CHECK(resources.last_steps() == 1u);
     }
     CHECK(resources.backlog_seconds() == 0.0);
-    CHECK(resources.tick_count() - ticks_before == 40u);                                // 10 s in ticks of 0.25 s
-    CHECK(resources.simulation_seconds() - simulated_before == doctest::Approx(10.0));  // all of it, caught up
+    CHECK(resources.tick_count() - ticks_before == 1u + frames);  // one tick per frame, the long one too
+    CHECK(resources.simulation_seconds() - simulated_before == doctest::Approx(10.0 + 0.25 * frames));
     CHECK(resources.get_clock().elapsed_s > game_before);
 
     // A broken frame is refused by the host, the host keeps running and nothing is counted.
     const uint64_t ticks = resources.tick_count();
-    CHECK(resources.advance(std::numeric_limits<double>::quiet_NaN(), 0.0, 0u) ==
-          ase::kernel::HostStatusInvalidArgument);
-    CHECK(resources.advance(std::numeric_limits<double>::infinity(), 0.0, 0u) ==
-          ase::kernel::HostStatusInvalidArgument);
-    CHECK(resources.advance(-0.25, 0.0, 0u) == ase::kernel::HostStatusInvalidArgument);
+    CHECK(resources.advance(std::numeric_limits<double>::quiet_NaN()) == ase::kernel::HostStatusInvalidArgument);
+    CHECK(resources.advance(std::numeric_limits<double>::infinity()) == ase::kernel::HostStatusInvalidArgument);
+    CHECK(resources.advance(-0.25) == ase::kernel::HostStatusInvalidArgument);
     CHECK(resources.tick_count() == ticks);
     CHECK(resources.running());
     CHECK(std::string(resources.failure_step()).empty());
 }
 
-TEST_CASE("L5 without a window: the debug lapse runs its time in ordinary ticks of the same clock, faster than real time") {
+TEST_CASE("L5 without a window: the time lapse is a pace of ase-time's clock, one tick per frame, faster than real time") {
     AdapterEnvironment& env = environment();
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
     GodotHostResourceManager& resources = env.resources;
     advance_frames(resources, 4u);
-    const double game_before = resources.get_clock().elapsed_s;
+
+    // The game seconds of eight frames at the default pace.
+    const double base_from = resources.get_clock().elapsed_s;
+    advance_frames(resources, 8u);
+    const double base_span = resources.get_clock().elapsed_s - base_from;
+    CHECK(base_span > 0.0);
+
+    // The lapse is a factor on the pace port: ase-pl-flora multiplies it with ase-time's base pace and
+    // ase-time runs this host's clock at the product. Every frame stays one tick; no tick is added.
+    REQUIRE(resources.pace(10.0) == ase::kernel::HostStatusOk);
+    advance_frames(resources, 8u);
     const uint64_t ticks_before = resources.tick_count();
-    const double simulated_before = resources.simulation_seconds();
-
-    // One frame of a quarter second with two seconds of lapse and eight lapse steps: the frame's own tick
-    // and eight more in the same frame - nine ordinary ticks, nothing left over.
-    REQUIRE(resources.advance(0.25, 2.0, 8u) == ase::kernel::HostStatusOk);
-    CHECK(resources.last_steps() == 9u);
+    const double fast_from = resources.get_clock().elapsed_s;
+    advance_frames(resources, 8u);
+    CHECK(resources.tick_count() - ticks_before == 8u);
+    CHECK(resources.last_steps() == 1u);
     CHECK(resources.backlog_seconds() == 0.0);
+    CHECK(resources.get_clock().elapsed_s - fast_from > base_span * 2.0);
 
-    // More lapse than the frame may run (six seconds, 24 ticks, against eight plus eight steps): sixteen
-    // ticks now, the rest waits in the backlog - nothing is dropped and no tick grows.
-    REQUIRE(resources.advance(0.0, 6.0, 8u) == ase::kernel::HostStatusOk);
-    CHECK(resources.last_steps() == 16u);
-    CHECK(resources.backlog_seconds() == doctest::Approx(2.0));
-    REQUIRE(resources.advance(0.0, 0.0, 0u) == ase::kernel::HostStatusOk);
-    CHECK(resources.last_steps() == 8u);
-    CHECK(resources.backlog_seconds() == 0.0);
-
-    CHECK(resources.tick_count() - ticks_before == 33u);                                // 8.25 s in ticks of 0.25 s
-    CHECK(resources.simulation_seconds() - simulated_before == doctest::Approx(8.25));  // the lapse is simulated time
-    CHECK(resources.get_clock().elapsed_s > game_before);
-
-    // A broken lapse is refused like a broken frame.
-    const uint64_t ticks = resources.tick_count();
-    CHECK(resources.advance(0.25, std::numeric_limits<double>::quiet_NaN(), 8u) ==
-          ase::kernel::HostStatusInvalidArgument);
-    CHECK(resources.tick_count() == ticks);
+    // The default pace back.
+    REQUIRE(resources.pace(GODOT_PACE_NONE) == ase::kernel::HostStatusOk);
+    advance_frames(resources, 4u);
     CHECK(resources.running());
+    CHECK(std::string(resources.failure_step()).empty());
 }
 
 TEST_CASE("beside the game host the self-test refuses and leaves the game host untouched") {
@@ -414,7 +424,7 @@ TEST_CASE("clear_all ends the game host once, is idempotent and leaves no host b
     CHECK(resources.get_template_corners().empty());
     CHECK(resources.get_template_triangles().empty());
     CHECK(resources.template_generation() > templates);
-    CHECK(resources.advance(0.25, 0.0, 0u) == ase::kernel::HostStatusInvalidState);
+    CHECK(resources.advance(0.25) == ase::kernel::HostStatusInvalidState);
     CHECK(resources.note("after the host") == ase::kernel::HostStatusInvalidState);
 }
 

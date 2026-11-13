@@ -2,27 +2,31 @@
  * ASE GODOT ADAPTER - VIVARIUM VIEW CLOCK MOMENTS
  *
  * @file        godot_vivarium_clock.cpp
- * @brief       VivariumView - the start screen over the initialisation, the measured game hour and clock rate, the jump feed
- * @description How the view brings this host's game clock to a moment, measured against the clock port and
- *              never carrying a constant of ase-time, and the start screen that stands before the clock runs.
+ * @brief       VivariumView - the start screen over the initialisation, the clock constants and rate, the jump share
+ * @description How the view reads this host's game clock, computed with ase-time's constants as the clock record
+ *              carries them, and the start screen that stands before the clock runs.
  *
  *              THE START SCREEN (usecase:100387 view the plant) covers everything the engine loads: the relief,
  *              the patches, the brook beds, the organ templates, the scene and the pipelines of every material it
  *              shows. Under it the host runs only the ticks its loading needs, at the default pace: the embedded
  *              host ticks from real time (KernelEmbeddedHost::advance), and the generator, the beds and the
- *              templates are those ticks. No time lapse and no jump runs under it and nothing is tapped. It lifts
- *              onto the first complete frame, and from that frame on the view measures the clock - no time lapse
- *              and no jump starts by itself (operator order of 2026-11-06).
+ *              templates are those ticks. No time lapse runs under it and nothing is tapped. It lifts onto the
+ *              first complete frame, and from that frame on the view measures the clock - no time lapse and no
+ *              jump starts by itself (operator order of 2026-11-06). A jump raises it again until the world
+ *              stands at the new time.
  *
- *              THE GAME HOUR AND THE RATE OF THE CLOCK are measured in every simulated frame: two readings of the
- *              clock port within one day give the game seconds of one game hour, and the clock's game seconds over
- *              the real seconds the host simulated between two frames give its rate at the running pace. The hour
- *              jump (godot_vivarium_debug.cpp, usecase:101120 clock the growth cycle) computes its target from the
- *              hour length and its feed from the rate.
+ *              THE GAME HOUR AND THE GAME DAY are ase-time's constants, carried on every clock record
+ *              (TIM_CONST_SECONDS_PER_HOUR and TIM_CONST_HOURS_PER_DAY); the view copies them and measures only the
+ *              rate of the clock - its game seconds over the real seconds the host simulated between two frames.
+ *              The jump (godot_vivarium_jump.cpp, usecase:101120 clock the growth cycle) computes no target from
+ *              them: ase-time lays and judges it from its own clock.
  *
- *              THE FEED OF A JUMP (ARCH_ASE_KERNEL_EMBEDDED, section "Two Cases of Time"): during a jump the frame
- *              hands the host real seconds beyond its own and lets it run more ticks; every one of them is an
- *              ordinary tick of the client's clock, computed by every system, nothing loaded and nothing skipped.
+ *              A JUMP IS ONE WRITE (CAUSA_ASE_TIME, section "The Seek Contract"): the target goes once into
+ *              ase-time's clock through the seek or the date port, and every module takes the new time from the
+ *              star and computes its own state at it in its own schedule; nothing is replayed and no second is
+ *              fed beyond the frame's own (GodotHostResourceManager::advance). The jump holds the start screen
+ *              only until ase-time's verdict on its request number; follow_debug ends it there, and the screen
+ *              lifts on the criteria of a start of the app, its fourth step the quiet frames as on a start.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -33,8 +37,8 @@
  * @usecase     usecase:101120 - clock the growth cycle
  * @actor       Plant Keeper (PLNTKEEPER), Growth Clock Controller (GROWCLOCON)
  * @created     2026-11-06
- * @modified    2026-11-06
- * @version     00.00.03.00001
+ * @modified    2026-11-11
+ * @version     00.00.04.00007
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -47,23 +51,41 @@
 
 namespace ase::adp::godot {
 
+namespace {
+
+// THE SHARE OF A RUNNING JUMP (usecase:101120 clock the growth cycle), 0..1, the fourth step of the start screen
+// while the jump holds it. The clock is set in one write, so no game seconds are owed on the way. A jump runs
+// only until ase-time's verdict on its own request number (follow_debug ends it there, D2281), and before that
+// verdict the share is 0, as the quiet frames are: nothing is estimated, the view computes no game time of its
+// own. The settle since the write (sought_run_s against debug.settle_s) holds only the landing note.
+double jump_share(const VivariumJump& jump, const VivariumClockView& clock, double simulated_s, double settle_s) {
+    if (!clock.known || !clock.seek_known || clock.seek_seq != jump.seq || jump.sought_run_s < 0.0) {
+        return 0.0;
+    }
+    if (!(settle_s > 0.0)) {
+        return 1.0;
+    }
+    return ase::math::min((simulated_s - jump.sought_run_s) / settle_s, 1.0);
+}
+
+}  // namespace
+
 void VivariumView::follow_hour_length() {
-    // THE LENGTH OF A GAME HOUR, measured in every simulated frame: two readings of the clock port within one
-    // game day give the game seconds per hour. Across a day turn the hour falls back and the pair says nothing.
+    // THE CONSTANTS OF ase-time: the hours of a game day and the game seconds of a game hour travel on every
+    // clock record (FloraHostClkExptSystem files them from the star), and the view copies them - under the start
+    // screen too, so a jump asked there computes with them. Nothing of them is measured.
     // THE RATE OF THE CLOCK: the game seconds it ran over the real seconds the host simulated for them - the
     // running pace as the clock shows it, across a day turn too, since the game seconds only grow.
-    if (!initialised_) {
-        return;  // under the start screen the host runs its loading ticks; the clock is measured from the lift on
-    }
     const VivariumClockView& clock = resources_.get_clock();
     if (!clock.known) {
         return;
     }
-    const double rose = clock.hour - hour_length_.last_hour;
-    const double passed = clock.elapsed_s - hour_length_.last_elapsed_s;
-    if (hour_length_.last_hour >= 0.0 && clock.day == hour_length_.last_day && rose > 0.0 && passed > 0.0) {
-        hour_length_.seconds_per_hour = passed / rose;
+    hour_length_.hours_per_day = clock.hours_per_day;
+    hour_length_.seconds_per_hour = clock.seconds_per_hour;
+    if (!initialised_) {
+        return;  // under the start screen the host runs its loading ticks; the rate is measured from the lift on
     }
+    const double passed = clock.elapsed_s - hour_length_.last_elapsed_s;
     const double simulated_s = resources_.simulation_seconds();
     const double ran_s = simulated_s - hour_length_.last_simulated_s;
     if (hour_length_.last_elapsed_s >= 0.0 && hour_length_.last_simulated_s >= 0.0 && passed > 0.0 && ran_s > 0.0) {
@@ -95,6 +117,8 @@ double VivariumView::initialisation_progress() const {
     // The share of the initialisation the start screen shows, one equal step each: the patches announced,
     // the brooks carried, the parts of the scene built, the quiet frames rendered. It is read from the same
     // state follow_initialisation lifts the start screen on, so the bar stands full in the frame it lifts.
+    // After a jump the fourth step is the same quiet frames as on a start: the jump holds the screen only
+    // until ase-time's verdict on its request number (follow_debug), and the quiet frames stay at 0 until then.
     if (initialised_) {
         return 1.0;
     }
@@ -104,20 +128,23 @@ double VivariumView::initialisation_progress() const {
                                     static_cast<double>(start_.brooks.size());
     const double parts = static_cast<double>(scene_parts_built()) / static_cast<double>(GODOT_INIT_SCENE_PARTS);
     const double frames = static_cast<double>(init_render_frames_) / static_cast<double>(GODOT_INIT_RENDER_FRAMES);
-    const double sum = (patches_announced_ ? 1.0 : 0.0) + ase::math::min(brooks, 1.0) + parts +
-                       ase::math::min(frames, 1.0);
+    const VivariumJump& jump = debug_.jump;
+    const double last = jump.running ? jump_share(jump, resources_.get_clock(), resources_.stage_seconds(),
+                                                  debug_.settle_s)
+                                     : ase::math::min(frames, 1.0);
+    const double sum = (patches_announced_ ? 1.0 : 0.0) + ase::math::min(brooks, 1.0) + parts + last;
     return sum / GODOT_INIT_STEPS;
 }
 
 void VivariumView::follow_initialisation() {
     // THE START SCREEN (usecase:100387 view the plant): the engine loads everything before anyone sees it. Under
-    // it the host runs only the ticks its loading needs, at the default pace and from real time - no time lapse,
-    // no jump, no tap. The relief, the patches, the square and the brooks are submitted with the boot
-    // (GodotHostResourceManager::boot), the generator ticks the ground and cuts the beds, the plugin tessellates
-    // its templates and the view builds the scene. Behind the opaque start screen the finished scene renders,
-    // and every material it shows compiles its pipelines. The screen lifts once every part stands and
-    // GODOT_INIT_RENDER_FRAMES frames in a row rendered without a new pipeline compilation - the shaders are
-    // loaded, and the first visible frame is the complete one.
+    // it the host runs only the steps its loading needs, from real time - no time lapse, no tap; after a jump
+    // it stands until the world stands at the new time. The relief, the patches, the square and the brooks are
+    // submitted with the boot (GodotHostResourceManager::boot), the generator ticks the ground and cuts the beds,
+    // the plugin tessellates its templates and the view builds the scene. Behind the opaque start screen the
+    // finished scene renders, and every material it shows compiles its pipelines. The screen lifts once every
+    // part stands and GODOT_INIT_RENDER_FRAMES frames in a row rendered without a new pipeline compilation - the
+    // shaders are loaded, and the first visible frame is the complete one.
     if (initialised_) {
         return;
     }
@@ -140,7 +167,11 @@ void VivariumView::follow_initialisation() {
     // it the season follow. A quiet frame before both stand would lift the screen onto a sky that is still
     // empty and a season that still jumps; such a frame does not count.
     const bool sky_and_clock = resources_.get_sky().known && resources_.get_clock().known;
-    if (!patches_announced_ || !brooks_carried || !scene_built || !sky_and_clock || compiled) {
+    // A running jump holds the screen until ase-time's verdict on its request number: before it the clock has
+    // not moved yet. On the verdict follow_debug ends the jump, and from there the screen lifts on exactly the
+    // criteria of a start; the settle of the landing note holds no frame (D2281).
+    const bool jumping = debug_.jump.running;
+    if (!patches_announced_ || !brooks_carried || !scene_built || !sky_and_clock || compiled || jumping) {
         init_render_frames_ = 0u;
         return;
     }
@@ -153,29 +184,6 @@ void VivariumView::follow_initialisation() {
          " frames=" + ::godot::String::num_uint64(init_render_frames_) +
          " pipelines=" + ::godot::String::num_uint64(pipelines) + " " + measure(selected_place_));
     node_->queue_redraw();
-}
-
-double VivariumView::jump_feed() const {
-    // THE FEED OF A JUMP: real seconds this frame hands the host beyond its own, topped up only while the
-    // backlog holds less than one feed, so a frame that could not run all of it never piles up more than the
-    // next one runs. A stage jump takes the whole feed; an hour jump only the real time still missing to its
-    // target at the measured rate of the clock, and on its way to the day change one game hour at most.
-    const VivariumJump& jump = debug_.jump;
-    const double backlog_s = resources_.backlog_seconds();
-    if (!jump.running || !(backlog_s < debug_.lapse_s)) {
-        return 0.0;
-    }
-    if (jump.stage != GODOT_STAGE_NONE) {
-        return debug_.lapse_s;
-    }
-    const VivariumClockView& clock = resources_.get_clock();
-    const double rate = hour_length_.game_per_real;
-    if (!clock.known || !(rate > 0.0)) {
-        return 0.0;  // the frame's own time runs on; the next frame measures the rate
-    }
-    const double missing_s = jump.target_s < 0.0 ? hour_length_.seconds_per_hour / rate - backlog_s
-                                                 : (jump.target_s - clock.elapsed_s) / rate - backlog_s;
-    return ase::math::max(0.0, ase::math::min(missing_s, debug_.lapse_s));
 }
 
 }  // namespace ase::adp::godot

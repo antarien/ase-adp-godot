@@ -8,7 +8,7 @@
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3: the water stands at NN0. build_water_table
  *              (godot_plant_water.hpp) lays the one plane over every ground cell below the table; the stream
  *              port (FloraHostStrmExptSystem) marks where the plane flows. This file hangs it into the scene
- *              in a ShaderMaterial of GODOT_WATER_SHADER_CODE. Nothing of the water is computed here.
+ *              in a ShaderMaterial of GODOT_WATER_SHADER_FILE. Nothing of the water is computed here.
  *              THE COLOUR OF THE WATER: the material sets the two colour uniforms of the shader to the
  *              green of a lowland brook (algae and fine silt), so the water reads green under a grey or a
  *              blue sky; the shallow colour lets the gravel of the bed show through, the deep one is the
@@ -22,11 +22,12 @@
  * @usecase     usecase:101339 - show the ground around plant
  * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-11-01
- * @modified    2026-11-06
- * @version     00.00.03.00000
+ * @modified    2026-11-13
+ * @version     00.00.04.00000
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_plant_geometry.hpp>
 
 #include <godot_cpp/classes/node3d.hpp>
 
@@ -35,8 +36,11 @@
 
 namespace ase::adp::godot {
 
-constexpr const char* GODOT_WATER_SHALLOW = "shallow_color";  // uniform of GODOT_WATER_SHADER_CODE: the colour at no depth
-constexpr const char* GODOT_WATER_DEEP = "deep_color";        // uniform of GODOT_WATER_SHADER_CODE: the colour at GODOT_WATER_DEPTH_FULL_M
+// The shader of the water (shaders/plant_water.gdshader, loaded by godot_plant_shader.hpp) and its uniforms.
+constexpr const char* GODOT_WATER_SHADER_FILE = "res://shaders/plant_water.gdshader";  // the water of the brooks
+constexpr const char* GODOT_WATER_VELOCITY_FULL = "velocity_full";  // uniform of GODOT_WATER_SHADER_FILE: GODOT_WATER_VELOCITY_FULL_M_S
+constexpr const char* GODOT_WATER_SHALLOW = "shallow_color";  // uniform of GODOT_WATER_SHADER_FILE: the colour at no depth
+constexpr const char* GODOT_WATER_DEEP = "deep_color";        // uniform of GODOT_WATER_SHADER_FILE: the colour at GODOT_WATER_DEPTH_FULL_M
 constexpr float GODOT_WATER_SHALLOW_R = 0.24f;                // shallow brook water over gravel, red
 constexpr float GODOT_WATER_SHALLOW_G = 0.40f;                // shallow brook water over gravel, green
 constexpr float GODOT_WATER_SHALLOW_B = 0.24f;                // shallow brook water over gravel, blue
@@ -46,19 +50,19 @@ constexpr float GODOT_WATER_DEEP_B = 0.16f;                   // deep brook wate
 
 /**
  * Hangs the empty water node (GODOT_PLANT_WATER) under the scene root, in a ShaderMaterial of
- * GODOT_WATER_SHADER_CODE with the green of GODOT_WATER_SHALLOW_* and GODOT_WATER_DEEP_*, casting no shadow.
+ * GODOT_WATER_SHADER_FILE with the green of GODOT_WATER_SHALLOW_* and GODOT_WATER_DEEP_*, casting no shadow.
  * build_plant_scene calls it once, after the ground stands.
  */
 void build_plant_water(::godot::Node3D* scene);
 
 /**
- * Replaces the water with build_water_table over the stream records, the terrain samples and the ground
- * cells; the node keeps its material. A scene without the node draws no water.
+ * Replaces the water with build_water_table over the stream records and the ground mesh `ground` as
+ * fill_plant_ground left it (PlantGroundSurface::arrays, a dig already written into it); the node keeps its
+ * material. A scene without the node draws no water, an empty ground no water either.
  *
  * @return the ground cells under water
  */
 uint32_t fill_plant_water(::godot::Node3D* scene, const std::vector<VivariumStreamView>& streams,
-                          const std::vector<VivariumTerrainView>& samples,
-                          const std::vector<VivariumGroundCellView>& cells);
+                          const PlantMeshArrays& ground);
 
 }  // namespace ase::adp::godot

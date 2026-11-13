@@ -30,8 +30,8 @@
  * @usecase     usecase:6540 - generate plant organs
  * @actor       Organ Arrangement Generator (ORGAARRGEN)
  * @created     2026-10-10
- * @modified    2026-10-10
- * @version     00.00.01.00001
+ * @modified    2026-11-13
+ * @version     00.00.02.00000
  */
 
 #include <ase/kernel/kernel_embedded_host.hpp>
@@ -49,6 +49,7 @@ struct CycleMeasure {
     std::vector<std::string> organ_words;  // the word of each organ port (segment, leaf, ...)
     std::vector<std::string> organ_ports;  // the port of each word, same order
     std::vector<uint64_t>    seen_us;      // cursor per (unit, schedule): row by unit, units x schedules
+    std::vector<uint64_t>    seen_runs;    // cursor of the schedule passes per (unit, schedule), same layout
     uint64_t                 cycle = 0;    // lines written so far
 };
 
@@ -68,10 +69,13 @@ bool cycle_measure_begin(CycleMeasure& measure, const ase::kernel::KernelEmbedde
 /**
  * The line of the cycle that just ended, written into `line`, and the cursors moved on:
  *
- *   cycle=<n> organs <word>=<count>... orders <order>=<count>... time_us <unit>@<schedule>=<us>...
+ *   cycle=<n> organs <word>=<count>... orders <order>=<count>... time_us <unit>@<schedule>=<us>/<runs>...
  *   time_us_cycle=<us> pss_kib=<kib|unknown>
  *
  * Only a (unit, schedule) pair that took time in this cycle is named; time_us_cycle sums them all.
+ * <runs> is how many passes of the schedule ran the unit in this cycle, so <us> over <runs> is the cost
+ * of one pass: a schedule of 1 Hz that spent 70000 us in two passes stalls a frame, one of 30 Hz that
+ * spent the same in thirty does not.
  * Answers false when the host refused a snapshot or a time read - the line then ends with
  * "refused=<what>" and the cursors stand where they stood.
  */

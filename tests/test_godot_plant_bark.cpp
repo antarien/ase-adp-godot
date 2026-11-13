@@ -6,7 +6,7 @@
  * @brief       Pins the bark share and the bark tiling every internode instance carries as custom data
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2: rows_by_body puts beside each instance record
  *              the bark share of its organ (white bark against stem-base bark) and the tiling of its section,
- *              which the bark shader mixes by (godot_plant_geometry.hpp, GODOT_BARK_SHADER_CODE).
+ *              which the bark shader mixes by (godot_plant_geometry.hpp, GODOT_BARK_SHADER_FILE).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)

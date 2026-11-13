@@ -2,9 +2,9 @@
  * ASE GODOT ADAPTER - THE RETURN TO THE GARDEN
  *
  * @file        godot_garden_return.cpp
- * @brief       A span the app spent away is noticed in one frame and caught up by the host; its end carries the duration
+ * @brief       A span the app spent away is noticed in one frame and laid by ase-time; its end carries the duration
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.6 point 2 and V6, see godot_garden_return.hpp. Reads only the
- *              three numbers of a frame; the ticks and the backlog are the host's.
+ *              three numbers of a frame; the ticks are the host's, the backlog the resource manager's.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -13,8 +13,8 @@
  * @usecase     usecase:100390 - return to the garden
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-12
- * @modified    2026-10-12
- * @version     00.00.01.00001
+ * @modified    2026-11-12
+ * @version     00.00.01.00003
  */
 
 #include <ase/adp/godot/godot_garden_return.hpp>
@@ -41,6 +41,16 @@ GardenReturnFrame garden_return_frame(GardenReturn& state, double now_s, double 
         frame.catch_up_s = now_s - state.since_s;
     }
     return frame;
+}
+
+bool garden_came_back(GardenReturn& state, bool foreground) {
+    if (!foreground) {
+        state.away = true;
+        return false;
+    }
+    const bool came_back = state.away;
+    state.away = false;
+    return came_back;
 }
 
 }  // namespace ase::adp::godot

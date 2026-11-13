@@ -5,10 +5,13 @@
  * @brief       Binds the materials and organ template files of the care view's 3D scene once
  * @description See godot_plant_look.hpp. Every file is resolved through godot_asset_loader.hpp at the
  *              start; the scene fills never read a file. The bark of the internodes is one ShaderMaterial
- *              of GODOT_BARK_SHADER_CODE over both bark materials (usecase:100395 age the bark); a bark
+ *              of GODOT_BARK_SHADER_FILE over both bark materials (usecase:100395 age the bark); a bark
  *              file that is missing hands on the stand-in colour of its name instead. The ground of every
- *              soil is one ShaderMaterial of GODOT_GROUND_SHADER_CODE whose cover is the soil's role:
- *              slope, levelled disc, brook bed, grid and contour lines are drawn over it.
+ *              soil is one ShaderMaterial of GODOT_GROUND_SHADER_FILE whose cover is the soil's role:
+ *              slope, levelled disc, brook bed, grid and contour lines are drawn over it. Every shader is a
+ *              file under shaders/ (godot_plant_look_shader.hpp), loaded once and shared by its materials;
+ *              the swing of a branch (usecase:101335 animate the branch sway) comes in by the shader's own
+ *              #include of shaders/sway_uniforms.gdshaderinc and shaders/sway_swing.gdshaderinc.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -18,16 +21,17 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.03.00000
+ * @modified    2026-11-13
+ * @version     00.00.03.00001
  */
 
 #include <ase/adp/godot/godot_plant_look.hpp>
 #include <ase/adp/godot/godot_asset_loader.hpp>
+#include <ase/adp/godot/godot_plant_look_shader.hpp>
+#include <ase/adp/godot/godot_plant_shader.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <godot_cpp/classes/base_material3d.hpp>
-#include <godot_cpp/classes/shader.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -48,26 +52,16 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
     return found == roles.end() ? std::string() : found->second;
 }
 
-/** The code of a shader with the swing of a branch set into its two slots (usecase:101335 animate the branch sway). */
-::godot::String swaying_code(const char* code) {
-    return ::godot::String(code)
-        .replace(GODOT_SWAY_SLOT_UNIFORMS, GODOT_SWAY_SHADER_UNIFORMS)
-        .replace(GODOT_SWAY_SLOT_SWING, GODOT_SWAY_SHADER_SWING);
-}
-
 /**
  * The stand-in material of a name whose file is missing (operator order of 2026-10-23): a ShaderMaterial of
- * GODOT_STAND_IN_SHADER_CODE in the colour the asset list gives the name. The ground darkens with the soil
+ * GODOT_STAND_IN_SHADER_FILE in the colour the asset list gives the name. The ground darkens with the soil
  * water of the focused patch and a leaf takes the colour of its condition through the instance uniforms the
  * scene hands on every frame (mark_plant_stands).
  */
 ::godot::Ref<::godot::Material> stand_in_of(const VivariumAssetBinding& binding, const std::string& name) {
-    ::godot::Ref<::godot::Shader> shader;
-    shader.instantiate();
-    shader->set_code(swaying_code(GODOT_STAND_IN_SHADER_CODE));
     ::godot::Ref<::godot::ShaderMaterial> material;
     material.instantiate();
-    material->set_shader(shader);
+    material->set_shader(load_plant_shader(GODOT_STAND_IN_SHADER_FILE));
     material->set_shader_parameter(GODOT_STAND_IN_COLOR,
                                    ::godot::Color::hex(asset_color(binding, name, GODOT_COLOR_ASSET_MISSING)));
     material->set_shader_parameter(GODOT_STAND_IN_WILTED, ::godot::Color::hex(GODOT_COLOR_WILTED));
@@ -94,7 +88,7 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
 
 /**
  * The material a bound template swings in (usecase:101335 animate the branch sway): a ShaderMaterial of
- * GODOT_ORGAN_SHADER_CODE that takes what the BaseMaterial3D of its one surface carries. Empty for a template of
+ * GODOT_ORGAN_SHADER_FILE that takes what the BaseMaterial3D of its one surface carries. Empty for a template of
  * several surfaces or a material of another form: such a template draws its own surfaces and stands still.
  */
 ::godot::Ref<::godot::Material> swaying_organ_of(const ::godot::Ref<::godot::Mesh>& shape) {
@@ -105,12 +99,9 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
     if (pbr.is_null()) {
         return ::godot::Ref<::godot::Material>();
     }
-    ::godot::Ref<::godot::Shader> shader;
-    shader.instantiate();
-    shader->set_code(swaying_code(GODOT_ORGAN_SHADER_CODE));
     ::godot::Ref<::godot::ShaderMaterial> organ;
     organ.instantiate();
-    organ->set_shader(shader);
+    organ->set_shader(load_plant_shader(GODOT_ORGAN_SHADER_FILE));
     organ->set_shader_parameter(GODOT_ORGAN_COLOR, pbr->get_albedo());
     organ->set_shader_parameter(GODOT_ORGAN_ALBEDO, pbr->get_texture(::godot::BaseMaterial3D::TEXTURE_ALBEDO));
     organ->set_shader_parameter(GODOT_ORGAN_NORMAL, pbr->get_texture(::godot::BaseMaterial3D::TEXTURE_NORMAL));
@@ -122,6 +113,8 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
     if (pbr->get_transparency() == ::godot::BaseMaterial3D::TRANSPARENCY_ALPHA_SCISSOR) {
         organ->set_shader_parameter(GODOT_ORGAN_CUT, pbr->get_alpha_scissor_threshold());
     }
+    // the condition a wilting leaf turns toward the dry olive at, the same code the stand-in shader compares
+    organ->set_shader_parameter(GODOT_STAND_IN_WILTED_CODE, static_cast<int32_t>(GODOT_COND_WILTED));
     return organ;
 }
 
@@ -143,7 +136,7 @@ PlantSceneTemplate template_of(const VivariumAssetBinding& binding, const ::godo
 }
 
 /**
- * The bark of the internodes (usecase:100395 age the bark): a ShaderMaterial of GODOT_BARK_SHADER_CODE that
+ * The bark of the internodes (usecase:100395 age the bark): a ShaderMaterial of GODOT_BARK_SHADER_FILE that
  * mixes `white` with `base` by the share each instance carries. A side bound to a BaseMaterial3D - a glTF
  * material always is one - hands on its colour, textures, roughness and UV scale. A side whose file is
  * missing hands on the stand-in colour of its name and no texture: the shader samples white then, so the
@@ -153,12 +146,9 @@ PlantSceneTemplate template_of(const VivariumAssetBinding& binding, const ::godo
                                             const ::godot::Ref<::godot::Material>& white,
                                             const std::string& base_name,
                                             const ::godot::Ref<::godot::Material>& base) {
-    ::godot::Ref<::godot::Shader> shader;
-    shader.instantiate();
-    shader->set_code(swaying_code(GODOT_BARK_SHADER_CODE));
     ::godot::Ref<::godot::ShaderMaterial> mix;
     mix.instantiate();
-    mix->set_shader(shader);
+    mix->set_shader(load_plant_shader(GODOT_BARK_SHADER_FILE));
     const ::godot::Ref<::godot::BaseMaterial3D> white_pbr = white;
     if (white_pbr.is_valid()) {
         mix->set_shader_parameter(GODOT_BARK_WHITE_COLOR, white_pbr->get_albedo());
@@ -197,19 +187,16 @@ PlantSceneTemplate template_of(const VivariumAssetBinding& binding, const ::godo
 }
 
 /**
- * The ground of one soil (GODOT_GROUND_SHADER_CODE): a ShaderMaterial whose cover is `cover` - a side bound to
+ * The ground of one soil (GODOT_GROUND_SHADER_FILE): a ShaderMaterial whose cover is `cover` - a side bound to
  * a BaseMaterial3D hands on its colour, albedo texture, UV scale and roughness, a cover whose file is
  * missing the colour `fallback` and no texture, so the shader samples white. Bare soil, bank, bed, slope
  * thresholds and the line shares are the same for every soil; the grid step comes with the terrain
  * (fill_plant_ground).
  */
 ::godot::Ref<::godot::Material> ground_of(const ::godot::Ref<::godot::Material>& cover, uint32_t fallback) {
-    ::godot::Ref<::godot::Shader> shader;
-    shader.instantiate();
-    shader->set_code(GODOT_GROUND_SHADER_CODE);
     ::godot::Ref<::godot::ShaderMaterial> ground;
     ground.instantiate();
-    ground->set_shader(shader);
+    ground->set_shader(load_plant_shader(GODOT_GROUND_SHADER_FILE));
     const ::godot::Ref<::godot::BaseMaterial3D> pbr = cover;
     if (pbr.is_valid()) {
         ground->set_shader_parameter(GODOT_GROUND_COVER_COLOR, pbr->get_albedo());
@@ -233,6 +220,7 @@ PlantSceneTemplate template_of(const VivariumAssetBinding& binding, const ::godo
     ground->set_shader_parameter(GODOT_GROUND_MAJOR_WEIGHT, GODOT_GROUND_MAJOR_SHARE);
     ground->set_shader_parameter(GODOT_GROUND_CONTOUR_WEIGHT, GODOT_GROUND_CONTOUR_SHARE);
     ground->set_shader_parameter(GODOT_GROUND_WET, GODOT_STAND_IN_WET_SHADE);
+    ground->set_shader_parameter(GODOT_GROUND_FRAME_STEP, GODOT_FRAME_STEP_LINEAR);
     return ground;
 }
 
@@ -259,6 +247,12 @@ PlantSceneLook bind_plant_look(const VivariumAssetBinding& binding, const ::godo
     look.ground[GODOT_SOIL_FOREST] = soil_ground(binding, asset_root, roles, GODOT_ROLE_GROUND_FOREST);
     look.soil = ground_of(::godot::Ref<::godot::Material>(), GODOT_COLOR_SOIL);
     look.leaf = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_LEAF));
+    // the leaf alone takes the colour of its season and the dry olive (m.html leafCol): its own material, stand-in or
+    // organ, carries GODOT_LEAF_SEASON; the error material of a file that does not load is no ShaderMaterial and stays
+    const ::godot::Ref<::godot::ShaderMaterial> leaf_shader = look.leaf.material;
+    if (leaf_shader.is_valid()) {
+        leaf_shader->set_shader_parameter(GODOT_LEAF_SEASON, GODOT_LEAF_SEASON_ON);
+    }
     look.male = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_MALE));
     look.female = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_FEMALE));
     look.fruit = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_FRUIT));

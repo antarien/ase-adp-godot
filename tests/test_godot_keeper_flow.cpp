@@ -15,8 +15,8 @@
  * @usecase     usecase:100390 - return to the garden
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-26
- * @version     00.00.02.00000
+ * @modified    2026-11-12
+ * @version     00.00.02.00001
  */
 
 #include <doctest/doctest.h>
@@ -78,6 +78,30 @@ TEST_CASE("return to the garden: the frame that brings the time away is noticed,
         CHECK(end.noticed);
         CHECK(end.caught_up);
         CHECK(end.catch_up_s == doctest::Approx(4.0));
+    }
+}
+
+TEST_CASE("return to the garden: only a front that follows a background opens the trail (row A08)") {
+    GardenReturn state;
+
+    SUBCASE("the first front of a boot follows no background and is no return") {
+        CHECK_FALSE(garden_came_back(state, true));
+        CHECK_FALSE(state.away);
+    }
+
+    SUBCASE("background then front is one return, the next front is none") {
+        CHECK_FALSE(garden_came_back(state, false));
+        CHECK(state.away);
+        CHECK(garden_came_back(state, true));
+        CHECK_FALSE(state.away);
+        CHECK_FALSE(garden_came_back(state, true));
+    }
+
+    SUBCASE("two backgrounds (application paused and focus out) before one front are still one return") {
+        CHECK_FALSE(garden_came_back(state, false));
+        CHECK_FALSE(garden_came_back(state, false));
+        CHECK(garden_came_back(state, true));
+        CHECK_FALSE(garden_came_back(state, true));
     }
 }
 

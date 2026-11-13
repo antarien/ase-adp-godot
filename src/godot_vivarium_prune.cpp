@@ -15,8 +15,8 @@
  * @usecase     usecase:100365 - prune a branch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.01.00003
+ * @modified    2026-11-10
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -29,6 +29,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 namespace ase::adp::godot {
 
@@ -52,6 +53,22 @@ void VivariumView::toggle_pruning() {
     flattening_ = false;
     note(::godot::String("prune mode ") + (pruning_ ? "on" : "off"));
     node_->queue_redraw();
+}
+
+void VivariumView::plant_segments(uint32_t patch_object, std::vector<VivariumInstanceView>& out) const {
+    // The internodes of ONE plant: the organ port names the body each internode belongs to, the patch object is
+    // that body. pick_segment hits among them, the HUD anchors the crown and the prune marks on them.
+    out.clear();
+    std::unordered_map<uint32_t, uint32_t> body_of;
+    for (const VivariumOrganView& organ : resources_.get_organs(GODOT_ORGAN_SEGMENT)) {
+        body_of[organ.object_id] = organ.body;
+    }
+    for (const VivariumInstanceView& instance : resources_.get_instances(GODOT_ORGAN_SEGMENT)) {
+        const auto body = body_of.find(instance.object_id);
+        if (body != body_of.end() && body->second == patch_object) {
+            out.push_back(instance);
+        }
+    }
 }
 
 uint32_t VivariumView::pick_segment(const ::godot::Vector2& at, uint32_t& candidates, float& nearest_px) const {
@@ -80,17 +97,11 @@ uint32_t VivariumView::pick_segment(const ::godot::Vector2& at, uint32_t& candid
     if (origin == scene_origins_.end()) {
         return GODOT_NO_OBJECT;
     }
-    std::unordered_map<uint32_t, uint32_t> body_of;
-    for (const VivariumOrganView& organ : resources_.get_organs(GODOT_ORGAN_SEGMENT)) {
-        body_of[organ.object_id] = organ.body;
-    }
+    std::vector<VivariumInstanceView> segments;
+    plant_segments(focused->object_id, segments);
     uint32_t hit = GODOT_NO_OBJECT;
     float hit_px = pick_px_;
-    for (const VivariumInstanceView& instance : resources_.get_instances(GODOT_ORGAN_SEGMENT)) {
-        const auto body = body_of.find(instance.object_id);
-        if (body == body_of.end() || body->second != focused->object_id) {
-            continue;
-        }
+    for (const VivariumInstanceView& instance : segments) {
         // rows: x, y, z axis and origin per row (GODOT_INSTANCE_VALUES); the tube runs along y
         const ::godot::Vector3 middle(origin->second.x + instance.rows[3] + GODOT_TUBE_MID * instance.rows[1],
                                       origin->second.y + instance.rows[7] + GODOT_TUBE_MID * instance.rows[5],

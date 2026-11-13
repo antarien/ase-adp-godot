@@ -42,17 +42,19 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-10-26
- * @version     00.00.06.00000
+ * @modified    2026-11-13
+ * @version     00.00.10.00000
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/godot_plant_geometry.hpp>
 #include <ase/adp/godot/godot_plant_ground.hpp>
+#include <ase/adp/godot/godot_plant_environment.hpp>  // SkyOvercastShade, the shade of an overcast sky
 #include <ase/adp/godot/godot_plant_look.hpp>
 #include <ase/adp/godot/types.hpp>
 
+#include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/node3d.hpp>
@@ -62,12 +64,6 @@
 #include <vector>
 
 namespace ase::adp::godot {
-
-// THE FOG VEILS THE GROUND, NEVER THE SKY: Godot lays its depth fog over the background with the factor
-// fog_sky_affect, 1 by default, and the background stands at infinite depth - the whole sky turned the fog
-// colour, and the sky colour ase-pl-sky computes (the background record) never reached the screen. It stands
-// here and not in types.hpp, which nearly every unit of the adapter includes.
-constexpr float GODOT_FOG_SKY_AFFECT = 0.0f;  // share of the depth fog laid over the sky background: none
 
 /**
  * Builds the scene under `parent` and returns its root (GODOT_PLANT_SCENE_ROOT): the current camera, the
@@ -85,12 +81,24 @@ void aim_plant_camera(::godot::Node3D* scene, const PlantSceneCamera& camera, co
  * texture coordinates and triangles as ase-terrain and ase-render-data laid them -, its vertex colours
  * laid by mark_ground over the levelled `discs` and the brook `beds`, drawn in `material`, the ground of
  * the focused patch's soil (PlantSceneLook::ground), whose grid lines stand `step_m` apart: the distance
- * of two height samples.
+ * of two height samples. P0690: where `surface` was built from the same samples and cells, patch_ground
+ * writes only what moved and send_ground_patch hands Godot those spans; the mesh is built anew only
+ * otherwise, and hold_ground_surface then reads where Godot keeps its vertices into `surface`.
  */
 void fill_plant_ground(::godot::Node3D* scene, const std::vector<VivariumTerrainView>& samples,
                        const std::vector<VivariumGroundCellView>& cells, const std::vector<PlantGroundDisc>& discs,
                        const std::vector<PlantGroundBed>& beds, float step_m,
-                       const ::godot::Ref<::godot::Material>& material);
+                       const ::godot::Ref<::godot::Material>& material, PlantGroundSurface& surface);
+
+/**
+ * After a full build of the ground (godot_plant_ground_mesh.cpp): the layout RenderingServer names for the
+ * format of `mesh`'s surface and the vertex and attribute streams Godot made of it, read into `surface`;
+ * `surface.patchable` only where ground_code_holds found Godot's code in them.
+ */
+void hold_ground_surface(const ::godot::Ref<::godot::ArrayMesh>& mesh, PlantGroundSurface& surface);
+
+/** Hands Godot the spans the last patch_ground named, and the grown bounds where a vertex moved past them. */
+void send_ground_patch(const ::godot::Ref<::godot::ArrayMesh>& mesh, const PlantGroundSurface& surface);
 
 /**
  * Replaces the plants: one node per body of `origins` at its stem base, under it the instance records of
@@ -128,10 +136,15 @@ void fill_plant_seeds(::godot::Node3D* scene, const GodotHostResourceManager& re
 /**
  * Sets the sun (with shadows), the moon light, the sky colour behind the scene, the ambient light and the
  * fog from the sky port, and stands the discs of sun and moon in the sky along their directions
- * (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11: sun, moon and the day cycle). The fog veils the ground only
- * (GODOT_FOG_SKY_AFFECT): the sky shows the background record, and the stars stand before it. The moon light and its disc stand
+ * (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11: sun, moon and the day cycle). Sky colour, ambient light, fog and
+ * exposure are light_plant_environment's (godot_plant_environment.hpp): the fog veils the ground only, the
+ * sky shows the background record through its sky shader, and the stars stand before it. The moon light and its disc stand
  * only while the port carries a moon record; the sun disc only while the sun is above the horizon plane.
+ * `overcast` dims the sun by its light factor and reaches light_plant_environment for the sky and the ambient
+ * light (PLAN_ASE_VIVARIUM_PHASE_06_HUD row N01). `edge` is the ground's visible far edge (plant_ground_far_edge;
+ * null while none stands); light_plant_sky stands the sky dome so its horizon lies there (B0262).
  */
-void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky);
+void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky, const SkyOvercastShade& overcast,
+                       const ::godot::Vector3* edge);
 
 }  // namespace ase::adp::godot

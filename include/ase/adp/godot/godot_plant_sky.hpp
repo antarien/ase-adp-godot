@@ -21,18 +21,21 @@
  * @usecase     usecase:101384 - place sun and moon spatially
  * @actor       cycle/DAY/NIGHT (semi/nbp) Day/Night Cycle
  * @created     2026-10-26
- * @modified    2026-10-28
- * @version     00.00.03.00000
+ * @modified    2026-11-12
+ * @version     00.00.06.00000
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_plant_environment.hpp>  // SkyOvercastShade, the fade of the moons and the stars
 
 #include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/variant/vector3.hpp>
 
 namespace ase::adp::godot {
 
 /**
- * Adds the hidden sun disc (GODOT_PLANT_SUN_DISC) and, for every one of the GODOT_SKY_MOONS_MAX moon slots, a
+ * Adds the hidden sun disc (GODOT_PLANT_SUN_DISC), the hidden halo around it (build_plant_sun_halo,
+ * godot_plant_sun_halo.hpp) and, for every one of the GODOT_SKY_MOONS_MAX moon slots, a
  * dark moon light (GODOT_PLANT_MOON and the slot number) and a hidden moon disc (GODOT_PLANT_MOON_DISC and the
  * slot number) under the scene root, and for every one of the GODOT_SKY_COMETS_MAX comet slots a hidden head
  * (GODOT_PLANT_COMET_HEAD and the slot number) and a hidden tail (GODOT_PLANT_COMET_TAIL and the slot number).
@@ -44,11 +47,20 @@ void build_plant_sky(::godot::Node3D* scene);
  * Sets every moon slot from the moon record in it - the light shines along the negative of the moon's
  * direction in its colour at its strength (CEL_MOON_CONTRIB for Amilox, 0 for Scorpii), the disc stands on
  * that side of the sky; a slot without a record goes dark. Stands the sun disc along the sun direction while
- * the sun is above the horizon plane. Each disc stands at GODOT_SKY_DISC_DISTANCE from the camera, a body at
- * infinity. Every comet slot with a record shows its head along the comet's direction and its tail as a cone
+ * the sun is above the horizon plane. Each disc stands at GODOT_SKY_DISC_DISTANCE from the middle of the sky dome,
+ * a body at infinity: sky_dome_centre (godot_plant_sky_disc.hpp) reckons that middle from the camera and `edge`,
+ * the ground's visible far edge (plant_ground_far_edge; null while none stands), so the dome's horizon lies where
+ * the terrain ends in the picture (B0262). The halo and the starfield stand on the same middle. Every comet slot with a record shows its head along the comet's direction and its tail as a cone
  * from the head along the tail direction, as long as the arc of the record; a slot without one stays hidden.
- * A sky the port did not carry yet changes nothing.
+ * `overcast` fades the moon discs to SkyOvercastShade::moon of their opacity and hands the starfield its
+ * factor (light_plant_stars); under an open sky both are 1. Every moon disc stands at
+ * SkyOvercastShade::moon_opacity and carries the shadow disc of the mockup's crescent after the shade's
+ * moon_shadow_* (GODOT_MOON_SHADER_FILE). BRIDGE GAP: the moon record (VivariumMoonView) carries no phase, so
+ * the crescent is the mockup's, not the moon's own. While the sun is up the halo stands around it after the
+ * shade (light_plant_sun_halo, godot_plant_sun_halo.hpp), and the sun disc turns toward the shade's sun_veil by
+ * its veil (row N03). A sky the port did not carry yet changes nothing.
  */
-void light_plant_sky(::godot::Node3D* scene, const VivariumSkyView& sky);
+void light_plant_sky(::godot::Node3D* scene, const VivariumSkyView& sky, const SkyOvercastShade& overcast,
+                     const ::godot::Vector3* edge);
 
 }  // namespace ase::adp::godot

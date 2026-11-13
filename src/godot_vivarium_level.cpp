@@ -16,8 +16,8 @@
  * @usecase     usecase:5939 - adapt area terrain
  * @actor       Game Areal Plate (AREAL)
  * @created     2026-10-24
- * @modified    2026-10-24
- * @version     00.00.01.00001
+ * @modified    2026-11-12
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -37,15 +37,16 @@ bool VivariumView::can_level() const {
     return resources_.get_patch_at(selected_place_) != nullptr;
 }
 
-void VivariumView::level() {
+bool VivariumView::level() {
     if (!can_level()) {
         note("level " + measure(selected_place_) + " result=disabled");
-        return;
+        return false;
     }
     const VivariumPatchView* patch = resources_.get_patch_at(selected_place_);
     const HostStatus status = resources_.level(patch->object_id);
     note("level " + measure(selected_place_) + " result=" + GodotHostResourceManager::status_name(status));
     node_->queue_redraw();
+    return status == ase::kernel::HostStatusOk;  // the HUD toasts only an act the port took (applyTerr's changed)
 }
 
 }  // namespace ase::adp::godot

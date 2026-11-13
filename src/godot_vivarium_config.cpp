@@ -26,8 +26,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-11-06
- * @version     00.00.01.00004
+ * @modified    2026-11-12
+ * @version     00.00.01.00008
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -99,8 +99,8 @@ bool VivariumView::load_config() {
     }
     const ::godot::Dictionary root = parsed;
     if (!load_host_config(root) || !load_layout(root) || !load_texts(root) || !load_modes(root) ||
-        !load_debug(root) || !load_view(root)) {
-        return false;  // the failing key stands on the error panel already
+        !load_debug(root) || !load_view(root) || !load_hud(root)) {
+        return false;  // the failing key stands on the error panel already (load_hud after load_view: view.flatten_m)
     }
     if (!load_stage() || !load_assets(root)) {
         return false;
@@ -207,6 +207,22 @@ bool VivariumView::load_modes(const ::godot::Dictionary& root) {
     if (!read_section(modes, "debug", debug) || !read_text(debug, "argument", modes_.debug_argument)) {
         return fail_config("modes.debug");
     }
+    // the weather of the stage (usecase:5606 observe the sky): the bridge reads the word after it (load_hud_bridge)
+    ::godot::Dictionary weather;
+    if (!read_section(modes, "weather", weather) || !read_text(weather, "argument", modes_.weather_argument)) {
+        return fail_config("modes.weather");
+    }
+    // the HUD's still mode (usecase:101440): held on a launch whatever the platform says (read_hud_still)
+    ::godot::Dictionary still;
+    if (!read_section(modes, "still", still) || !read_text(still, "argument", modes_.still_argument)) {
+        return fail_config("modes.still");
+    }
+    // the stage's depth of perception (usecase:101440): the bridge reads the number after it (load_hud_bridge)
+    ::godot::Dictionary perception;
+    if (!read_section(modes, "perception", perception) ||
+        !read_text(perception, "argument", modes_.perception_argument)) {
+        return fail_config("modes.perception");
+    }
     return true;
 }
 
@@ -224,15 +240,18 @@ bool VivariumView::load_view(const ::godot::Dictionary& root) {
     double height = 0.0;
     double look = 0.0;
     double fov = 0.0;
+    double heading = 0.0;
     if (!read_number(view, GODOT_VIEW_KEY_DISTANCE, distance) || !(distance > 0.0) ||
         !read_number(view, GODOT_VIEW_KEY_HEIGHT, height) || !read_number(view, GODOT_VIEW_KEY_LOOK, look) ||
-        !read_number(view, GODOT_VIEW_KEY_FOV, fov) || !(fov > 0.0)) {
+        !read_number(view, GODOT_VIEW_KEY_FOV, fov) || !(fov > 0.0) ||
+        !read_number(view, GODOT_VIEW_KEY_HEADING, heading) || !(heading >= 0.0) || !(heading < 360.0)) {
         return fail_config("view.camera");
     }
     scene_camera_.distance_m = static_cast<float>(distance);
     scene_camera_.height_m = static_cast<float>(height);
     scene_camera_.look_m = static_cast<float>(look);
     scene_camera_.fov_deg = static_cast<float>(fov);
+    scene_camera_.heading_deg = static_cast<float>(heading);
     double budget_ms = 0.0;
     double headroom = 0.0;
     double ceiling = 0.0;

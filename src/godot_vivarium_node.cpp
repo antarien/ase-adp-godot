@@ -15,8 +15,9 @@
  *              godot_vivarium_host_config.cpp, godot_vivarium_layout.cpp and godot_vivarium_assets.cpp,
  *              the input in godot_vivarium_input.cpp, the canvas in godot_vivarium_draw.cpp, the 3D scene
  *              in godot_vivarium_scene.cpp, the explicit modes in godot_vivarium_measure.cpp, the pour and
- *              its arrival in godot_vivarium_water.cpp, the debug buttons and their lapse in
- *              godot_vivarium_debug.cpp.
+ *              its arrival in godot_vivarium_water.cpp, the debug buttons and their pace in
+ *              godot_vivarium_debug.cpp, the jumps in godot_vivarium_jump.cpp and godot_vivarium_date.cpp, the
+ *              background, the foreground and the return to the garden in godot_vivarium_return.cpp.
  *
  *              EVERY ENGINE CALL GOES THROUGH node_: drawing, redraw requests, processing, input
  *              mapping and the viewport are those of the engine object this view is the instance
@@ -40,8 +41,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-06
- * @version     00.00.04.00013
+ * @modified    2026-11-13
+ * @version     00.00.04.00020
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -108,7 +109,7 @@ void VivariumView::ready() {
         measurement_.active = launched_with(modes_.measure_argument);
         measurement_.warmup_left = modes_.measure_warmup_seconds;
         measurement_.record_left = modes_.measure_record_seconds;
-        boot_host();
+        boot_host(true);
         // PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 point 2: the care view is a 3D scene; it stands once and
         // follow_scene fills it from the ports frame by frame.
         scene_ = build_plant_scene(node_, scene_camera_);
@@ -143,7 +144,7 @@ void VivariumView::exit_tree() {
 
 // HOST LIFECYCLE
 
-void VivariumView::boot_host() {
+void VivariumView::boot_host(bool new_seeds) {
     failure_text_ = ::godot::String();
     selected_place_ = GODOT_NO_PLACE;
     water_pending_place_ = GODOT_NO_PLACE;
@@ -163,7 +164,11 @@ void VivariumView::boot_host() {
     garden_return_ = GardenReturn{};
     // sow a new seed (03.1 point 2, V7): the first boot sows the seeds of the start configuration, every
     // Reiniciar a new seed per patch (godot_new_seed.hpp) - a new birch of the same species in another shape.
-    const uint32_t sowing = host_boots_;
+    // A rewind (a date behind the clock, rewind_host) keeps the sowing of this run: the same birch from its start.
+    if (new_seeds) {
+        run_sowing_ = host_boots_;
+    }
+    const uint32_t sowing = run_sowing_;
     host_boots_ += 1u;
     VivariumStartConfig sown = start_;
     for (VivariumPatchSpec& patch : sown.patches) {
@@ -179,8 +184,12 @@ void VivariumView::boot_host() {
         return;
     }
 
+    // The boot shaped the ground with the start's relief (GodotHostResourceManager::start submits
+    // ground.height_scale_m before the first patch): that relief stands until a RELEVO chip asks another.
+    debug_.height_scale_m = sown.ground.height_scale_m;
+
     const VivariumBundleInfo& bundle = resources_.get_bundle();
-    build_line_ = ::godot::String("adapter ") + ASE_ADP_GODOT_VERSION + texts_.separator + "client " +
+    build_line_ =::godot::String("adapter ") + ASE_ADP_GODOT_VERSION + texts_.separator + "client " +
                   identity_value(identity_, "client_commit") + texts_.separator +
                   ::godot::String::num_uint64(bundle.units.size()) + " units";
     // The build line keeps to the surface: it shrinks until it fits beside the title's margins.
@@ -244,7 +253,7 @@ void VivariumView::restart() {
         configured_ = load_config();
     }
     if (configured_) {
-        boot_host();
+        boot_host(true);
     }
     node_->queue_redraw();
 }
@@ -328,13 +337,14 @@ void VivariumView::process(double delta) {
     const double elapsed_s =
         static_cast<double>(frame_ns - last_frame_ns_) / static_cast<double>(ase::utils::NANOS_PER_SECOND);
     last_frame_ns_ = frame_ns;
-    // A jump hands the host more time than the frame took and lets it run more ticks (jump_feed,
-    // godot_vivarium_clock.cpp) - every one an ordinary tick at the running pace, which the jump never touches.
-    const double lapse_s = jump_feed();
-    const uint32_t lapse_steps = debug_.jump.running ? debug_.lapse_steps : 0u;
-    // Host time (advance + snapshots) is measured apart from the whole _process interval (PLAN 02.3).
-    const HostStatus status = resources_.advance(elapsed_s, lapse_s, lapse_steps);
+    watch_ground_frame(frame_start_usec);  // the frames after a ground act, measured in every mode (P0690)
+    // The host gets the real time the frame took and nothing beyond it: a jump is one write into ase-time's
+    // clock (CAUSA_ASE_TIME, "The Seek Contract"), and every module computes its state at the new time in its
+    // own ticks at the running pace. Host time (advance + snapshots) is measured apart from the whole _process
+    // interval (PLAN 02.3).
+    const HostStatus status = resources_.advance(elapsed_s);
     const uint64_t host_usec = clock->get_ticks_usec() - frame_start_usec;
+    watch_ground_host(host_usec);  // the host's share of the frames after a ground act (P0690)
     if (status == ase::kernel::HostStatusOk) {
         announce_patches();
         follow_catch_up(elapsed_s, static_cast<double>(frame_ns) / static_cast<double>(ase::utils::NANOS_PER_SECOND));
@@ -342,8 +352,15 @@ void VivariumView::process(double delta) {
         follow_debug();
         follow_hour_length();
         follow_water();
+        const uint64_t scene_start_usec = clock->get_ticks_usec();
         follow_scene(elapsed_s);
         follow_initialisation();
+        const uint64_t hud_start_usec = clock->get_ticks_usec();
+        tick_hud(elapsed_s);  // the HUD's clock: long presses, held pours (godot_vivarium_hud_input.cpp)
+        const uint64_t hud_end_usec = clock->get_ticks_usec();
+        // the view's own shares of a frame after a ground act: which step besides the host filled the interval (P0690)
+        watch_ground_phases(scene_start_usec - frame_start_usec - host_usec, hud_start_usec - scene_start_usec,
+                            hud_end_usec - hud_start_usec, hud_end_usec - frame_start_usec);
         // The asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7) is lit by the sun of the host's
         // sky port; until the port carried all four records the showcase keeps its light unset.
         const VivariumSkyView& sky = resources_.get_sky();
@@ -365,44 +382,6 @@ void VivariumView::process(double delta) {
     }
     // A refused frame with a running host only drops this frame; the host has logged why.
     node_->queue_redraw();
-}
-
-void VivariumView::notification(int32_t what) {
-    if (in_editor()) {
-        return;
-    }
-    // THE WORLD DOES NOT STOP (PLAN 01.3 point 4): the background is logged as a fact, nothing is
-    // held. The next frame brings the time it lasted, and follow_catch_up logs its return.
-    if (what == ::godot::Node::NOTIFICATION_APPLICATION_PAUSED) {
-        note("background reason=application " + measure(GODOT_NO_PLACE));
-    } else if (what == ::godot::Node::NOTIFICATION_APPLICATION_RESUMED) {
-        note("foreground reason=application " + measure(GODOT_NO_PLACE));
-    } else if (what == ::godot::Node::NOTIFICATION_APPLICATION_FOCUS_OUT) {
-        note("background reason=focus " + measure(GODOT_NO_PLACE));
-    } else if (what == ::godot::Node::NOTIFICATION_APPLICATION_FOCUS_IN) {
-        note("foreground reason=focus " + measure(GODOT_NO_PLACE));
-    }
-}
-
-void VivariumView::follow_catch_up(double elapsed_s, double now_s) {
-    // The return to the garden (godot_garden_return.hpp) decides what this frame says: the frame that
-    // noticed a span the app spent away, and the frame in which its backlog ran dry with the seconds
-    // the catch-up took (V6). This function only writes the two lines. The ticks of this one frame
-    // are frame_ticks: measure() carries steps= (the Dissemination runs), and a key standing twice in
-    // one line keeps only its last value for every key=value reader.
-    const GardenReturnFrame frame =
-        garden_return_frame(garden_return_, now_s, elapsed_s, resources_.backlog_seconds());
-    if (frame.noticed) {
-        measurement_.catch_ups += measurement_.recording ? 1u : 0u;
-        note("catch_up elapsed_s=" + ::godot::String::num(elapsed_s, GODOT_LOG_DECIMALS) +
-             " frame_ticks=" + ::godot::String::num_uint64(resources_.last_steps()) +
-             " backlog_s=" + ::godot::String::num(resources_.backlog_seconds(), GODOT_LOG_DECIMALS) + " " +
-             measure(GODOT_NO_PLACE));
-    }
-    if (frame.caught_up) {
-        note("caught_up catch_up_s=" + ::godot::String::num(frame.catch_up_s, GODOT_LOG_DECIMALS) + " " +
-             measure(GODOT_NO_PLACE));
-    }
 }
 
 void VivariumView::follow_stages() {
@@ -447,6 +426,9 @@ void VivariumView::follow_stages() {
         line += " game_s=" + ::godot::String::num(clock.elapsed_s, GODOT_LOG_DECIMALS) +
                 " day=" + ::godot::String::num(clock.day, GODOT_LOG_DECIMALS) +
                 " hour=" + ::godot::String::num(clock.hour, GODOT_LOG_DECIMALS);
+        if (clock.shoot_known) {
+            line += " shoot_s=" + ::godot::String::num(clock.shoot_s, GODOT_LOG_DECIMALS);
+        }
     }
     line += " patches=" + ::godot::String::num_uint64(resources_.patch_count());
     const VivariumPatchView* patch = place == GODOT_NO_PLACE ? nullptr : resources_.get_patch_at(place);

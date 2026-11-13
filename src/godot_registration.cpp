@@ -23,6 +23,13 @@
  *              THE TERMINATOR REMOVES THE CLASS ITSELF: godot-cpp's binding unregisters only the
  *              classes registered through its own ClassDB, and this one is not among them.
  *
+ *              THIS UNIT FIXES THE SIZE OF THE VIEW. The memnew in create is compiled here, so the
+ *              size it allocates is sizeof(VivariumView) as godot_vivarium_node.hpp stood when this
+ *              unit was last compiled. An object of this unit older than a member added to the view
+ *              allocates too little, and the view's constructor writes past its end: the run dies
+ *              with "corrupted double-linked list" while main.tscn loads (run 20261112-perc1, after
+ *              hud_bridge_level_ was added, object of 17:44 against the header of 19:12).
+ *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @design      DSGN_016
@@ -30,8 +37,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-10-11
- * @version     00.00.01.00002
+ * @modified    2026-11-12
+ * @version     00.00.01.00003
  */
 
 #include <ase/adp/godot/godot_registration.hpp>

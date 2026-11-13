@@ -14,8 +14,8 @@
  * @usecase     usecase:101415 - hand sky light to app
  * @actor       cycle/DAY/NIGHT (semi/nbp) Day/Night Cycle
  * @created     2026-10-26
- * @modified    2026-10-26
- * @version     00.00.02.00000
+ * @modified    2026-11-08
+ * @version     00.00.03.00000
  */
 
 #include <doctest/doctest.h>
@@ -80,6 +80,34 @@ TEST_CASE("C0455: a moon in the sky is light of the scene, a moon record never c
     VivariumSkyView stale = night;
     stale.moon[0].intensity = 0.08;
     CHECK(scene_exposure(stale) == doctest::Approx(moonless));
+}
+
+TEST_CASE("D2258: at dusk the sky behind the scene is light the eye sees, the lift never blows it white") {
+    // PEX 24.85 h of probe 20261108-e1e4-fix: sun below the horizon, ambient 0.087, sky 0.178/0.098/0.086
+    VivariumSkyView dusk;
+    dusk.known = true;
+    dusk.sun_intensity = 0.0;
+    dusk.ambient_intensity = 0.087;
+    dusk.ambient_r = 0.1;
+    dusk.ambient_g = 0.1;
+    dusk.ambient_b = 0.1;
+    dusk.background_r = 0.178;
+    dusk.background_g = 0.098;
+    dusk.background_b = 0.086;
+    const float lift = scene_exposure(dusk);
+    CHECK(lift * lift == doctest::Approx(1.0 / 0.178).epsilon(0.001));
+    CHECK(lift > 1.0f);
+    // the brightest channel of the lifted sky stays below white
+    CHECK(lift * 0.178 < 1.0);
+    // a black sky leaves the lift to the light of the scene alone
+    VivariumSkyView black = dusk;
+    black.background_r = 0.0;
+    black.background_g = 0.0;
+    black.background_b = 0.0;
+    const double light = 0.087 * 0.1;
+    const float scene_only = scene_exposure(black);
+    CHECK(scene_only * scene_only == doctest::Approx(1.0 / light).epsilon(0.001));
+    CHECK(scene_only > lift);
 }
 
 }  // namespace ase::adp::godot

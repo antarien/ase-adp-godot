@@ -5,8 +5,8 @@
  * @design      DSGN_066
  * @brief       Pins the water table at NN0 and the ribbon of water along a course
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3: the vertices and triangles build_water_table
- *              lays at NN0 over the ground cells below it, and those build_water lays along a course, as
- *              they go to ArrayMesh from the stream, terrain and ground cell ports.
+ *              lays at NN0 over the cells of the ground mesh below it (build_ground over the terrain and
+ *              ground cell ports), and those build_water lays along a course, as they go to ArrayMesh.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -14,12 +14,13 @@
  * @usecase     usecase:101339 - show the ground around plant
  * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-11-01
- * @modified    2026-11-05
- * @version     00.00.04.00000
+ * @modified    2026-11-13
+ * @version     00.00.05.00000
  */
 
 #include <doctest/doctest.h>
 
+#include <ase/adp/godot/godot_plant_ground.hpp>
 #include <ase/adp/godot/godot_plant_water.hpp>
 #include <ase/adp/godot/types.hpp>
 
@@ -226,12 +227,21 @@ VivariumGroundCellView table_cell(uint32_t sw, uint32_t se, uint32_t ne, uint32_
     return cell;
 }
 
+/** The ground mesh build_ground lays over `samples` and `cells`, as the care view hands it to the table. */
+PlantMeshArrays table_mesh(const std::vector<VivariumTerrainView>& samples,
+                           const std::vector<VivariumGroundCellView>& cells) {
+    PlantMeshArrays ground;
+    std::vector<PlantGroundSlot> slots;
+    (void)build_ground(samples, cells, ground, slots);
+    return ground;
+}
+
 }  // namespace
 
 TEST_CASE("the water table lies at NN0 over the cells dug below it and over no dry cell") {
     PlantMeshArrays arrays;
     const std::vector<VivariumGroundCellView> cells = {table_cell(0u, 1u, 4u, 3u), table_cell(1u, 2u, 5u, 4u)};
-    REQUIRE(build_water_table({}, table_ground(), cells, arrays) == 1u);
+    REQUIRE(build_water_table({}, table_mesh(table_ground(), cells), arrays) == 1u);
     REQUIRE(arrays.positions.size() == 4u * 3u);
     REQUIRE(arrays.indices.size() == 6u);
     for (std::size_t v = 0u; v < 4u; ++v) {
@@ -252,7 +262,7 @@ TEST_CASE("the water table lies at NN0 over the cells dug below it and over no d
 
 TEST_CASE("the depth of the table above the ground goes into green, none where the ground stands above it") {
     PlantMeshArrays arrays;
-    REQUIRE(build_water_table({}, table_ground(), {table_cell(1u, 2u, 5u, 4u)}, arrays) == 1u);
+    REQUIRE(build_water_table({}, table_mesh(table_ground(), {table_cell(1u, 2u, 5u, 4u)}), arrays) == 1u);
     CHECK(arrays.colors[1] == doctest::Approx(0.0f));
     CHECK(arrays.colors[4u + 1u] == doctest::Approx(0.25f / GODOT_WATER_DEPTH_FULL_M));
     // no stream: still water, the course north
@@ -272,7 +282,7 @@ TEST_CASE("the table carries velocity and course of the stream whose bed holds t
     east.depth_m = 0.2;
     east.velocity_m_s = 1.0;
     PlantMeshArrays arrays;
-    REQUIRE(build_water_table({east}, table_ground(), {table_cell(1u, 2u, 5u, 4u)}, arrays) == 1u);
+    REQUIRE(build_water_table({east}, table_mesh(table_ground(), {table_cell(1u, 2u, 5u, 4u)}), arrays) == 1u);
     // the south corners lie on the bed: velocity share and the course east
     CHECK(arrays.colors[0] == doctest::Approx(1.0f / GODOT_WATER_VELOCITY_FULL_M_S));
     CHECK(arrays.colors[2] == doctest::Approx(1.0f));
@@ -284,14 +294,14 @@ TEST_CASE("the table carries velocity and course of the stream whose bed holds t
 
 TEST_CASE("a cell with a corner the port does not carry draws no water, and shared corners are one vertex") {
     PlantMeshArrays arrays;
-    CHECK(build_water_table({}, table_ground(), {table_cell(1u, 2u, 99u, 4u)}, arrays) == 0u);
+    CHECK(build_water_table({}, table_mesh(table_ground(), {table_cell(1u, 2u, 99u, 4u)}), arrays) == 0u);
     CHECK(arrays.positions.empty());
     std::vector<VivariumTerrainView> wet = table_ground();
     for (VivariumTerrainView& sample : wet) {
         sample.height = -1.0;
     }
     const std::vector<VivariumGroundCellView> cells = {table_cell(0u, 1u, 4u, 3u), table_cell(1u, 2u, 5u, 4u)};
-    REQUIRE(build_water_table({}, wet, cells, arrays) == 2u);
+    REQUIRE(build_water_table({}, table_mesh(wet, cells), arrays) == 2u);
     CHECK(arrays.positions.size() == 6u * 3u);
     CHECK(arrays.indices.size() == 12u);
 }

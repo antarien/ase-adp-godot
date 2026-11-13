@@ -22,25 +22,24 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-10-26
- * @version     00.00.07.00000
+ * @modified    2026-11-13
+ * @version     00.00.09.00003
  */
 
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_asset_showcase_scene.hpp>
+#include <ase/adp/godot/godot_plant_environment.hpp>
 #include <ase/adp/godot/godot_plant_haze.hpp>
 #include <ase/adp/godot/godot_plant_brook.hpp>
 #include <ase/adp/godot/godot_plant_instances.hpp>
+#include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_plant_sky.hpp>
 #include <ase/adp/godot/godot_plant_templates.hpp>
-#include <ase/adp/godot/godot_scene_exposure.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
-#include <godot_cpp/classes/camera_attributes_practical.hpp>
 #include <godot_cpp/classes/directional_light3d.hpp>
-#include <godot_cpp/classes/environment.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
@@ -49,7 +48,6 @@
 #include <godot_cpp/classes/multi_mesh.hpp>
 #include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
-#include <godot_cpp/classes/world_environment.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -93,7 +91,9 @@ T* add_part(::godot::Node3D* scene, const char* name) {
 /**
  * The arrays of one surface as Godot's mesh arrays, normals included as they stand - the templates
  * those of their ports, the ground those of ase-render-data; Godot derives none. An empty surface is no
- * mesh.
+ * mesh. Every array is written through its own memory (ptrw): a set() per element is one call across the
+ * GDExtension interface, and the ground's 66057 vertices and 393228 indices made that some 660 000 calls on
+ * the main thread between two frames of a dig (P0690).
  */
 ::godot::Ref<::godot::ArrayMesh> mesh_of(const PlantMeshArrays& arrays) {
     if (arrays.positions.empty() || arrays.indices.empty()) {
@@ -101,19 +101,22 @@ T* add_part(::godot::Node3D* scene, const char* name) {
     }
     ::godot::PackedVector3Array positions;
     positions.resize(static_cast<int64_t>(arrays.positions.size() / 3u));
+    ::godot::Vector3* position_at = positions.ptrw();
     for (std::size_t v = 0u; v < arrays.positions.size() / 3u; ++v) {
-        positions.set(static_cast<int64_t>(v), ::godot::Vector3(arrays.positions[v * 3u], arrays.positions[v * 3u + 1u],
-                                                                arrays.positions[v * 3u + 2u]));
+        position_at[v] = ::godot::Vector3(arrays.positions[v * 3u], arrays.positions[v * 3u + 1u],
+                                          arrays.positions[v * 3u + 2u]);
     }
     ::godot::PackedVector2Array uvs;
     uvs.resize(static_cast<int64_t>(arrays.uvs.size() / 2u));
+    ::godot::Vector2* uv_at = uvs.ptrw();
     for (std::size_t v = 0u; v < arrays.uvs.size() / 2u; ++v) {
-        uvs.set(static_cast<int64_t>(v), ::godot::Vector2(arrays.uvs[v * 2u], arrays.uvs[v * 2u + 1u]));
+        uv_at[v] = ::godot::Vector2(arrays.uvs[v * 2u], arrays.uvs[v * 2u + 1u]);
     }
     ::godot::PackedInt32Array indices;
     indices.resize(static_cast<int64_t>(arrays.indices.size()));
+    int32_t* index_at = indices.ptrw();
     for (std::size_t i = 0u; i < arrays.indices.size(); ++i) {
-        indices.set(static_cast<int64_t>(i), arrays.indices[i]);
+        index_at[i] = arrays.indices[i];
     }
     ::godot::Array surface;
     surface.resize(::godot::Mesh::ARRAY_MAX);
@@ -122,18 +125,19 @@ T* add_part(::godot::Node3D* scene, const char* name) {
     surface[::godot::Mesh::ARRAY_INDEX] = indices;
     ::godot::PackedVector3Array normals;
     normals.resize(static_cast<int64_t>(arrays.normals.size() / 3u));
+    ::godot::Vector3* normal_at = normals.ptrw();
     for (std::size_t v = 0u; v < arrays.normals.size() / 3u; ++v) {
-        normals.set(static_cast<int64_t>(v), ::godot::Vector3(arrays.normals[v * 3u], arrays.normals[v * 3u + 1u],
-                                                              arrays.normals[v * 3u + 2u]));
+        normal_at[v] = ::godot::Vector3(arrays.normals[v * 3u], arrays.normals[v * 3u + 1u], arrays.normals[v * 3u + 2u]);
     }
     surface[::godot::Mesh::ARRAY_NORMAL] = normals;
     // the vertex colours where the surface carries them: the cover of the ground (mark_ground)
     if (!arrays.colors.empty()) {
         ::godot::PackedColorArray colors;
         colors.resize(static_cast<int64_t>(arrays.colors.size() / 4u));
+        ::godot::Color* color_at = colors.ptrw();
         for (std::size_t v = 0u; v < arrays.colors.size() / 4u; ++v) {
-            colors.set(static_cast<int64_t>(v), ::godot::Color(arrays.colors[v * 4u], arrays.colors[v * 4u + 1u],
-                                                               arrays.colors[v * 4u + 2u], arrays.colors[v * 4u + 3u]));
+            color_at[v] = ::godot::Color(arrays.colors[v * 4u], arrays.colors[v * 4u + 1u], arrays.colors[v * 4u + 2u],
+                                         arrays.colors[v * 4u + 3u]);
         }
         surface[::godot::Mesh::ARRAY_COLOR] = colors;
     }
@@ -177,14 +181,16 @@ void fill_instances(::godot::MultiMeshInstance3D* node, const ::godot::Ref<::god
     multimesh->set_instance_count(static_cast<int32_t>(count));
     // one stride per instance: the twelve values of its record, then its custom data
     const std::size_t stride = GODOT_INSTANCE_VALUES + extra;
+    // written through the buffer's own memory (ptrw), never a set() per value across the GDExtension interface
     ::godot::PackedFloat32Array buffer;
     buffer.resize(static_cast<int64_t>(count * stride));
+    float* value_at = buffer.ptrw();
     for (std::size_t n = 0u; n < count; ++n) {
         for (std::size_t v = 0u; v < GODOT_INSTANCE_VALUES; ++v) {
-            buffer.set(static_cast<int64_t>(n * stride + v), rows[n * GODOT_INSTANCE_VALUES + v]);
+            value_at[n * stride + v] = rows[n * GODOT_INSTANCE_VALUES + v];
         }
         for (std::size_t v = 0u; v < extra; ++v) {
-            buffer.set(static_cast<int64_t>(n * stride + GODOT_INSTANCE_VALUES + v), (*custom)[n * extra + v]);
+            value_at[n * stride + GODOT_INSTANCE_VALUES + v] = (*custom)[n * extra + v];
         }
     }
     multimesh->set_buffer(buffer);
@@ -205,8 +211,9 @@ void fill_instances(::godot::MultiMeshInstance3D* node, const ::godot::Ref<::god
     ::godot::PackedFloat32Array texels;
     texels.resize(static_cast<int64_t>(texture_rows * row_values));
     texels.fill(static_cast<float>(GODOT_SWAY_NONE));
+    float* texel_at = texels.ptrw();
     for (std::size_t v = 0u; v < count * GODOT_SWAY_VALUES; ++v) {
-        texels.set(static_cast<int64_t>(v), (*sway)[v]);
+        texel_at[v] = (*sway)[v];
     }
     const ::godot::Ref<::godot::Image> image = ::godot::Image::create_from_data(
         static_cast<int32_t>(per_row * GODOT_SWAY_TEXELS), static_cast<int32_t>(texture_rows), false,
@@ -259,18 +266,7 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
     eye->set_fov(camera.fov_deg);
     eye->set_current(true);
 
-    ::godot::WorldEnvironment* world = add_part<::godot::WorldEnvironment>(scene, GODOT_PLANT_ENVIRONMENT);
-    ::godot::Ref<::godot::Environment> environment;
-    environment.instantiate();
-    environment->set_background(::godot::Environment::BG_COLOR);
-    environment->set_ambient_source(::godot::Environment::AMBIENT_SOURCE_COLOR);
-    world->set_environment(environment);
-    // the camera adapts to the light as an eye does (register D1721): light_plant_scene sets its multiplier
-    // every frame from the sky port (scene_exposure); the sky's numbers stay as they are
-    ::godot::Ref<::godot::CameraAttributesPractical> exposure;
-    exposure.instantiate();
-    exposure->set_auto_exposure_enabled(false);
-    world->set_camera_attributes(exposure);
+    build_plant_environment(scene);
 
     (void)add_part<::godot::MeshInstance3D>(scene, GODOT_PLANT_GROUND);
     build_plant_water(scene);
@@ -294,15 +290,24 @@ void aim_plant_camera(::godot::Node3D* scene, const PlantSceneCamera& camera, co
 void fill_plant_ground(::godot::Node3D* scene, const std::vector<VivariumTerrainView>& samples,
                        const std::vector<VivariumGroundCellView>& cells, const std::vector<PlantGroundDisc>& discs,
                        const std::vector<PlantGroundBed>& beds, float step_m,
-                       const ::godot::Ref<::godot::Material>& material) {
+                       const ::godot::Ref<::godot::Material>& material, PlantGroundSurface& surface) {
     ::godot::MeshInstance3D* node = part_of<::godot::MeshInstance3D>(scene, GODOT_PLANT_GROUND);
     if (node == nullptr) {
         return;
     }
-    PlantMeshArrays arrays;
-    (void)build_ground(samples, cells, arrays);
-    (void)mark_ground(discs, beds, arrays);
-    node->set_mesh(mesh_of(arrays));
+    const ::godot::Ref<::godot::ArrayMesh> held = node->get_mesh();
+    if (held.is_valid() && patch_ground(samples, cells, discs, beds, surface)) {
+        send_ground_patch(held, surface);
+    } else {
+        surface.arrays = PlantMeshArrays();
+        surface.slots.clear();
+        (void)build_ground(samples, cells, surface.arrays, surface.slots);
+        (void)mark_ground(discs, beds, surface.arrays);
+        surface.cells = cells;
+        const ::godot::Ref<::godot::ArrayMesh> built = mesh_of(surface.arrays);
+        node->set_mesh(built);
+        hold_ground_surface(built, surface);
+    }
     const ::godot::Ref<::godot::ShaderMaterial> shaded = material;
     if (shaded.is_valid()) {
         shaded->set_shader_parameter(GODOT_GROUND_GRID_STEP, step_m);
@@ -444,7 +449,8 @@ void fill_plant_seeds(::godot::Node3D* scene, const GodotHostResourceManager& re
     fill_instances(node, shape, rows, nullptr, look.nutlet.material, nullptr);
 }
 
-void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky) {
+void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky, const SkyOvercastShade& overcast,
+                       const ::godot::Vector3* edge) {
     if (!sky.known) {
         return;
     }
@@ -452,37 +458,16 @@ void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky) {
                                  static_cast<float>(sky.sun_z)};
     const float sun_rgb[3] = {static_cast<float>(sky.sun_r), static_cast<float>(sky.sun_g),
                               static_cast<float>(sky.sun_b)};
-    light_asset_showcase(scene, toward_sun, sun_rgb, static_cast<float>(sky.sun_intensity));
+    // under an overcast sky the sun lights the land dimmer (m.html light(), row N01)
+    light_asset_showcase(scene, toward_sun, sun_rgb, static_cast<float>(sky.sun_intensity) * overcast.light);
     ::godot::DirectionalLight3D* sun = part_of<::godot::DirectionalLight3D>(scene, GODOT_SHOWCASE_SUN);
     if (sun != nullptr) {
         sun->set_shadow(true);
     }
-    light_plant_sky(scene, sky);
-
-    ::godot::WorldEnvironment* world = part_of<::godot::WorldEnvironment>(scene, GODOT_PLANT_ENVIRONMENT);
-    if (world == nullptr || world->get_environment().is_null()) {
-        return;
-    }
-    const ::godot::Ref<::godot::Environment> environment = world->get_environment();
-    environment->set_bg_color(::godot::Color(static_cast<float>(sky.background_r), static_cast<float>(sky.background_g),
-                                             static_cast<float>(sky.background_b)));
-    environment->set_ambient_light_color(::godot::Color(static_cast<float>(sky.ambient_r),
-                                                        static_cast<float>(sky.ambient_g),
-                                                        static_cast<float>(sky.ambient_b)));
-    environment->set_ambient_light_energy(static_cast<float>(sky.ambient_intensity));
-    environment->set_fog_enabled(true);
-    environment->set_fog_mode(::godot::Environment::FOG_MODE_DEPTH);
-    environment->set_fog_light_color(::godot::Color(static_cast<float>(sky.fog_r), static_cast<float>(sky.fog_g),
-                                                    static_cast<float>(sky.fog_b)));
-    environment->set_fog_depth_begin(static_cast<float>(sky.fog_near));
-    environment->set_fog_depth_end(static_cast<float>(sky.fog_far));
-    environment->set_fog_sky_affect(GODOT_FOG_SKY_AFFECT);
-    // the shimmer of hot air ase-atmosphere computes, carried in the fog record (usecase:101515)
-    veil_plant_scene(scene, sky);
-    const ::godot::Ref<::godot::CameraAttributes> exposure = world->get_camera_attributes();
-    if (exposure.is_valid()) {
-        exposure->set_exposure_multiplier(scene_exposure(sky));
-    }
+    // under an overcast sky the moons and the stars fade behind the clouds (m.html drawSky, row N02)
+    light_plant_sky(scene, sky, overcast, edge);
+    // sky colour, ambient light, fog and the lift of the exposure (godot_plant_environment.hpp)
+    light_plant_environment(scene, sky, overcast);
 }
 
 }  // namespace ase::adp::godot

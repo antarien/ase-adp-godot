@@ -16,11 +16,12 @@
  * @usecase     usecase:101515 - veil sight with weather
  * @actor       Weather Veil Controller (WEATVEICON)
  * @created     2026-10-28
- * @modified    2026-10-28
- * @version     00.00.01.00000
+ * @modified    2026-11-12
+ * @version     00.00.01.00001
  */
 
 #include <ase/adp/godot/godot_plant_haze.hpp>
+#include <ase/adp/godot/godot_plant_shader.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>
@@ -51,12 +52,9 @@ void build_plant_haze(::godot::Node3D* scene) {
     if (eye == nullptr) {
         return;
     }
-    ::godot::Ref<::godot::Shader> shader;
-    shader.instantiate();
-    shader->set_code(GODOT_HAZE_SHADER_CODE);
     ::godot::Ref<::godot::ShaderMaterial> veil;
     veil.instantiate();
-    veil->set_shader(shader);
+    veil->set_shader(load_plant_shader(GODOT_HAZE_SHADER_FILE));
     veil->set_shader_parameter(GODOT_HAZE_ROWS, GODOT_HAZE_WAVE_ROWS);
     veil->set_shader_parameter(GODOT_HAZE_SPEED, GODOT_HAZE_WAVE_SPEED);
     veil->set_shader_parameter(GODOT_HAZE_REACH, GODOT_HAZE_WAVE_REACH);
@@ -104,6 +102,14 @@ void veil_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky) {
     veil->set_shader_parameter(GODOT_HAZE_SHIMMER, static_cast<float>(sky.fog_shimmer));
     veil->set_shader_parameter(GODOT_HAZE_NEAR, static_cast<float>(sky.fog_near));
     veil->set_shader_parameter(GODOT_HAZE_FAR, static_cast<float>(sky.fog_far));
+    // the wind drift along the camera's right on the world grid (x east, z north): the rows lean and run downwind;
+    // before the first wind record it stays 0 and the rows rise straight
+    float drift = 0.0f;
+    if (sky.wind_known) {
+        const ::godot::Vector3 right = eye->get_global_transform().basis.orthonormalized().get_column(0);
+        drift = right.dot(::godot::Vector3(static_cast<float>(sky.drift_x), 0.0f, static_cast<float>(sky.drift_z)));
+    }
+    veil->set_shader_parameter(GODOT_HAZE_DRIFT, drift);
 }
 
 }  // namespace ase::adp::godot

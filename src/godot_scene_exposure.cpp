@@ -12,8 +12,8 @@
  * @usecase     usecase:101415 - hand sky light to app
  * @actor       cycle/DAY/NIGHT (semi/nbp) Day/Night Cycle
  * @created     2026-10-26
- * @modified    2026-10-26
- * @version     00.00.02.00000
+ * @modified    2026-11-08
+ * @version     00.00.03.00000
  */
 
 #include <ase/adp/godot/godot_scene_exposure.hpp>
@@ -29,7 +29,11 @@ float scene_exposure(const VivariumSkyView& sky) {
     for (uint32_t m = 0u; m < sky.moons && m < GODOT_SKY_MOONS_MAX; ++m) {
         moon += sky.moon[m].intensity;
     }
-    const double light = sky.sun_intensity + moon + ambient;
+    // the sky behind the scene is light the eye sees too: at dusk it is the brightest thing in view (D2258)
+    const double sky_rg = sky.background_r > sky.background_g ? sky.background_r : sky.background_g;
+    const double sky_peak = sky_rg > sky.background_b ? sky_rg : sky.background_b;
+    const double lit = sky.sun_intensity + moon + ambient;
+    const double light = lit > sky_peak ? lit : sky_peak;
     if (!sky.known || !(light > 0.0)) {
         return GODOT_EXPOSURE_LIFT_MAX;
     }

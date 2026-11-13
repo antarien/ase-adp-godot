@@ -23,8 +23,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-26
- * @version     00.00.01.00003
+ * @modified    2026-11-12
+ * @version     00.00.01.00005
  */
 
 #include "test_godot_host_support.hpp"
@@ -128,10 +128,10 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     CHECK(std::string(resources.failure_step()) == GODOT_STEP_BUNDLE);
     CHECK(!resources.running());
 
-    // Refused before a host exists: no catch-up steps, no stage reader, a relative files directory.
-    VivariumStartConfig no_steps = vivarium_config(bundle);
-    no_steps.catch_up_steps = 0u;
-    CHECK(resources.boot(no_steps) == ase::kernel::HostStatusInvalidArgument);
+    // Refused before a host exists: no real port, no stage reader, a relative files directory.
+    VivariumStartConfig no_real = vivarium_config(bundle);
+    no_real.real_port.clear();
+    CHECK(resources.boot(no_real) == ase::kernel::HostStatusInvalidArgument);
     CHECK(std::string(resources.failure_step()) == GODOT_STEP_CONFIG);
     CHECK(!resources.has_host());
 
@@ -166,8 +166,9 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
 
     // An unnamed port is refused before a host exists, never at the port step of a host that loaded
     // the whole set for nothing: an organ port, the ground, the sky, the seeds, the tiling, the sway, the templates,
-    // the level port and its operation, the elevation port and its operation.
-    std::vector<VivariumStartConfig> unnamed(16u, vivarium_config(bundle));
+    // the level port and its operation, the elevation port and its operation, the date port, the stars port,
+    // the forecast port, the two spade ports and their operations.
+    std::vector<VivariumStartConfig> unnamed(23u, vivarium_config(bundle));
     unnamed[0].organ_ports[GODOT_ORGAN_ROOT].clear();
     unnamed[1].terrain_port.clear();
     unnamed[2].ground_cell_port.clear();
@@ -184,6 +185,13 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     unnamed[13].stream_port.clear();
     unnamed[14].elevation_port.clear();
     unnamed[15].op_shape.clear();
+    unnamed[16].date_port.clear();
+    unnamed[17].stars_port.clear();
+    unnamed[18].forecast_port.clear();
+    unnamed[19].lower_port.clear();
+    unnamed[20].raise_port.clear();
+    unnamed[21].op_lower.clear();
+    unnamed[22].op_raise.clear();
     for (const VivariumStartConfig& config : unnamed) {
         CHECK(resources.boot(config) == ase::kernel::HostStatusInvalidArgument);
         CHECK(std::string(resources.failure_step()) == GODOT_STEP_CONFIG);
@@ -191,7 +199,7 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     }
 
     // A port the set does not offer is found after the load and before the start.
-    std::vector<VivariumStartConfig> unoffered(12u, vivarium_config(bundle));
+    std::vector<VivariumStartConfig> unoffered(17u, vivarium_config(bundle));
     unoffered[0].clock_port = "flora.clock.v9";
     unoffered[1].organ_ports[GODOT_ORGAN_LEAF] = "flora.organ.leaf.v9";
     unoffered[2].sky_port = "sky.scene.v9";
@@ -204,6 +212,11 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     unoffered[9].sway_port = "flora.sway.v9";
     unoffered[10].stream_port = "flora.stream.v9";
     unoffered[11].elevation_port = "flora.elevation.v9";
+    unoffered[12].date_port = "flora.date.v9";
+    unoffered[13].stars_port = "sky.stars.v9";
+    unoffered[14].forecast_port = "flora.forecast.v9";
+    unoffered[15].lower_port = "flora.lower.v9";
+    unoffered[16].raise_port = "flora.raise.v9";
     for (const VivariumStartConfig& config : unoffered) {
         CHECK(resources.boot(config) == ase::kernel::HostStatusNotFound);
         CHECK(std::string(resources.failure_step()) == GODOT_STEP_PORT);
@@ -241,8 +254,8 @@ TEST_CASE("L8: a bundle without one unit fails at load_units, loudly and without
     CHECK(!resources.running());
     CHECK(resources.patch_count() == 0u);
     CHECK(resources.unit_count() == 0u);
-    CHECK(resources.advance(0.25, 0.0, 0u) == ase::kernel::HostStatusInvalidState);
-    CHECK(resources.irrigate(0u) == ase::kernel::HostStatusInvalidState);
+    CHECK(resources.advance(0.25) == ase::kernel::HostStatusInvalidState);
+    CHECK(resources.irrigate(0u, 0.0) == ase::kernel::HostStatusInvalidState);
 
     // The stopped host is kept, so its log carries the cause.
     CHECK(resources.has_host());

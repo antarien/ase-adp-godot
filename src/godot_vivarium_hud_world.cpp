@@ -1,0 +1,219 @@
+/**
+ * ASE GODOT ADAPTER - VIVARIUM VIEW HUD WORLD
+ *
+ * @file        godot_vivarium_hud_world.cpp
+ * @brief       VivariumView::fill_hud_world - the frames of the HUD's blocks that stand on the world under the HUD
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.5: fill_hud (godot_vivarium_hud.cpp) lays the HUD's frame from the
+ *              ports and hands the blocks placed in the world to this unit: the cut marks on the plant in focus, the
+ *              ground kit with the brush, the hand's verb and readings, the light and the patch of the world drop,
+ *              the tool place, the carried things, the cut under the trunk in the mode water and the drag's hit on
+ *              the ground. A value no port carries yet is the bridge's (godot_vivarium_hud_hand.cpp,
+ *              godot_vivarium_hud_carry.cpp, godot_vivarium_hud_bridge.cpp) and its register id is logged once on
+ *              the edge (open_gap), never shown: the picture stands whole (operator decision 2026-11-10).
+ *
+ *              THE CUT UNDER THE TRUNK (usecase:100367 water a patch). The soil now and the share a planned pour
+ *              adds are the hand's readings; the roots are the hand bridge's drawRootCut tree while flora.root.v1
+ *              grows no segment (N0463), laid under the stem base of the plant in focus.
+ *
+ * @module      ase-adp-godot
+ * @layer       5 (Adapter)
+ * @design      DSGN_067, DSGN_066
+ * @category    ecs/module
+ * @usecase     usecase:101440 - grow the interface with skills
+ * @actor       Interface Growth Director (INTEGRODIR)
+ * @register    N0451 (flora.carry.v1), N0454 (flora.patch.v1 preview), N0462 (flora.scene.v1 cuttable), N0463
+ *              (flora.root.v1 zone and segments), N0465 (the things as asset rows), carrier N0448
+ * @created     2026-11-11
+ * @modified    2026-11-13
+ * @version     00.00.01.00006
+ */
+
+#include <ase/adp/godot/godot_vivarium_node.hpp>
+#include <ase/adp/godot/types.hpp>
+
+#include <godot_cpp/classes/camera3d.hpp>
+#include <godot_cpp/classes/viewport.hpp>
+#include <godot_cpp/variant/vector3.hpp>
+
+namespace ase::adp::godot {
+
+void VivariumView::settle_bed_choice() {
+    // A NEW VERB OR A NEW MODE DROPS THE BED'S START. The mockup forgets bedA on terr:v (m.html 947), on equipping
+    // a tool (608) and on every setMode (933): the start mark of a bed only stands while the bed verb stays chosen.
+    // The change is read where it can first matter: in the frame, and before a ground verb acts (send_hud_verb). A
+    // frame that carries the chip's tap AND the first ground tap (run 20261112-155949: one frame of 1.3 s) otherwise
+    // laid the start under leito and dropped it in the same frame as if the verb had changed after it.
+    if (hud_.verb() != hud_verb_seen_ || hud_.mode() != hud_mode_seen_) {
+        if (bed_started_) {
+            note(::godot::String(("bed start dropped: verb " + hud_.verb() + " mode " + hud_.mode()).c_str()));
+        }
+        bed_started_ = false;
+        hud_verb_seen_ = hud_.verb();
+        hud_mode_seen_ = hud_.mode();
+    }
+}
+
+void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOrigin* origin,
+                                  const VivariumPatchSpec& spec, double opened) {
+    // The cut marks on the internodes of the plant in focus: the bridge's TREE.cand while flora.scene.v1 marks none.
+    PruneMarksFrame& prune = hud_now_.prune;
+    prune.anchor = &hud_anchor_;
+    prune.segments = &hud_segments_;
+    prune.origin = origin != nullptr ? *origin : prune.origin;
+    prune.elapsed = opened;
+    open_gap(GODOT_HUD_GAP_PRUNE, "flora.scene.v1.cuttable");
+    hud_hand_.cut(hud_now_.hand, prune.cuttable, patch != nullptr ? patch->object_id : GODOT_NO_OBJECT,
+                  resources_.get_organs(GODOT_ORGAN_SEGMENT), hud_segments_);
+
+    // The ground kit: the ground, its brooks, the brush under the finger and the patch the level verb levels.
+    TerrainKitFrame& terrain = hud_now_.terrain;
+    terrain.anchor = &hud_anchor_;
+    terrain.ground = &hud_ground_;
+    terrain.streams = &resources_.get_streams();
+    terrain.elapsed = opened;
+    if (origin != nullptr) {
+        terrain.origin = *origin;
+    }
+    GroundReticleFrame& reticle = terrain.reticle;
+    reticle.anchor = &hud_anchor_;
+    reticle.ground = &hud_ground_;
+    if (hud_.brushing()) {
+        float x = 0.0f;
+        float z = 0.0f;
+        float nearest_px = -1.0f;
+        reticle.brush_on = pick_ground(hud_frame_.xform(hud_.brush()), x, z, nearest_px);
+        reticle.brush_x = static_cast<double>(x);
+        reticle.brush_z = static_cast<double>(z);
+    }
+    settle_bed_choice();
+    reticle.bed_on = bed_started_;
+    reticle.bed_x = static_cast<double>(bed_x_);
+    reticle.bed_z = static_cast<double>(bed_z_);
+    reticle.patch_x = spec.x;
+    reticle.patch_z = spec.z;
+    reticle.patch_m = spec.half_m;
+
+    // The crumbs of loosened soil in every mode (row N08): the loose bridge's points (N0456) in the light of the
+    // hour, the mockup's light() under the sky as SkyOvercast keeps it (land_light, the one source of it).
+    GroundCrumbsFrame& crumbs = terrain.crumbs;
+    crumbs.anchor = &hud_anchor_;
+    crumbs.ground = &hud_ground_;
+    hud_loose_.frame(crumbs);
+    SkyOvercastShade overcast;
+    hud_.overcast().shade(hud_now_.sky, overcast);
+    crumbs.light = hud_.overcast().land_light(resources_.get_sky().sun_y, overcast.light);
+
+    // The hand: the verb's brush and the area a level act covers; its readings follow the carried things below.
+    // The area is its number alone: every word that takes {place} (verb_reading.level, rack_sub) sets ÁREA itself.
+    HandSlotFrame& hand = hud_now_.hand;
+    hand.bed_started = bed_started_;
+    hand.area = ::godot::String::num_uint64(spec.place + 1u).utf8().get_data();
+    const auto verb = hud_verbs_.find(hud_.verb());
+    if (verb != hud_verbs_.end()) {
+        hand.brush_m = verb->second.brush_m;
+    }
+    hand.elapsed = opened;
+
+    // The world: the light of the hour and the place of the patch, where the carry gap is named.
+    const VivariumSkyView& sky = resources_.get_sky();
+    WorldDropFrame& world = hud_now_.world;
+    world.anchor = &hud_anchor_;
+    if (sky.known) {
+        world.light = sky.sun_y;  // the sine of the sun's elevation: its share above the horizon
+    }
+    if (patch != nullptr) {
+        world.patch = ::godot::Vector3(static_cast<float>(patch->x), static_cast<float>(patch->y),
+                                       static_cast<float>(patch->z));
+    }
+    hud_now_.rack_world.anchor = &hud_anchor_;
+    hud_now_.rack.anchor = &hud_anchor_;
+    hud_now_.rack.area = hand.area;
+    hud_now_.rack.elapsed = opened;
+
+    // The carried things: flora.carry.v1 files no record yet (N0451), the bridge's inventory stands in its place.
+    // The tool place is set beside the patch along the camera's right and view on the ground plane.
+    open_gap(GODOT_HUD_GAP_CARRY, "flora.carry.v1.things");
+    // The containers likewise: VivariumCarryBridge::fill writes the mockup's CAPS from SHA into the pack and the
+    // pouch record of every frame (N0451, the fields flora.carry.v1 will carry).
+    open_gap(GODOT_HUD_GAP_CARRY, "flora.carry.v1.containers(opening_cm,room_l,carry_kg,asset)");
+    // The drawings of the things: UiItemSprite draws the sixteen things from SHA's item_art.json, the paths of the
+    // mockup, while the asset pipeline carries none of them as a row (package 06.10: PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE
+    // and config/vivarium_assets.json, form values after DSGN_024). Its id stands here, beside the carry it draws.
+    constexpr const char* GAP_ASSET = "N0465";
+    open_gap(GAP_ASSET, "vivarium_assets.json.things(16)");
+    ::godot::Vector3 right;
+    ::godot::Vector3 ahead;
+    const ::godot::Viewport* view_port = node_->get_viewport();
+    const ::godot::Camera3D* camera = view_port != nullptr ? view_port->get_camera_3d() : nullptr;
+    if (camera != nullptr) {
+        const ::godot::Basis basis = camera->get_global_transform().basis;
+        right = basis.get_column(0);
+        ahead = -basis.get_column(2);
+        right.y = 0.0f;
+        ahead.y = 0.0f;
+        right = right.normalized();
+        ahead = ahead.normalized();
+    }
+    hud_carry_.fill(hud_now_, world.patch, right, ahead, hud_ground_);
+    open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.after_rel");  // the preview after the pour (N0454)
+    open_gap(GODOT_HUD_GAP_ROOT, "flora.root.v1.zone_m");       // the root zone under the brush (N0463)
+    hud_hand_.frame(hand, patch, reticle, hud_bridge_sap_l_, hud_.pouring());  // the hold as the HUD keeps it, before compose
+    terrain.root_m = hud_hand_.zone_m();                         // the ring of the ground mode, the same zone
+
+    // The cut under the trunk in the mode water: the soil now, the share the planned pour adds, and the roots;
+    // flora.root.v1 grows no segment yet (N0463), the hand bridge lays drawRootCut's tree in their place.
+    RootCutFrame& cut = hud_now_.root_cut;
+    cut.anchor = &hud_anchor_;
+    cut.origin = origin != nullptr ? *origin : cut.origin;
+    cut.soil_rel = hand.soil_rel;
+    cut.pour_rel = hand.poured_l > 0.0 ? hand.after_rel - hand.soil_rel : 0.0;
+    open_gap(GODOT_HUD_GAP_ROOT, "flora.root.v1.segments");
+    cut.roots = &hud_hand_.roots(patch, hud_anchor_, cut.origin);
+
+    // The tap hole in the birch: flora.sap.v1 states no tap yet (N0457), the bridge's tap from
+    // hud_bridge_patch_sap_* stands in its place; the bark vessel hangs at the trunk while the tap runs.
+    bool dead = false;
+    for (const std::string& sign : hud_now_.game.signs) {
+        dead = dead || sign == "dead";
+    }
+    open_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1(running,held_l,cap_l)");
+    TapHoleFrame& tap = hud_now_.tap;
+    tap.running = hud_bridge_sap_running_ && !dead;
+    tap.placed = hud_now_.tree_placed;
+    tap.trunk = hud_now_.trunk;
+    tap.tree_height = hud_now_.tree_height;
+    tap.vessel = tap.running;
+    tap.carry.held_l = hud_bridge_sap_l_;
+    tap.carry.capacity_l = hud_bridge_sap_cap_l_;
+    tap.clock = hud_now_.clock;
+
+    // The hole the dibber made: ase-flora answers no sowing on flora.seed.v1 yet (N0451); the carry bridge, which
+    // accepted the sowing, wrote its place and age into the frame above (VivariumCarryBridge::fill).
+    open_gap(GODOT_HUD_GAP_CARRY, "flora.seed.v1(place,at)");
+    hud_now_.sow.anchor = &hud_anchor_;
+
+    // The drag: where the finger meets the ground.
+    DragLayerFrame& drag = hud_now_.drag;
+    if (hud_down_) {
+        drag_ground(drag);
+    }
+    bridge_stow(drag);
+}
+
+void VivariumView::drag_ground(DragLayerFrame& drag) const {
+    // THE GROUND UNDER THE FINGER, read where the finger stands now (B0275). The mockup's drop reads the ground at
+    // the release point itself (toUZ(p.x, p.y), m.html 821); a move and a release that arrive between two frames
+    // aim at this place, never at the one the last frame read, so a thing let go over the ground lands there.
+    drag.ground_hit = false;
+    float x = 0.0f;
+    float z = 0.0f;
+    float nearest_px = -1.0f;
+    double height = 0.0;
+    if (pick_ground(hud_finger_, x, z, nearest_px) &&
+        hud_ground_.height(static_cast<double>(x), static_cast<double>(z), height)) {
+        drag.ground_hit = true;
+        drag.ground = ::godot::Vector3(x, static_cast<float>(height), z);
+    }
+}
+
+}  // namespace ase::adp::godot

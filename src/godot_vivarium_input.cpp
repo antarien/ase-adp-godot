@@ -16,8 +16,8 @@
  * @usecase     usecase:100386 - select a patch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-26
- * @version     00.00.02.00004
+ * @modified    2026-11-12
+ * @version     00.00.02.00006
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -64,6 +64,12 @@ void VivariumView::unhandled_input(const ::godot::Ref<::godot::InputEvent>& even
         zoom(pinch->get_factor() > 1.0f ? 1 : -1);
         return;
     }
+    // THE CARE VIEW'S HUD TAKES THE TOUCHES: press, drag and release go through it (godot_vivarium_hud_input.cpp);
+    // the old buttons answer only on the error panel, where Reiniciar stands.
+    if (hud_live()) {
+        hud_input(local);
+        return;
+    }
     ::godot::Vector2 at;
     if (touch.is_valid()) {
         if (!touch->is_pressed()) {
@@ -98,7 +104,7 @@ void VivariumView::tap(const ::godot::Vector2& at) {
         return;  // a debug button (launched with modes.debug.argument only) answered the tap
     }
     if (placed(layout_.water_rect).has_point(at)) {
-        water();
+        (void)water(start_.irrigate_amount_mm, false);  // the button Regar: one press, its fixed amount, no can
         return;
     }
     if (placed(layout_.level_rect).has_point(at)) {
@@ -126,7 +132,7 @@ void VivariumView::tap(const ::godot::Vector2& at) {
         return;
     }
     if (flattening_) {
-        flatten(at);  // in the flatten mode a tap in the scene levels a disc there and selects no place
+        flatten(at, flatten_m_);  // in the flatten mode a tap in the scene levels a disc of view.flatten_m there and selects no place
         return;
     }
     for (std::size_t place = 0; place < layout_.place_rects.size(); ++place) {

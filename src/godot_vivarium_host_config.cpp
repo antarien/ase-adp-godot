@@ -6,7 +6,7 @@
  * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.3 and PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8: everything
  *              GodotHostResourceManager::boot needs beside the stage stands in the start configuration -
  *              the name of every port and operation the view reads or writes, the patches the game host
- *              lays, the measured square of the ground and its brooks, the pour and the catch-up steps.
+ *              lays, the measured square of the ground and its brooks, and the pour.
  *              A missing or broken key stops the view with that key on its error panel; the manager
  *              checks the same configuration again before a host exists.
  *
@@ -16,8 +16,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-10-26
- * @version     00.00.01.00003
+ * @modified    2026-11-12
+ * @version     00.00.01.00006
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -44,6 +44,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.patch");
     }
     start_.patch_port = utf8_of(text);
+    // The stage forecasts of ase-plant (usecase:101120 clock the growth cycle): a port of their own beside
+    // the patch port, whose record holds no further value; one record per patch with a forecast.
+    if (!read_text(ports, "forecast", text)) {
+        return fail_config("ports.forecast");
+    }
+    start_.forecast_port = utf8_of(text);
     if (!read_text(ports, "clock", text)) {
         return fail_config("ports.clock");
     }
@@ -89,6 +95,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.sky");
     }
     start_.sky_port = utf8_of(text);
+    // The visible star set of ase-pl-sky at its places on the celestial sphere: its own port, read only
+    // when the turn record of the sky port names a set computed anew; the view turns it every frame.
+    if (!read_text(ports, "stars", text)) {
+        return fail_config("ports.stars");
+    }
+    start_.stars_port = utf8_of(text);
     // The seed bodies of ase-physics (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 4, register N0173): the
     // view draws every seed where the port says and computes none of its flight.
     if (!read_text(ports, "seed", text)) {
@@ -124,6 +136,15 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.flatten");
     }
     start_.flatten_port = utf8_of(text);
+    // The spade strokes of the player at a place: one port per direction, so the direction is never a branch.
+    if (!read_text(ports, "lower", text)) {
+        return fail_config("ports.lower");
+    }
+    start_.lower_port = utf8_of(text);
+    if (!read_text(ports, "raise", text)) {
+        return fail_config("ports.raise");
+    }
+    start_.raise_port = utf8_of(text);
     // The pace requests of the debug mode (the time lapse of this host's clock): a port of their own,
     // they name no object.
     if (!read_text(ports, "pace", text)) {
@@ -136,6 +157,35 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.seek");
     }
     start_.seek_port = utf8_of(text);
+    // The real position of the host (its real seconds since the start, sleep included), filed every
+    // frame: a port of its own, it names no object; a return from the background is one such filing.
+    if (!read_text(ports, "real", text)) {
+        return fail_config("ports.real");
+    }
+    start_.real_port = utf8_of(text);
+    // The date requests of the debug mode (this host's clock moved to a SURA date): a port of their own
+    // beside the seek, they name no object; ase-calendar turns the date into the hour.
+    if (!read_text(ports, "date", text)) {
+        return fail_config("ports.date");
+    }
+    start_.date_port = utf8_of(text);
+    // The day record (N0460): the day's sunrise, sunset and daylight, the season and the shares of the day, the sun
+    // and the year, a port of its own because the clock and the date record are full; the sheet reads it once
+    // ase-pl-flora offers it.
+    if (!read_text(ports, "day", text)) {
+        return fail_config("ports.day");
+    }
+    start_.day_port = utf8_of(text);
+    // The phase records (N0460): one per day period with its start hour and share, entity per item.
+    if (!read_text(ports, "phase", text)) {
+        return fail_config("ports.phase");
+    }
+    start_.phase_port = utf8_of(text);
+    // The season records (N0460): one per season with its first LUN and hours of light, entity per item.
+    if (!read_text(ports, "season", text)) {
+        return fail_config("ports.season");
+    }
+    start_.season_port = utf8_of(text);
     // The relief of the ground (the height amplitude and the ground level of the whole terrain): a port
     // of its own, it names no object.
     if (!read_text(ports, "elevation", text)) {
@@ -184,6 +234,14 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("operations.flatten");
     }
     start_.op_flatten = utf8_of(text);
+    if (!read_text(operations, "lower", text)) {
+        return fail_config("operations.lower");
+    }
+    start_.op_lower = utf8_of(text);
+    if (!read_text(operations, "raise", text)) {
+        return fail_config("operations.raise");
+    }
+    start_.op_raise = utf8_of(text);
     if (!read_text(operations, "pace", text)) {
         return fail_config("operations.pace");
     }
@@ -192,6 +250,14 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("operations.seek");
     }
     start_.op_seek = utf8_of(text);
+    if (!read_text(operations, "seek_date", text)) {
+        return fail_config("operations.seek_date");
+    }
+    start_.op_seek_date = utf8_of(text);
+    if (!read_text(operations, "real", text)) {
+        return fail_config("operations.real");
+    }
+    start_.op_real = utf8_of(text);
     if (!read_text(operations, "shape", text)) {
         return fail_config("operations.shape");
     }
@@ -218,12 +284,6 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         !(start_.irrigate_amount_mm > 0.0)) {
         return fail_config("irrigate_amount_mm");
     }
-    double steps = 0.0;
-    if (!read_number(root, "catch_up_steps", steps) || !(steps >= 1.0) ||
-        ase::math::floor(static_cast<float>(steps)) != static_cast<float>(steps)) {
-        return fail_config("catch_up_steps");
-    }
-    start_.catch_up_steps = static_cast<uint32_t>(steps);
     return true;
 }
 

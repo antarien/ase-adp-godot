@@ -16,10 +16,10 @@
  * @design      DSGN_066
  * @category    render/pipeline/stage
  * @usecase     usecase:101344 - carry host records to app
- * @actor       Host Record Transport Control (HOSTXFER)
+ * @actor       Host Port Courier (HOSTPORCOU)
  * @created     2026-11-05
- * @modified    2026-11-05
- * @version     00.00.01.00000
+ * @modified    2026-11-09
+ * @version     00.00.01.00001
  */
 
 // Own header FIRST

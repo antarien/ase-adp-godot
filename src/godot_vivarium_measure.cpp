@@ -17,8 +17,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-10-18
- * @version     00.00.01.00001
+ * @modified    2026-11-12
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -112,10 +112,9 @@ void VivariumView::measure_frame(uint64_t frame_start_usec, uint64_t host_usec) 
     }
 }
 
-void VivariumView::begin_cycles() {
+void VivariumView::lay_cycles(CycleMeasure& cycles) const {
     // THE LINE OF 03.6, the one the headless run writes too (godot_cycle_measure.hpp): every unit of
     // the bundle, every schedule ase-ecs names, every organ port of the start configuration.
-    CycleMeasure& cycles = measurement_.cycles;
     cycles = CycleMeasure{};
     for (const VivariumBundleUnit& unit : resources_.get_bundle().units) {
         cycles.units.push_back(unit.unit);
@@ -127,9 +126,17 @@ void VivariumView::begin_cycles() {
         cycles.organ_words.emplace_back(GodotHostResourceManager::organ_word(c));
         cycles.organ_ports.push_back(start_.organ_ports[c]);
     }
+}
+
+void VivariumView::begin_cycles() {
+    CycleMeasure& cycles = measurement_.cycles;
+    lay_cycles(cycles);
     measurement_.cycles_ready = cycle_measure_valid(cycles) && resources_.measure_begin(cycles);
-    const VivariumClockView& clock = resources_.get_clock();
-    measurement_.cycle_day = clock.known ? clock.day : -1.0;
+    // THE DAY TURN IS COUNTED, NOT COMPARED: ase-calendar requests one GameDawn run per crossed
+    // TUMBRAE from TIM_START_GAME on, and the host counts every run. The cycle begins at the count
+    // read now; while the host is not yet running, the first readable count begins it.
+    measurement_.cycle_counted =
+        resources_.schedule_runs(GODOT_DAY_TURN_SCHEDULE, &measurement_.cycle_dawns) == ase::kernel::HostStatusOk;
     if (!measurement_.cycles_ready) {
         note("measure cycles off - units, schedules or organ ports not readable");
     }
@@ -139,19 +146,22 @@ void VivariumView::measure_cycle() {
     if (!measurement_.cycles_ready) {
         return;
     }
-    const VivariumClockView& clock = resources_.get_clock();
-    if (!clock.known) {
+    uint64_t dawns = 0u;
+    if (resources_.schedule_runs(GODOT_DAY_TURN_SCHEDULE, &dawns) != ase::kernel::HostStatusOk) {
         return;
     }
-    if (measurement_.cycle_day < 0.0) {
-        // The clock arrived after the recording began: this day is the first cycle's start.
-        measurement_.cycle_day = clock.day;
+    if (!measurement_.cycle_counted) {
+        // The host started after the recording began: this count is the first cycle's start.
+        measurement_.cycle_dawns = dawns;
+        measurement_.cycle_counted = true;
         return;
     }
-    if (clock.day == measurement_.cycle_day) {
+    if (dawns == measurement_.cycle_dawns) {
         return;
     }
-    measurement_.cycle_day = clock.day;
+    // The host ran a day turn since the cycle began: the cycle ends here. A jump across many turns
+    // ends one cycle, whose line carries every run of the span.
+    measurement_.cycle_dawns = dawns;
     std::string line;
     resources_.measure_cycle(measurement_.cycles, line);
     note("measure " + text_of(line));

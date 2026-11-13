@@ -32,8 +32,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-10-26
- * @version     00.00.02.00005
+ * @modified    2026-11-12
+ * @version     00.00.02.00007
  */
 
 #include <doctest/doctest.h>
@@ -76,7 +76,25 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.library_dir = bundle;
     config.files_dir = bundle;
     config.patch_port = "flora.patch.v1";
+    // The stage forecasts (usecase:101120): read_snapshot merges them into the patches by object id, so
+    // boot() asks the set for this port as well.
+    config.forecast_port = "flora.forecast.v1";
     config.clock_port = "flora.clock.v1";
+    // The SURA date record (FloraHostClkExptSystem): snapshot() reads it beside the clock, so boot()
+    // asks the set for this port as well.
+    config.date_port = "flora.date.v1";
+    // The real position of the host (01.3 point 4): every frame files the real seconds there, and a
+    // return from the background is over once the clock record's real_laid_s reaches them.
+    config.real_port = "flora.real.v1";
+    config.op_real = "real";
+    // The two cases of time of the debug mode (usecase:101120): the time lapse asks a pace on the pace
+    // port, a jump moves the clock once through the seek port or, as a SURA date, through the date port.
+    // An empty port name is refused by the kernel's port registry before the request reaches ase-pl-flora.
+    config.pace_port = "flora.pace.v1";
+    config.seek_port = "flora.seek.v1";
+    config.op_pace = "pace";
+    config.op_seek = "seek";
+    config.op_seek_date = "seek_date";
     config.scene_port = "flora.scene.v1";
     // The ground of the scene (03.8) and the sky of the scene (03.11 step 3): boot() asks the set for
     // these ports like for the others, so the tests name them as the client's start configuration does.
@@ -84,6 +102,8 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.brook_port = "flora.brook.v1";
     config.terrain_port = "flora.terrain.v1";
     config.sky_port = "sky.scene.v1";
+    // The visible star set of ase-pl-sky: boot() asks the set for this port as well.
+    config.stars_port = "sky.stars.v1";
     // The seed bodies of ase-physics (03.11 step 4): boot() asks the set for this port as well.
     config.seed_port = "flora.seed.v1";
     // The bark tiling of the internodes (03.11 step 2): boot() asks the set for this port as well.
@@ -96,6 +116,10 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.level_port = "flora.level.v1";
     // The flatten requests of the player at a place (03.8): boot() asks the set for this port as well.
     config.flatten_port = "flora.flatten.v1";
+    // The spade of the player at a place (usecase:5939, the verbs cavar and amontoar of the item pa):
+    // a lower and a raise request, each on its own port; boot() asks the set for both as well.
+    config.lower_port = "flora.lower.v1";
+    config.raise_port = "flora.raise.v1";
     // The relief of the ground: boot() shapes it on this port before the first patch is laid.
     config.elevation_port = "flora.elevation.v1";
     // The place of the view's camera (03.11 point 7, the level of detail): view() submits on this port.
@@ -121,11 +145,12 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.op_prune = "prune";
     config.op_level = "level";
     config.op_flatten = "flatten";
+    config.op_lower = "lower";
+    config.op_raise = "raise";
     config.op_shape = "shape";
     config.op_view = "view";
     config.op_lay = "lay";
     config.irrigate_amount_mm = 25.0;
-    config.catch_up_steps = 8u;
     // The measured square of the client's start configuration (config/vivarium_start.json, "ground"):
     // boot() lays it on the ground port, so a square of zero edge would ask ase-terrain for nothing.
     config.ground.x = 16.0;
@@ -262,10 +287,10 @@ struct AdapterEnvironmentTeardown : doctest::IReporter {
 
 DOCTEST_REGISTER_LISTENER("adapter_environment_teardown", 1, AdapterEnvironmentTeardown);
 
-// n frames of a quarter second each - one tick each, the scheduler's frame ceiling, no lapse.
+// n frames of a quarter second each - one tick each and one filed real position each.
 inline void advance_frames(GodotHostResourceManager& resources, uint32_t frames) {
     for (uint32_t frame = 0u; frame < frames; ++frame) {
-        REQUIRE(resources.advance(0.25, 0.0, 0u) == ase::kernel::HostStatusOk);
+        REQUIRE(resources.advance(0.25) == ase::kernel::HostStatusOk);
     }
 }
 

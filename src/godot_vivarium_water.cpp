@@ -9,15 +9,23 @@
  *              the pour arrived (follow_water, every frame after the advance). The tap that leads here
  *              is godot_vivarium_input.cpp.
  *
+ *              THE AMOUNT IS THE CALLER'S. The button Regar pours irrigate_amount_mm; the HUD's can pours once,
+ *              at its release, the litres it held times hud_bridge_hand_mm_per_l (m.html 1014-1015, the
+ *              mockup's S.soil += mm and it.fill -= round(mm / 25)). The arrival is measured against that
+ *              amount, and its toast says REGOU {mm} MM, or REGOU {mm} MM · REGADOR VAZIO where the can
+ *              emptied with this pour; the can's fill is the carry bridge's while flora.carry.v1 carries
+ *              none (N0451).
+ *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @design      DSGN_066
  * @category    ecs/module
  * @usecase     usecase:100367 - water a patch
  * @actor       Plant Keeper (PLNTKEEPER)
+ * @register    N0451 (flora.carry.v1: the can's fill for toast.watered_empty), carrier N0448
  * @created     2026-10-18
- * @modified    2026-10-26
- * @version     00.00.01.00002
+ * @modified    2026-11-12
+ * @version     00.00.01.00005
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -26,6 +34,8 @@
 #include <ase/math/math.hpp>
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace ase::adp::godot {
 
@@ -42,25 +52,29 @@ bool VivariumView::can_water() const {
     return patch != nullptr && patch->condition != GODOT_COND_DEAD;
 }
 
-void VivariumView::water() {
-    if (!can_water()) {
-        note("water " + measure(selected_place_) + " result=disabled");
-        return;
+bool VivariumView::water(double amount_mm, bool emptied) {
+    if (!can_water() || !(amount_mm > 0.0)) {
+        note("water " + measure(selected_place_) + " amount_mm=" + ::godot::String::num(amount_mm, GODOT_LOG_DECIMALS) +
+             " result=disabled");
+        return false;
     }
     const VivariumPatchView* patch = resources_.get_patch_at(selected_place_);
     const double soil_before = patch->soil_mm;
-    const HostStatus status = resources_.irrigate(patch->object_id);
-    note("water " + measure(selected_place_) + " amount_mm=" +
-         ::godot::String::num(start_.irrigate_amount_mm, GODOT_LOG_DECIMALS) + " result=" +
-         GodotHostResourceManager::status_name(status));
-    if (status == ase::kernel::HostStatusOk) {
+    const HostStatus status = resources_.irrigate(patch->object_id, amount_mm);
+    note("water " + measure(selected_place_) + " amount_mm=" + ::godot::String::num(amount_mm, GODOT_LOG_DECIMALS) +
+         " result=" + GodotHostResourceManager::status_name(status));
+    const bool taken = status == ase::kernel::HostStatusOk;
+    if (taken) {
         uint64_t steps = 0u;
         (void)resources_.schedule_runs(GODOT_LOG_STEP_SCHEDULE, &steps);
         water_pending_place_ = selected_place_;
         water_pending_from_ = soil_before;
         water_pending_steps_ = steps;
+        water_pending_mm_ = amount_mm;
+        water_pending_empty_ = emptied;
     }
     node_->queue_redraw();
+    return taken;
 }
 
 void VivariumView::follow_water() {
@@ -80,11 +94,23 @@ void VivariumView::follow_water() {
         water_pending_place_ = GODOT_NO_PLACE;
         return;
     }
-    const double expected_mm = ase::math::min(start_.irrigate_amount_mm, patch->capacity_mm - water_pending_from_);
+    const double expected_mm = ase::math::min(water_pending_mm_, patch->capacity_mm - water_pending_from_);
     if (expected_mm > 0.0 && patch->soil_mm >= water_pending_from_ + GODOT_WATER_ARRIVED_SHARE * expected_mm) {
         note("water applied " + measure(water_pending_place_) + " soil_mm_before=" +
              ::godot::String::num(water_pending_from_, GODOT_LOG_DECIMALS));
         water_pending_place_ = GODOT_NO_PLACE;
+        // The HUD's toast says what arrived, as the port shows it: the rise of the soil water, in whole
+        // millimetres (Math.round(mm)), once per pour. Where the can emptied with it (the carry bridge's fill,
+        // N0451) the toast is toast.watered_empty, as the mockup's `REGOU ${mm} MM · REGADOR VAZIO`. The values
+        // stand named before the test: a list built inside the short-circuit is a temporary the compiler sees
+        // dangle (-Wdangling-pointer).
+        std::string failed;
+        const std::vector<HudPortValue> rise{HudPortValue{"mm", hud_decimals(patch->soil_mm - water_pending_from_, 0)}};
+        const char* key = water_pending_empty_ ? VivariumHud::TOAST_WATERED_EMPTY : VivariumHud::TOAST_WATERED;
+        water_pending_empty_ = false;
+        if (hud_live() && !hud_.toast(key, rise, VivariumHud::COLOUR_WATER, hud_clock_, failed)) {
+            fail_hud(failed);
+        }
         return;
     }
     uint64_t steps = 0u;

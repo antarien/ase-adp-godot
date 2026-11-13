@@ -13,8 +13,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-05
- * @version     00.00.04.00011 [seed]
+ * @modified    2026-11-12
+ * @version     00.00.04.00018 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -43,11 +43,11 @@
  *   ase-plant as the plugin forwards them.
  *
  * NO PAUSE (PLAN 01.3 point 4):
- *   advance() hands the host the real time the frame took, uncapped. The host ticks it in
- *   ordinary steps of its scheduler's frame, at most catch_up_steps of them per call, and keeps
- *   the rest in its backlog - a return from the background is caught up over a few frames, never
- *   in one giant step and never dropped. The lapse of the debug mode rides the same path: the view
- *   hands extra time and extra steps, and the host ticks them as ordinary ticks of its own clock.
+ *   advance() hands the host the real time the frame took, uncapped, runs its one tick and files
+ *   the absolute real position on the real port. A return from the background is one long frame:
+ *   ase-time sets its clock forward to the filed position in ONE write (TimeClkRealCalcSystem) and
+ *   reports the position it laid (TIM_REAL_LAID_S on the clock record); every module computes the
+ *   span up to the new time in its own pass. Nothing is replayed in ticks and nothing is dropped.
  *
  * THE SELF-TEST STARTS ONE TEST HOST (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3):
  *   self_test() creates, loads and starts one host, runs every scenario of the table on it in
@@ -106,6 +106,7 @@
 #include <ase/adp/godot/godot_terrain_samples.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/fileio/text_reader.hpp>
+#include <ase/math/math.hpp>
 #include <ase/utils/strops.hpp>
 
 #include <toml++/toml.hpp>
@@ -113,6 +114,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -167,6 +169,13 @@ uint8_t code_of(double value, uint8_t count) {
 constexpr const char* kOrganWords[GODOT_ORGAN_COUNT] = {
     GODOT_ORGAN_WORD_SEGMENT, GODOT_ORGAN_WORD_LEAF,  GODOT_ORGAN_WORD_MALE,
     GODOT_ORGAN_WORD_FEMALE,  GODOT_ORGAN_WORD_FRUIT, GODOT_ORGAN_WORD_ROOT};
+
+/**
+ * THE DAY OF THE YEAR in the day record (N0460, flora.day.v1): ase-pl-flora files it as FLORA_HOST_KEY_YEAR_DAY
+ * from CAL_YEAR_DAY, the day of the VECTUM from 1. Only this unit reads it, so the key stands here and not in
+ * types.hpp, which nearly every unit of the adapter includes.
+ */
+constexpr const char* kDayKeyYearDay = "year_day";
 
 /** The organ class a word names; GODOT_ORGAN_COUNT for a word that names none. */
 uint32_t organ_class_of(const std::string& word) {
@@ -426,7 +435,9 @@ bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written,
         const double moon_values[] = {record_value(moon, GODOT_KEY_X), record_value(moon, GODOT_KEY_Y),
                                       record_value(moon, GODOT_KEY_Z), record_value(moon, GODOT_KEY_R),
                                       record_value(moon, GODOT_KEY_G), record_value(moon, GODOT_KEY_B),
-                                      record_value(moon, GODOT_KEY_INTENSITY), record_value(moon, GODOT_KEY_SIZE)};
+                                      record_value(moon, GODOT_KEY_INTENSITY), record_value(moon, GODOT_KEY_SIZE),
+                                      record_value(moon, GODOT_KEY_DISC_R),    record_value(moon, GODOT_KEY_DISC_G),
+                                      record_value(moon, GODOT_KEY_DISC_B)};
         for (const double value : moon_values) {
             if (!std::isfinite(value)) {
                 out = VivariumSkyView{};
@@ -442,6 +453,10 @@ bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written,
         slot.b = moon_values[5];
         slot.intensity = moon_values[6];
         slot.size = moon_values[7];
+        // the disc colour ase-pl-sky files: the moonlight darkened by the shadow of a lunar eclipse (usecase:101276)
+        slot.disc_r = moon_values[8];
+        slot.disc_g = moon_values[9];
+        slot.disc_b = moon_values[10];
         out.moons += 1u;
     }
     // the comets: every comet record must be whole, and each takes the next slot - its head and its tail
@@ -611,60 +626,188 @@ bool sky_view_of(const std::vector<KernelHostRecord>& records, uint32_t written,
         slot.rate = shower_values[4];
         out.showers += 1u;
     }
-    // the stars: every star record must be whole, and each takes the next slot - the starfield instances
+    // the eclipse: a standing eclipse record must be whole and takes the next slot - the jump to an eclipse
+    // reads its kind and the hours to its maximum (usecase:101276 - predict the eclipses)
     for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
-        if (records[i].object_id != GODOT_SKY_RECORD_STAR) {
+        if (records[i].object_id != GODOT_SKY_RECORD_ECLIPSE) {
             continue;
         }
-        if (out.stars >= GODOT_SKY_STARS_MAX) {
+        if (out.eclipses >= GODOT_SKY_ECLIPSES_MAX) {
             out = VivariumSkyView{};
             return false;
         }
-        const KernelHostRecord& star = records[i];
-        const double star_values[] = {record_value(star, GODOT_KEY_X), record_value(star, GODOT_KEY_Y),
-                                      record_value(star, GODOT_KEY_Z), record_value(star, GODOT_KEY_R),
-                                      record_value(star, GODOT_KEY_G), record_value(star, GODOT_KEY_B),
-                                      record_value(star, GODOT_KEY_POINT)};
-        for (const double value : star_values) {
+        const KernelHostRecord& eclipse = records[i];
+        const double eclipse_values[] = {record_value(eclipse, GODOT_KEY_KIND), record_value(eclipse, GODOT_KEY_OBSCURATION),
+                                         record_value(eclipse, GODOT_KEY_HOURS_TO_MAX), record_value(eclipse, GODOT_KEY_DURATION)};
+        for (const double value : eclipse_values) {
             if (!std::isfinite(value)) {
                 out = VivariumSkyView{};
                 return false;
             }
         }
-        VivariumStarView& slot = out.star[out.stars];
-        slot.x = star_values[0];
-        slot.y = star_values[1];
-        slot.z = star_values[2];
-        slot.r = star_values[3];
-        slot.g = star_values[4];
-        slot.b = star_values[5];
-        slot.point = star_values[6];
-        out.stars += 1u;
+        VivariumEclipseView& slot = out.eclipse[out.eclipses];
+        slot.kind = eclipse_values[0];
+        slot.obscuration = eclipse_values[1];
+        slot.hours_to_max = eclipse_values[2];
+        slot.duration = eclipse_values[3];
+        out.eclipses += 1u;
+    }
+    // the predicted eclipses: an eclipse next record must be whole and takes the next slot - the jump to an
+    // eclipse seeks the clock by its game hours (usecase:101276 - predict the eclipses)
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_ECLIPSE_NEXT) {
+            continue;
+        }
+        if (out.eclipse_nexts >= GODOT_SKY_ECLIPSE_NEXTS_MAX) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& prediction = records[i];
+        const double next_values[] = {record_value(prediction, GODOT_KEY_NEXT_SOLAR),
+                                      record_value(prediction, GODOT_KEY_NEXT_LUNAR),
+                                      record_value(prediction, GODOT_KEY_NEXT_MOONRISE)};
+        for (const double value : next_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        VivariumEclipseNextView& slot = out.eclipse_next[out.eclipse_nexts];
+        slot.next_solar = next_values[0];
+        slot.next_lunar = next_values[1];
+        slot.next_moonrise = next_values[2];
+        out.eclipse_nexts += 1u;
+    }
+    // the turn of the star sphere: at most one record, whole - the starfield turns by it every frame, and its
+    // marks tell whether the stars port carries a new set (the stars themselves stand on the stars port)
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_TURN) {
+            continue;
+        }
+        if (out.turn_known) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& turn = records[i];
+        const double turn_values[] = {record_value(turn, GODOT_KEY_W),           record_value(turn, GODOT_KEY_X),
+                                      record_value(turn, GODOT_KEY_Y),           record_value(turn, GODOT_KEY_Z),
+                                      record_value(turn, GODOT_KEY_SET_SIDEREAL), record_value(turn, GODOT_KEY_SET_ZENITH),
+                                      record_value(turn, GODOT_KEY_SET_MOON)};
+        for (const double value : turn_values) {
+            if (!std::isfinite(value)) {
+                out = VivariumSkyView{};
+                return false;
+            }
+        }
+        out.turn_w = turn_values[0];
+        out.turn_x = turn_values[1];
+        out.turn_y = turn_values[2];
+        out.turn_z = turn_values[3];
+        out.set_sidereal = turn_values[4];
+        out.set_zenith = turn_values[5];
+        out.set_moon = turn_values[6];
+        out.turn_known = true;
+    }
+    // the wind drift (ase-pl-sky SKY_HOST_RECORD_WIND): at most one record, whole and inside its ranges - the
+    // haze and the cloud banks move along it. ase-pl-sky files it only once wind arrived; a set without it
+    // leaves wind_known false here, and the read keeps the drift of the last set that carried one.
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        if (records[i].object_id != GODOT_SKY_RECORD_WIND) {
+            continue;
+        }
+        if (out.wind_known) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        const KernelHostRecord& wind = records[i];
+        const double drift_x = record_value(wind, GODOT_KEY_DRIFT_X);
+        const double drift_z = record_value(wind, GODOT_KEY_DRIFT_Z);
+        const double share = record_value(wind, GODOT_KEY_WIND);
+        const bool drift_inside = drift_x >= GODOT_SKY_DRIFT_MIN && drift_x <= GODOT_SKY_DRIFT_MAX &&
+                                  drift_z >= GODOT_SKY_DRIFT_MIN && drift_z <= GODOT_SKY_DRIFT_MAX;
+        const bool share_inside = share >= GODOT_SKY_WIND_MIN && share <= GODOT_SKY_WIND_MAX;
+        if (!drift_inside || !share_inside) {
+            out = VivariumSkyView{};
+            return false;
+        }
+        out.drift_x = drift_x;
+        out.drift_z = drift_z;
+        out.wind = share;
+        out.wind_known = true;
     }
     out.known = true;
     return true;
 }
 
 /**
- * The ports and operations every host of the Vivarium needs: patch, clock, scene, ground, brook,
- * terrain, ground cell, the six organ ports, the five instance ports, the sky port, the seed port, the
- * tile port, the sway port, the stream port, the level, the flatten and the elevation port and the two template ports, irrigate, prune,
- * level, flatten, shape and lay - every port boot()
+ * The visible star set out of the records of the stars port (usecase:5606 - observe the sky): every record
+ * must be a whole star record, at most GODOT_SKY_STARS_MAX of them; its place is normalised to a unit
+ * direction on the celestial sphere. Moved here from sky_view_of, where the stars rode on the scene port
+ * and were read with every snapshot. On any broken record out is left empty and the answer is false.
+ */
+bool stars_view_of(const std::vector<KernelHostRecord>& records, uint32_t written, std::vector<VivariumStarView>& out) {
+    out.clear();
+    for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
+        const KernelHostRecord& star = records[i];
+        if (star.object_id != GODOT_SKY_RECORD_STAR || out.size() >= GODOT_SKY_STARS_MAX) {
+            out.clear();
+            return false;
+        }
+        const double star_values[] = {record_value(star, GODOT_KEY_X), record_value(star, GODOT_KEY_Y),
+                                      record_value(star, GODOT_KEY_Z), record_value(star, GODOT_KEY_R),
+                                      record_value(star, GODOT_KEY_G), record_value(star, GODOT_KEY_B),
+                                      record_value(star, GODOT_KEY_POINT)};
+        for (const double value : star_values) {
+            if (!std::isfinite(value)) {
+                out.clear();
+                return false;
+            }
+        }
+        const float square = static_cast<float>(star_values[0] * star_values[0] + star_values[1] * star_values[1] +
+                                                star_values[2] * star_values[2]);
+        const double length = static_cast<double>(ase::math::sqrt(square));
+        if (!(length > 0.0)) {
+            out.clear();
+            return false;
+        }
+        VivariumStarView slot;
+        slot.x = star_values[0] / length;
+        slot.y = star_values[1] / length;
+        slot.z = star_values[2] / length;
+        slot.r = star_values[3];
+        slot.g = star_values[4];
+        slot.b = star_values[5];
+        slot.point = star_values[6];
+        out.push_back(slot);
+    }
+    return true;
+}
+
+/**
+ * The ports and operations every host of the Vivarium needs: patch, forecast, clock, date, scene, ground, brook,
+ * terrain, ground cell, the six organ ports, the five instance ports, the sky port, the stars port, the seed port, the
+ * tile port, the sway port, the stream port, the level, the flatten, the lower, the raise and the elevation port and the two
+ * template ports, irrigate, prune, level, flatten, lower, raise, shape and lay - every port boot()
  * asks the set for. An
  * empty one would surface later as a NotFound of the first call, or as the port step of a boot that a
  * configuration check could have refused before a host existed.
  */
 bool ports_named(const VivariumStartConfig& config) {
-    bool named = !config.patch_port.empty() && !config.clock_port.empty() && !config.scene_port.empty() &&
+    bool named = !config.patch_port.empty() && !config.forecast_port.empty() && !config.clock_port.empty() &&
+                 !config.date_port.empty() &&
+                 !config.scene_port.empty() &&
                  !config.ground_port.empty() && !config.brook_port.empty() && !config.terrain_port.empty() &&
-                 !config.ground_cell_port.empty() && !config.sky_port.empty() && !config.seed_port.empty() &&
+                 !config.ground_cell_port.empty() && !config.sky_port.empty() && !config.stars_port.empty() &&
+                 !config.seed_port.empty() &&
                  !config.tile_port.empty() && !config.sway_port.empty() && !config.stream_port.empty() &&
                  !config.level_port.empty() &&
-                 !config.flatten_port.empty() && !config.elevation_port.empty() && !config.op_shape.empty() &&
+                 !config.flatten_port.empty() && !config.lower_port.empty() && !config.raise_port.empty() &&
+                 !config.op_lower.empty() && !config.op_raise.empty() &&
+                 !config.elevation_port.empty() && !config.op_shape.empty() &&
                  !config.template_corner_port.empty() && !config.template_triangle_port.empty() &&
                  !config.op_irrigate.empty() &&
                  !config.op_prune.empty() && !config.op_level.empty() && !config.op_flatten.empty() &&
-                 !config.op_lay.empty();
+                 !config.op_lay.empty() && !config.real_port.empty() && !config.op_real.empty();
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         named = named && !config.organ_ports[c].empty();
     }
@@ -934,11 +1077,36 @@ HostStatus pour(KernelEmbeddedHost& host, const VivariumStartConfig& config, uin
     return host.submit(config.patch_port.c_str(), config.op_irrigate.c_str(), &input);
 }
 
-/** One frame of real time - exactly one ordinary tick. false when the host refuses the frame. */
-bool frame(KernelEmbeddedHost& host, const VivariumSelfTestState& state) {
+/** File the absolute real position on the real port; the plugin hands it to ase-time in its next Reception run. */
+HostStatus file_real(KernelEmbeddedHost& host, const VivariumStartConfig& config, double real_s) {
+    KernelHostInput input{};
+    if (!put_value(input, GODOT_KEY_REAL_S, real_s)) {
+        return ase::kernel::HostStatusInvalidArgument;
+    }
+    return host.submit(config.real_port.c_str(), config.op_real.c_str(), &input);
+}
+
+/** The real position the clock record says ase-time laid its clock to; NaN while the record carries none. */
+double laid_real(KernelEmbeddedHost& host, const VivariumStartConfig& config, VivariumSelfTestState& state) {
+    uint32_t written = 0u;
+    if (snapshot_all(host, config.clock_port, state.records, written) != ase::kernel::HostStatusOk ||
+        written != 1u) {
+        return std::nan("");
+    }
+    return record_value(state.records[0], GODOT_KEY_REAL_LAID);
+}
+
+/**
+ * One frame of real time - exactly one ordinary tick, after which the real position moved on by
+ * the frame is filed, as the game host files it. false when the host refuses the frame.
+ */
+bool frame(KernelEmbeddedHost& host, const VivariumStartConfig& config, VivariumSelfTestState& state) {
     uint32_t steps = 0u;
-    double backlog = 0.0;
-    return host.advance(state.frame_s, 1u, &steps, &backlog) == ase::kernel::HostStatusOk && steps == 1u;
+    if (host.advance(state.frame_s, &steps) != ase::kernel::HostStatusOk || steps != 1u) {
+        return false;
+    }
+    state.real_s += state.frame_s;
+    return file_real(host, config, state.real_s) == ase::kernel::HostStatusOk;
 }
 
 /**
@@ -961,7 +1129,7 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
             return false;
         }
         for (int64_t i = 0; i < count; ++i) {
-            if (!frame(host, state)) {
+            if (!frame(host, config, state)) {
                 report_broken(label, GODOT_STEP_ADVANCE, "a frame was refused", result, report);
                 return false;
             }
@@ -1022,7 +1190,7 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         }
         int64_t frames = 0;
         for (; frames < bound && !reached; ++frames) {
-            if (!frame(host, state)) {
+            if (!frame(host, config, state)) {
                 report_broken(label, GODOT_STEP_ADVANCE, "a frame was refused", result, report);
                 return false;
             }
@@ -1036,32 +1204,41 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
 
     if (const toml::table* catch_up = action[GODOT_SELFTEST_KEY_CATCH_UP].as_table()) {
         const double seconds = (*catch_up)[GODOT_SELFTEST_KEY_SECONDS].value_or(std::nan(""));
-        const int64_t max_steps = (*catch_up)[GODOT_SELFTEST_KEY_MAX_STEPS].value_or(int64_t{0});
-        const int64_t expected = (*catch_up)[GODOT_SELFTEST_KEY_STEPS].value_or(int64_t{-1});
-        if (!(seconds > 0.0) || max_steps <= 0 || max_steps > static_cast<int64_t>(UINT32_MAX) || expected < 0) {
-            report_broken(label, GODOT_SELFTEST_KEY_CATCH_UP, "needs seconds, max_steps and steps", result, report);
+        const int64_t bound = (*catch_up)[GODOT_SELFTEST_KEY_MAX_FRAMES].value_or(int64_t{0});
+        if (!(seconds > 0.0) || !std::isfinite(seconds) || bound <= 0) {
+            report_broken(label, GODOT_SELFTEST_KEY_CATCH_UP, "needs seconds and max_frames", result, report);
             return false;
         }
+        // One long frame, as the game host meets a return from the background: one tick, then the
+        // real position moved on by the whole span is filed at once.
         uint32_t steps = 0u;
-        double backlog = 0.0;
-        if (host.advance(seconds, static_cast<uint32_t>(max_steps), &steps, &backlog) != ase::kernel::HostStatusOk) {
-            report_broken(label, GODOT_STEP_ADVANCE, "the catch-up was refused", result, report);
+        if (host.advance(seconds, &steps) != ase::kernel::HostStatusOk) {
+            report_broken(label, GODOT_STEP_ADVANCE, "the return was refused", result, report);
             return false;
         }
-        int64_t total = steps;
-        bool bounded = steps <= static_cast<uint32_t>(max_steps);
-        // the backlog drains over later calls, each a bounded number of ordinary ticks
-        for (int64_t call = 0; backlog > 0.0 && call <= expected; ++call) {
-            if (host.advance(0.0, static_cast<uint32_t>(max_steps), &steps, &backlog) != ase::kernel::HostStatusOk) {
-                report_broken(label, GODOT_STEP_ADVANCE, "the catch-up was refused", result, report);
+        state.real_s += seconds;
+        const double filed = state.real_s;
+        if (file_real(host, config, filed) != ase::kernel::HostStatusOk) {
+            report_broken(label, GODOT_SELFTEST_KEY_CATCH_UP, "the real position was refused", result, report);
+            return false;
+        }
+        // ase-time lays the clock forward to it in one write in its next Dissemination run and reports
+        // the position it laid; the bound is a few frames to see that run, never a target. The filed
+        // position and the laid one meet in the float the hub carries, and float rounding is monotone.
+        const double filed_f = static_cast<double>(static_cast<float>(filed));
+        bool laid = false;
+        int64_t frames = 0;
+        for (; frames < bound && !laid; ++frames) {
+            if (!frame(host, config, state)) {
+                report_broken(label, GODOT_STEP_ADVANCE, "a frame was refused", result, report);
                 return false;
             }
-            bounded = bounded && steps <= static_cast<uint32_t>(max_steps);
-            total += steps;
+            laid = laid_real(host, config, state) >= filed_f;
         }
-        report_check(check, "catch_up seconds=" + decimal(seconds) + " max_steps=" + std::to_string(max_steps),
-                     std::to_string(total) + (bounded && backlog == 0.0 ? "" : " unbounded"),
-                     std::to_string(expected), total == expected && bounded && backlog == 0.0, result, report);
+        report_check(check, "catch_up seconds=" + decimal(seconds) + " frames=" + std::to_string(frames),
+                     laid ? "laid" : "not laid",
+                     "real_laid_s >= " + decimal(filed_f) + " within " + std::to_string(bound) + " frames", laid,
+                     result, report);
         return true;
     }
 
@@ -1109,7 +1286,7 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
                        holds(static_cast<double>(written), op, static_cast<double>(expected), 0.0, known);
         int64_t frames = 0;
         for (; frames < bound && !reached && status == ase::kernel::HostStatusOk; ++frames) {
-            if (!frame(host, state)) {
+            if (!frame(host, config, state)) {
                 report_broken(label, GODOT_STEP_ADVANCE, "a frame was refused", result, report);
                 return false;
             }
@@ -1272,15 +1449,15 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     failure_status_ = ase::kernel::HostStatusOk;
     elapsed_in_s_ = 0.0;
     backlog_s_ = 0.0;
+    return_real_s_ = 0.0;
     tick_count_ = 0u;
     last_steps_ = 0u;
 
-    // A configuration the host could never run is refused before a host exists: no catch-up
-    // steps would turn every frame into a refused advance, an empty name into a NotFound later.
+    // A configuration the host could never run is refused before a host exists: an empty name
+    // would be a NotFound later, an empty real port a clock that never learns of a return.
     if (config_.read_stage == nullptr || config_.files_dir.empty() || config_.files_dir[0] != '/' ||
         !ports_named(config_) || !patches_layable(config_.patches) ||
-        !std::isfinite(config_.irrigate_amount_mm) || !(config_.irrigate_amount_mm > 0.0) ||
-        config_.catch_up_steps == 0u) {
+        !std::isfinite(config_.irrigate_amount_mm) || !(config_.irrigate_amount_mm > 0.0)) {
         return fail(GODOT_STEP_CONFIG, ase::kernel::HostStatusInvalidArgument);
     }
 
@@ -1303,16 +1480,21 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
         return fail(failure_step_ == GODOT_STEP_NONE ? GODOT_STEP_LOAD : failure_step_, status);
     }
 
-    bool offered = host_->has_port(config_.patch_port.c_str()) && host_->has_port(config_.clock_port.c_str()) &&
+    bool offered = host_->has_port(config_.patch_port.c_str()) && host_->has_port(config_.forecast_port.c_str()) &&
+                   host_->has_port(config_.clock_port.c_str()) &&
+                   host_->has_port(config_.date_port.c_str()) &&
                    host_->has_port(config_.scene_port.c_str()) && host_->has_port(config_.ground_port.c_str()) &&
                    host_->has_port(config_.brook_port.c_str()) && host_->has_port(config_.terrain_port.c_str()) &&
                    host_->has_port(config_.ground_cell_port.c_str()) && host_->has_port(config_.sky_port.c_str()) &&
+                   host_->has_port(config_.stars_port.c_str()) &&
                    host_->has_port(config_.seed_port.c_str()) && host_->has_port(config_.tile_port.c_str()) &&
                    host_->has_port(config_.sway_port.c_str()) && host_->has_port(config_.stream_port.c_str()) &&
                    host_->has_port(config_.level_port.c_str()) && host_->has_port(config_.flatten_port.c_str()) &&
+                   host_->has_port(config_.lower_port.c_str()) && host_->has_port(config_.raise_port.c_str()) &&
                    host_->has_port(config_.elevation_port.c_str()) &&
                    host_->has_port(config_.template_corner_port.c_str()) &&
-                   host_->has_port(config_.template_triangle_port.c_str());
+                   host_->has_port(config_.template_triangle_port.c_str()) &&
+                   host_->has_port(config_.real_port.c_str());
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         offered = offered && host_->has_port(config_.organ_ports[c].c_str());
     }
@@ -1565,6 +1747,9 @@ VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartCo
     }
 
     if (ready) {
+        // The one host has one real clock: the real position runs on from scenario to scenario, as
+        // it runs on from frame to frame of the game host, and never steps back.
+        double real_s = 0.0;
         for (const toml::node& entry : *cases) {
             const toml::table* scenario = entry.as_table();
             if (scenario == nullptr) {
@@ -1580,6 +1765,7 @@ VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartCo
             VivariumSelfTestState state;
             state.tolerance = tolerance;
             state.frame_s = frame_s;
+            state.real_s = real_s;
             bool complete = true;
             for (const toml::node& node : *actions) {
                 const toml::table* action = node.as_table();
@@ -1593,6 +1779,7 @@ VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartCo
                     break;
                 }
             }
+            real_s = state.real_s;
             checked.insert(checked.end(), state.checked.begin(), state.checked.end());
             if (complete) {
                 result.cases += 1u;
@@ -1632,28 +1819,43 @@ VivariumSelfTestResult GodotHostResourceManager::self_test(const VivariumStartCo
 
 // RUNNING
 
-HostStatus GodotHostResourceManager::advance(double elapsed_s, double lapse_s, uint32_t lapse_steps) {
+HostStatus GodotHostResourceManager::advance(double elapsed_s) {
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
     // Never capped, never dropped: NaN and infinity reach the host unchanged and are refused there
-    // with its own warning; a long frame is the background time, and the host catches it up. The
-    // lapse adds its time and its steps to the same call - one advance, one backlog.
+    // with its own warning. The host runs its one tick of the frame; the absolute real position is
+    // filed after it, and a long frame - the background time - moves it by the whole span at once.
+    // ase-time sets its clock forward to it in one write, and every module computes the span up to
+    // the new time in its own pass: a return is the same case as a jump.
     uint32_t steps = 0u;
-    double backlog = 0.0;
-    const HostStatus status =
-        host_->advance(elapsed_s + lapse_s, config_.catch_up_steps + lapse_steps, &steps, &backlog);
+    const HostStatus status = host_->advance(elapsed_s, &steps);
     if (status != ase::kernel::HostStatusOk) {
         return status;  // this frame is refused; the host said why
     }
-    elapsed_in_s_ += elapsed_s + lapse_s;
-    backlog_s_ = backlog;
+    elapsed_in_s_ += elapsed_s;
     last_steps_ = steps;
     tick_count_ += steps;
+    const HostStatus filed = file_real(*host_, config_, elapsed_in_s_);
+    if (filed != ase::kernel::HostStatusOk) {
+        return fail(GODOT_STEP_ADVANCE, filed);
+    }
+    // A long frame opens a return: its seconds wait as the backlog until the clock record shows
+    // ase-time laid the position this frame filed.
+    if (elapsed_s > GODOT_CATCH_UP_NOTE_S) {
+        return_real_s_ = elapsed_in_s_;
+        backlog_s_ += elapsed_s;
+    }
 
     const HostStatus read = read_snapshot();
     if (read != ase::kernel::HostStatusOk) {
         return fail(GODOT_STEP_SNAPSHOT, read);
+    }
+    // The filed position and the laid one meet in the float the hub carries; float rounding is monotone.
+    if (return_real_s_ > 0.0 && clock_.known &&
+        clock_.real_laid_s >= static_cast<double>(static_cast<float>(return_real_s_))) {
+        return_real_s_ = 0.0;
+        backlog_s_ = 0.0;
     }
     return ase::kernel::HostStatusOk;
 }
@@ -1677,6 +1879,10 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         view.soil_mm = record_value(record, GODOT_KEY_SOIL_MM);
         view.soil_rel = record_value(record, GODOT_KEY_SOIL_REL);
         view.capacity_mm = record_value(record, GODOT_KEY_CAPACITY_MM);
+        // the stage forecasts stand on the forecast port, read below; until its record for this patch
+        // is read they are not measured
+        view.grow_at_h = std::nan("");
+        view.mtur_at_h = std::nan("");
         // the stem base: x and z from the lay request, y once ase-terrain levelled the disc (03.11)
         view.x = record_value(record, GODOT_KEY_X);
         view.y = record_value(record, GODOT_KEY_Y);
@@ -1698,6 +1904,28 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         view.soil = code_of(record_value(record, GODOT_KEY_SOIL), GODOT_SOIL_COUNT);
         patches_[view.object_id] = view;
         places_[view.place] = view.object_id;
+    }
+
+    // THE STAGE FORECASTS HAVE A PORT OF THEIR OWN (FLORA_HOST_PORT_FORECAST): the patch record is full
+    // (HUB_CONST_HOST_VALUES_MAX), so ase-pl-flora files grow_at_h and mtur_at_h as one record per patch
+    // with a forecast, its object id the patch. A patch without such a record keeps both unmeasured; a
+    // record that names no patch of the patch port is a broken port.
+    status = snapshot_all(*host_, config_.forecast_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        patches_.clear();
+        places_.clear();
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = records_[i];
+        const auto found = patches_.find(record.object_id);
+        if (found == patches_.end()) {
+            patches_.clear();
+            places_.clear();
+            return refuse_record(*host_, config_.forecast_port, record.object_id, "forecast of no patch");
+        }
+        found->second.grow_at_h = record_value(record, GODOT_KEY_GROW_AT_H);
+        found->second.mtur_at_h = record_value(record, GODOT_KEY_MTUR_AT_H);
     }
 
     std::vector<KernelHostRecord> clock_records(1u);
@@ -1722,6 +1950,221 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         return refuse_record(*host_, config_.clock_port, clock_records[0].object_id,
                              "elapsed, day or hour not finite");
     }
+    // The length of the day and of the hour are ase-time's constants, filed by the plugin from the star;
+    // the view turns the clock into game hours by them and measures nothing.
+    clock.hours_per_day = record_value(clock_records[0], GODOT_KEY_HOURS_PER_DAY);
+    clock.seconds_per_hour = record_value(clock_records[0], GODOT_KEY_SECONDS_PER_HOUR);
+    if (!std::isfinite(clock.hours_per_day) || !std::isfinite(clock.seconds_per_hour) || clock.hours_per_day <= 0.0 ||
+        clock.seconds_per_hour <= 0.0) {
+        return refuse_record(*host_, config_.clock_port, clock_records[0].object_id,
+                             "hours per day or seconds per hour missing or not positive");
+    }
+    // The cycle end of ase-phytomer's growth clock rides on the clock record once that clock is ready
+    // (FloraHostClkExptSystem, PHY_CLK_LAST_S); the host only shows it, nothing waits on it.
+    clock.shoot_s = record_value(clock_records[0], GODOT_KEY_SHOOT);
+    clock.shoot_known = std::isfinite(clock.shoot_s);
+    // The real position ase-time last laid its clock to (TIM_REAL_LAID_S, 0 = never): the end of a
+    // return from the background, read here instead of being counted in ticks.
+    clock.real_laid_s = record_value(clock_records[0], GODOT_KEY_REAL_LAID);
+    if (!std::isfinite(clock.real_laid_s) || clock.real_laid_s < 0.0) {
+        return refuse_record(*host_, config_.clock_port, clock_records[0].object_id,
+                             "real position laid missing or negative");
+    }
+    // ase-time's verdict on the last seek or date request rides on the clock record while it stands
+    // (FloraHostClkExptSystem, TIM_SEEK_*); absent before the first request was judged. The view reads
+    // it and compares no clock part of its own.
+    clock.seek_seq = record_value(clock_records[0], GODOT_KEY_SEEK_SEQ);
+    clock.seek_order = record_value(clock_records[0], GODOT_KEY_SEEK_ORDER);
+    // The target comes as day and hour of the day: an absolute game hour outgrows the exact range of a float
+    // slot (VECTUM 154 lies near 18.58 million hours, beyond 2^24), so ase-time splits it (TIM_SEEK_TARGET_DAY).
+    clock.seek_target_day = record_value(clock_records[0], GODOT_KEY_SEEK_TARGET_DAY);
+    clock.seek_target_h = record_value(clock_records[0], GODOT_KEY_SEEK_TARGET_H);
+    clock.seek_known = std::isfinite(clock.seek_seq) && std::isfinite(clock.seek_order) &&
+                       std::isfinite(clock.seek_target_day) && std::isfinite(clock.seek_target_h);
+    // The day period rides on the clock record; the SURA date (ARCH_ASE_CALENDAR 2.9.1) stands on a record
+    // of its own on the date port, because one record holds at most HUB_CONST_HOST_VALUES_MAX values and
+    // the hour, its constants and the sun fill the clock record already (FloraHostClkExptSystem). The date
+    // port publishes an empty set until ase-calendar measured CAL_YEAR (FloraHubCalSyncSystem); until then
+    // the header keeps the day and hour line. A part that is missing alone is a broken record, not a date
+    // still to come.
+    clock.period = record_value(clock_records[0], GODOT_KEY_PERIOD);
+    std::vector<KernelHostRecord> date_records(1u);
+    status = snapshot_all(*host_, config_.date_port, date_records, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written > 1u) {
+        return refuse_record(*host_, config_.date_port, date_records[0].object_id, "more than one date");
+    }
+    if (written == 1u) {
+        clock.year = record_value(date_records[0], GODOT_KEY_YEAR);
+        clock.epoch = record_value(date_records[0], GODOT_KEY_EPOCH);
+        clock.cycle = record_value(date_records[0], GODOT_KEY_CYCLE);
+        clock.month = record_value(date_records[0], GODOT_KEY_MONTH);
+        clock.month_day = record_value(date_records[0], GODOT_KEY_MONTH_DAY);
+        // ase-calendar's lengths of a LUNBREX and a VECTUM ride with the date: the debug date entry bounds
+        // its fields by them, never by a number of the view.
+        clock.days_per_month = record_value(date_records[0], GODOT_KEY_DAYS_PER_MONTH);
+        clock.months_per_year = record_value(date_records[0], GODOT_KEY_MONTHS_PER_YEAR);
+        const double date_parts[] = {clock.year,      clock.epoch,          clock.cycle,          clock.month,
+                                     clock.month_day, clock.days_per_month, clock.months_per_year};
+        std::size_t finite_parts = 0u;
+        for (const double part : date_parts) {
+            finite_parts += std::isfinite(part) ? 1u : 0u;
+        }
+        if (finite_parts != std::size(date_parts)) {
+            return refuse_record(*host_, config_.date_port, date_records[0].object_id,
+                                 "SURA date incomplete: year, epoch, cycle, month, day and the calendar lengths "
+                                 "come together");
+        }
+        if (!std::isfinite(clock.period)) {
+            return refuse_record(*host_, config_.clock_port, clock_records[0].object_id,
+                                 "SURA date without its day period");
+        }
+    }
+    clock.date_known = written == 1u;
+    // N0460: the day record carries the day's sunrise, sunset and daylight, the season (CAL_SEASON,
+    // CAL_DAYLIGHT_DURATION) and the shares the modules place the clock, the sun and today at (TIM_DAY_PROGRESS,
+    // ase-calendar's share of the year) on a port of its own, because the clock and the date record are full
+    // (HUB_CONST_HOST_VALUES_MAX). The adapter never turns an hour into a share: that is the clock logic of the
+    // modules. Until ase-pl-flora offers the port or files the record the day is not known and the sheet draws no
+    // light, sun or today (the units log the gap on their edge); a part that is missing alone is a broken record.
+    if (!config_.day_port.empty() && host_->has_port(config_.day_port.c_str())) {
+        std::vector<KernelHostRecord> day_records(1u);
+        status = snapshot_all(*host_, config_.day_port, day_records, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        if (written > 1u) {
+            return refuse_record(*host_, config_.day_port, day_records[0].object_id, "more than one day");
+        }
+        if (written == 1u) {
+            const KernelHostRecord& day = day_records[0];
+            clock.sunrise_h = record_value(day, GODOT_KEY_SUNRISE_H);
+            clock.sunset_h = record_value(day, GODOT_KEY_SUNSET_H);
+            clock.daylight_h = record_value(day, GODOT_KEY_DAYLIGHT_H);
+            clock.season = record_value(day, GODOT_KEY_SEASON);
+            clock.day_share = record_value(day, GODOT_KEY_DAY_SHARE);
+            clock.sunrise_share = record_value(day, GODOT_KEY_SUNRISE_SHARE);
+            clock.sunset_share = record_value(day, GODOT_KEY_SUNSET_SHARE);
+            clock.year_share = record_value(day, GODOT_KEY_YEAR_SHARE);
+            clock.year_day = record_value(day, kDayKeyYearDay);
+            const double day_parts[] = {clock.sunrise_h,     clock.sunset_h,     clock.daylight_h,
+                                        clock.season,        clock.day_share,    clock.sunrise_share,
+                                        clock.sunset_share,  clock.year_share,   clock.year_day};
+            std::size_t finite_day = 0u;
+            for (const double part : day_parts) {
+                finite_day += std::isfinite(part) ? 1u : 0u;
+            }
+            if (finite_day != std::size(day_parts)) {
+                return refuse_record(*host_, config_.day_port, day.object_id,
+                                     "day incomplete: sunrise, sunset, daylight, the season, the shares of the "
+                                     "day, the sun and the year and the day of the year come together");
+            }
+            clock.day_known = true;
+        }
+    }
+    // N0460: one record per day period (TIM_DAY_PERIOD ASO .. NOX) with the hour it begins (0 for ASO, else
+    // ase-time's TIM_CONST_PERIOD_BND_*) and the share of the day ase-time places that hour at. Entity per item: a
+    // phase is a record, never a slot of the day record. Every period comes exactly once; a set with a period
+    // missing, twice or out of range, or a record without its hour or share, is refused.
+    if (!config_.phase_port.empty() && host_->has_port(config_.phase_port.c_str())) {
+        std::vector<KernelHostRecord> phase_records(GODOT_DAY_PHASES + 1u);
+        status = snapshot_all(*host_, config_.phase_port, phase_records, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        if (written != 0u && written != GODOT_DAY_PHASES) {
+            return refuse_record(*host_, config_.phase_port, phase_records[0].object_id,
+                                 "phase set incomplete: every day period comes exactly once");
+        }
+        if (written == GODOT_DAY_PHASES) {
+            clock.phase_start_h.assign(GODOT_DAY_PHASES, std::nan(""));
+            clock.phase_start_share.assign(GODOT_DAY_PHASES, std::nan(""));
+            for (std::size_t r = 0u; r < written; ++r) {
+                const KernelHostRecord& phase = phase_records[r];
+                const double period = record_value(phase, GODOT_KEY_PERIOD);
+                const double start_h = record_value(phase, GODOT_KEY_START_H);
+                const double start_share = record_value(phase, GODOT_KEY_START_SHARE);
+                if (!std::isfinite(period) || !std::isfinite(start_h) || !std::isfinite(start_share)) {
+                    return refuse_record(*host_, config_.phase_port, phase.object_id,
+                                         "phase incomplete: the period, its start hour and its share come together");
+                }
+                if (!whole(period) || period < static_cast<double>(GODOT_PERIOD_FIRST) ||
+                    period > static_cast<double>(GODOT_PERIOD_LAST)) {
+                    return refuse_record(*host_, config_.phase_port, phase.object_id, "period out of range");
+                }
+                const std::size_t slot = static_cast<std::size_t>(period) - static_cast<std::size_t>(GODOT_PERIOD_FIRST);
+                if (std::isfinite(clock.phase_start_h[slot])) {
+                    return refuse_record(*host_, config_.phase_port, phase.object_id, "period twice");
+                }
+                clock.phase_start_h[slot] = start_h;
+                clock.phase_start_share[slot] = start_share;
+            }
+            clock.phases_known = true;
+        }
+    }
+    // N0460: one record per season (CAL_CONST_SEASON_GLACIX .. HALITRIX) with its first LUN
+    // (CAL_CONST_SEASON_*_START) and its hours of light (CAL_CONST_SSN_DAYLIGHT_*), ase-calendar's constants. Every
+    // season comes exactly once, refused like the phase set.
+    if (!config_.season_port.empty() && host_->has_port(config_.season_port.c_str())) {
+        std::vector<KernelHostRecord> season_records(GODOT_YEAR_SEASONS + 1u);
+        status = snapshot_all(*host_, config_.season_port, season_records, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        if (written != 0u && written != GODOT_YEAR_SEASONS) {
+            return refuse_record(*host_, config_.season_port, season_records[0].object_id,
+                                 "season set incomplete: every season comes exactly once");
+        }
+        if (written == GODOT_YEAR_SEASONS) {
+            clock.season_start_lun.assign(GODOT_YEAR_SEASONS, std::nan(""));
+            clock.season_light_h.assign(GODOT_YEAR_SEASONS, std::nan(""));
+            for (std::size_t r = 0u; r < written; ++r) {
+                const KernelHostRecord& season = season_records[r];
+                const double code = record_value(season, GODOT_KEY_SEASON);
+                const double start_lun = record_value(season, GODOT_KEY_START_LUN);
+                const double light_h = record_value(season, GODOT_KEY_LIGHT_H);
+                if (!std::isfinite(code) || !std::isfinite(start_lun) || !std::isfinite(light_h)) {
+                    return refuse_record(*host_, config_.season_port, season.object_id,
+                                         "season incomplete: the season, its first LUN and its light come together");
+                }
+                if (!whole(code) || code >= static_cast<double>(GODOT_YEAR_SEASONS)) {
+                    return refuse_record(*host_, config_.season_port, season.object_id, "season out of range");
+                }
+                const std::size_t slot = static_cast<std::size_t>(code);
+                if (std::isfinite(clock.season_start_lun[slot])) {
+                    return refuse_record(*host_, config_.season_port, season.object_id, "season twice");
+                }
+                clock.season_start_lun[slot] = start_lun;
+                clock.season_light_h[slot] = light_h;
+            }
+            clock.seasons_known = true;
+        }
+    }
+    // N0459: one pace record with the factor of ase-time's base pace the clock runs at, as ase-pl-flora divides it
+    // (FloraPaceCalcSystem). The adapter never divides the scale itself. A record without a positive finite factor
+    // is refused; without the record the pace is not known and the hourglass keeps the factor last asked.
+    if (!config_.pace_port.empty() && host_->has_port(config_.pace_port.c_str())) {
+        std::vector<KernelHostRecord> pace_records(1u);
+        status = snapshot_all(*host_, config_.pace_port, pace_records, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        if (written > 1u) {
+            return refuse_record(*host_, config_.pace_port, pace_records[0].object_id, "more than one pace");
+        }
+        if (written == 1u) {
+            const KernelHostRecord& pace = pace_records[0];
+            const double factor = record_value(pace, GODOT_KEY_FACTOR);
+            if (!std::isfinite(factor) || !(factor > GODOT_PACE_NONE)) {
+                return refuse_record(*host_, config_.pace_port, pace.object_id,
+                                     "pace without a positive factor of the base pace");
+            }
+            clock.pace_factor = factor;
+            clock.pace_known = true;
+        }
+    }
     clock.known = true;
     clock_ = clock;
     const HostStatus organs = read_organs();
@@ -1743,6 +2186,10 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     const HostStatus sky = read_sky();
     if (sky != ase::kernel::HostStatusOk) {
         return sky;
+    }
+    const HostStatus stars = read_stars();
+    if (stars != ase::kernel::HostStatusOk) {
+        return stars;
     }
     return read_seeds();
 }
@@ -2019,10 +2466,13 @@ HostStatus GodotHostResourceManager::read_sky() {
         sky_ = VivariumSkyView{};
         return ase::kernel::HostStatusOk;
     }
+    // THE STARS STAND ON THEIR OWN PORT. The turn record (GODOT_SKY_RECORD_TURN) is the one star record
+    // left on this port; the eclipse and the prediction records count in as every other kind.
     const uint32_t sky_records_max = GODOT_SKY_RECORD_COUNT + GODOT_SKY_MOONS_MAX + GODOT_SKY_COMETS_MAX +
                                      GODOT_SKY_PLANETS_MAX + GODOT_SKY_COMPANIONS_MAX +
                                      GODOT_SKY_FRAGMENTS_MAX + GODOT_SKY_BELTS_MAX + GODOT_SKY_SHOWERS_MAX +
-                                     GODOT_SKY_STARS_MAX;
+                                     GODOT_SKY_ECLIPSES_MAX + GODOT_SKY_ECLIPSE_NEXTS_MAX + GODOT_SKY_TURNS_MAX +
+                                     GODOT_SKY_WINDS_MAX;
     if (written < GODOT_SKY_RECORD_COUNT || written > sky_records_max) {
         sky_ = VivariumSkyView{};
         const std::string count = "record count " + std::to_string(written) + " outside " +
@@ -2035,7 +2485,63 @@ HostStatus GodotHostResourceManager::read_sky() {
         return refuse_record(*host_, config_.sky_port, organ_records_[0].object_id,
                              "a sky record incomplete, out of range or above its kind's maximum");
     }
-    sky_ = sky;
+    // the held star set and the marks it was read at ride over to the new view; read_stars replaces them
+    // only when the turn record names a set computed at other marks
+    sky.star = std::move(sky_.star);
+    sky.star_sidereal = sky_.star_sidereal;
+    sky.star_zenith = sky_.star_zenith;
+    sky.star_moon = sky_.star_moon;
+    sky.star_generation = sky_.star_generation;
+    // a set without the wind record keeps the last drift: ase-pl-sky files it only once wind arrived, and the
+    // haze and the clouds hold their course until the next one (D2293)
+    if (!sky.wind_known && sky_.wind_known) {
+        sky.wind_known = true;
+        sky.drift_x = sky_.drift_x;
+        sky.drift_z = sky_.drift_z;
+        sky.wind = sky_.wind;
+    }
+    sky_ = std::move(sky);
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_stars() {
+    // THE STAR SET IS READ WHEN IT CHANGED, NEVER EVERY SNAPSHOT. ase-pl-sky computes its visible set anew
+    // after a sidereal step or a change of the brightness (SkyCelStarVisSystem) and files it on the stars
+    // port then (SkyHostStarExptSystem); the kernel keeps the last set between those closes. The marks the
+    // set was computed at ride on the turn record of the scene port, so a frame whose marks equal those of
+    // the held set reads nothing - thousands of records would otherwise be copied out of the kernel each
+    // frame for a set that has not moved. The motion of the sky is the turn, applied by the view.
+    if (!sky_.turn_known) {
+        return ase::kernel::HostStatusOk;
+    }
+    const bool same_marks = sky_.star_sidereal == sky_.set_sidereal && sky_.star_zenith == sky_.set_zenith &&
+                            sky_.star_moon == sky_.set_moon;
+    if (same_marks && sky_.star_generation != 0u) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.stars_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written > GODOT_SKY_STARS_MAX) {
+        sky_.star.clear();
+        const std::string count = "record count " + std::to_string(written) + " above " +
+                                  std::to_string(GODOT_SKY_STARS_MAX);
+        return refuse_record(*host_, config_.stars_port, organ_records_[0].object_id, count.c_str());
+    }
+    std::vector<VivariumStarView> stars;
+    if (!stars_view_of(organ_records_, written, stars)) {
+        sky_.star.clear();
+        return refuse_record(*host_, config_.stars_port, organ_records_[0].object_id,
+                             "a star record incomplete, not finite or of another kind");
+    }
+    sky_.star = std::move(stars);
+    sky_.star_sidereal = sky_.set_sidereal;
+    sky_.star_zenith = sky_.set_zenith;
+    sky_.star_moon = sky_.set_moon;
+    star_generation_ += 1u;
+    sky_.star_generation = star_generation_;
     return ase::kernel::HostStatusOk;
 }
 
@@ -2062,13 +2568,13 @@ HostStatus GodotHostResourceManager::read_seeds() {
     return ase::kernel::HostStatusOk;
 }
 
-HostStatus GodotHostResourceManager::irrigate(uint32_t object_id) {
+HostStatus GodotHostResourceManager::irrigate(uint32_t object_id, double amount_mm) {
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
     KernelHostInput input{};
     input.object_id = object_id;
-    if (!put_value(input, GODOT_KEY_AMOUNT_MM, config_.irrigate_amount_mm)) {
+    if (!put_value(input, GODOT_KEY_AMOUNT_MM, amount_mm)) {
         return ase::kernel::HostStatusCapacity;
     }
     return host_->submit(config_.patch_port.c_str(), config_.op_irrigate.c_str(), &input);
@@ -2116,6 +2622,32 @@ HostStatus GodotHostResourceManager::flatten(double x, double z, double radius_m
     return host_->submit(config_.flatten_port.c_str(), config_.op_flatten.c_str(), &input);
 }
 
+HostStatus GodotHostResourceManager::lower(double x, double z, double radius_m, double depth_m) {
+    // A spade stroke names a place, no patch: ase-pl-flora files it as a dig order, ase-terrain lowers the disc.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_X, x);
+    (void)put_value(input, GODOT_KEY_Z, z);
+    (void)put_value(input, GODOT_KEY_HALF, radius_m);
+    (void)put_value(input, GODOT_KEY_DEPTH, depth_m);
+    return host_->submit(config_.lower_port.c_str(), config_.op_lower.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::raise(double x, double z, double radius_m, double height_m) {
+    // The heap stroke carries its height under the same key as the dig depth: one stroke, one amount.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_X, x);
+    (void)put_value(input, GODOT_KEY_Z, z);
+    (void)put_value(input, GODOT_KEY_HALF, radius_m);
+    (void)put_value(input, GODOT_KEY_DEPTH, height_m);
+    return host_->submit(config_.raise_port.c_str(), config_.op_raise.c_str(), &input);
+}
+
 HostStatus GodotHostResourceManager::pace(double factor) {
     // The request names no object: the clock is the one clock of this host. The view sends the factor
     // only; the base pace it multiplies and the highest pace that is valid are ase-time's, read from the
@@ -2128,16 +2660,35 @@ HostStatus GodotHostResourceManager::pace(double factor) {
     return host_->submit(config_.pace_port.c_str(), config_.op_pace.c_str(), &input);
 }
 
-HostStatus GodotHostResourceManager::seek(double game_hour) {
-    // The request names no object: the clock is the one clock of this host. Which hour is valid is
-    // ase-pl-flora's and ase-time's to check; a moment behind the clock or in a later day is ase-time's
-    // to hold, not the view's.
+HostStatus GodotHostResourceManager::seek(double seq, double game_hour, double ahead_h, double day_hour) {
+    // The request names no object: the clock is the one clock of this host. Every form stands on the
+    // request, the unused ones as GODOT_SEEK_FORM_NONE; where the target lies and whether the clock can
+    // reach it is ase-time's to judge from its own clock, and its verdict comes back with `seq`.
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
     KernelHostInput input{};
     (void)put_value(input, GODOT_KEY_GAME_HOUR, game_hour);
+    (void)put_value(input, GODOT_KEY_AHEAD_H, ahead_h);
+    (void)put_value(input, GODOT_KEY_DAY_HOUR, day_hour);
+    (void)put_value(input, GODOT_KEY_SEQ, seq);
     return host_->submit(config_.seek_port.c_str(), config_.op_seek.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::seek_date(double seq, double year, double month, double month_day, double hour) {
+    // The request names no object: the clock is the one clock of this host. Whether the date exists is
+    // ase-calendar's to check with its own constants, whether it lies behind the clock ase-time's to
+    // judge; the verdict comes back with `seq` on the same channel as that of a seek.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_SEQ, seq);
+    (void)put_value(input, GODOT_KEY_YEAR, year);
+    (void)put_value(input, GODOT_KEY_MONTH, month);
+    (void)put_value(input, GODOT_KEY_MONTH_DAY, month_day);
+    (void)put_value(input, GODOT_KEY_HOUR, hour);
+    return host_->submit(config_.date_port.c_str(), config_.op_seek_date.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::shape(double height_scale_m, double base_height_m) {
@@ -2307,6 +2858,15 @@ const VivariumBundleInfo& GodotHostResourceManager::get_bundle() const {
 
 double GodotHostResourceManager::simulation_seconds() const {
     return elapsed_in_s_ - backlog_s_;
+}
+
+double GodotHostResourceManager::stage_seconds() const {
+    // Only a running host is asked, as in schedule_runs: a stopped one would log its refusal on every frame.
+    double ticked_s = 0.0;
+    if (!running() || host_->ticked_seconds(&ticked_s) != ase::kernel::HostStatusOk) {
+        return 0.0;
+    }
+    return ticked_s;
 }
 
 uint64_t GodotHostResourceManager::tick_count() const {

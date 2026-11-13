@@ -98,7 +98,7 @@ foreach(_adp_godot_bundle_test host refusal scene)
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant instances bark templates stand binding ground water keeper focus seed exposure window showcase)
+foreach(_adp_godot_pure_test layout plant instances bark templates stand binding ground water keeper focus seed exposure window context signs chips showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
@@ -127,6 +127,12 @@ foreach(_adp_godot_pure_test layout plant instances bark templates stand binding
         set(_adp_godot_pure_source test_godot_scene_exposure.cpp)
     elseif(_adp_godot_pure_test STREQUAL "window")
         set(_adp_godot_pure_source test_godot_client_window.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "context")
+        set(_adp_godot_pure_source test_godot_hud_context_resolver.cpp)  # usecase:101440 grow the interface with skills
+    elseif(_adp_godot_pure_test STREQUAL "signs")
+        set(_adp_godot_pure_source test_godot_hud_context_signs.cpp)  # usecase:101440 grow the interface with skills
+    elseif(_adp_godot_pure_test STREQUAL "chips")
+        set(_adp_godot_pure_source test_godot_hud_context.cpp)  # usecase:101440 grow the interface with skills
     else()
         set(_adp_godot_pure_source test_godot_asset_showcase.cpp)
     endif()
@@ -139,6 +145,11 @@ foreach(_adp_godot_pure_test layout plant instances bark templates stand binding
             ase::adp::godot-host
             doctest::doctest
     )
+    if(_adp_godot_pure_test STREQUAL "ground")
+        # the ground test reads shaders/plant_ground.gdshader from the tree; only this target takes ase-fileio,
+        # so no other unit's command line changes (usecase:101339 show the ground around plant)
+        target_link_libraries(${_adp_godot_pure_target} PRIVATE ase::fileio)
+    endif()
     add_test(NAME ${_adp_godot_pure_target} COMMAND ${_adp_godot_pure_target})
     set_target_properties(${_adp_godot_pure_target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 endforeach()

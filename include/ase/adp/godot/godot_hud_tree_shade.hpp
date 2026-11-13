@@ -1,0 +1,88 @@
+#pragma once
+
+/**
+ * ASE GODOT ADAPTER - HUD TREE SHADE
+ *
+ * @file        godot_hud_tree_shade.hpp
+ * @brief       The shade under the birch, or the seed mound while the stand is still a seed
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, element N19 (the mockup's drawTree, m.html 488 to 490).
+ *              It stands before the world group, as drawTree before drawWorld, and outside its brightness: the
+ *              mockup's filter lies on drawWorld only.
+ *
+ *              THE DRAWING. From the stage SPROUT on, an ellipse at the foot of the trunk moved by plant_shade_dx
+ *              and plant_shade_dy, its radii plant_shade_rx times the stage scale plus plant_shade_rx_base and
+ *              plant_shade_ry times the scale plus plant_shade_ry_base, in PLANT_SHADE. The stage scale is
+ *              plant_scale_seed, _shoot, _growing or _mature (the mockup's SCALE[S.stage]). At the stage SEED the
+ *              mockup draws no shade but the mound of the sown soil: an ellipse plant_seed_mound_rx by _ry in
+ *              PLANT_SEED_MOUND at the foot, and the seed plant_seed_rx by _ry in PLANT_SEED, plant_seed_dy above it.
+ *
+ *              FULL FROM THE FRAME. The foot of the trunk and the stage come from the frame the view fills (the
+ *              stand of ase-flora on its patch record); TreeShade draws whatever the frame carries and asks no port.
+ *              A birch off the screen or a patch without a stage draws nothing.
+ *
+ * @module      ase-adp-godot
+ * @layer       5 (Adapter)
+ * @design      DSGN_066
+ * @category    ecs/module
+ * @usecase     usecase:100387 - view the plant
+ * @actor       Plant Keeper (PLNTKEEPER)
+ * @register    carrier N0448
+ * @created     2026-11-12
+ * @modified    2026-11-12
+ * @version     00.00.01.00000
+ */
+
+#include <ase/adp/godot/godot_hud_ui_theme.hpp>
+
+#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/transform2d.hpp>
+#include <godot_cpp/variant/vector2.hpp>
+
+#include <cstdint>
+#include <string>
+
+namespace ase::adp::godot {
+
+/** What the shade under the birch shows this frame. */
+struct TreeShadeFrame {
+    bool placed = false;          // the birch stands on the screen
+    ::godot::Vector2 trunk;       // the foot of the trunk in mockup units (TX, TY())
+    uint8_t stage = UINT8_MAX;    // the stage of the stand (GODOT_STAGE_*), UINT8_MAX without a patch record
+};
+
+/** The shade under the birch and the seed mound. */
+class TreeShade {
+public:
+    /** Binds the measures and the colours; false with the missing name in `failed`. */
+    bool bind(const UiTheme& theme, std::string& failed);
+
+    /** Draws the shade or the mound of `now` under `frame`. */
+    void draw(UiPen& canvas, const ::godot::Transform2D& frame, const TreeShadeFrame& now) const;
+
+private:
+    /** One ellipse of radii `rx`, `ry` at `at` in `colour` under `frame`. */
+    static void oval(UiPen& canvas, const ::godot::Transform2D& frame, const ::godot::Vector2& at, double rx,
+                     double ry, const ::godot::Color& colour);
+
+    double shade_dx_ = 0.0;       // plant_shade_dx
+    double shade_dy_ = 0.0;       // plant_shade_dy
+    double shade_rx_ = 0.0;       // plant_shade_rx
+    double shade_rx_base_ = 0.0;  // plant_shade_rx_base
+    double shade_ry_ = 0.0;       // plant_shade_ry
+    double shade_ry_base_ = 0.0;  // plant_shade_ry_base
+    double scale_seed_ = 0.0;     // plant_scale_seed
+    double scale_shoot_ = 0.0;    // plant_scale_shoot
+    double scale_growing_ = 0.0;  // plant_scale_growing
+    double scale_mature_ = 0.0;   // plant_scale_mature
+    double mound_rx_ = 0.0;       // plant_seed_mound_rx
+    double mound_ry_ = 0.0;       // plant_seed_mound_ry
+    double seed_rx_ = 0.0;        // plant_seed_rx
+    double seed_ry_ = 0.0;        // plant_seed_ry
+    double seed_dy_ = 0.0;        // plant_seed_dy
+    ::godot::Color shade_;        // PLANT_SHADE
+    ::godot::Color mound_;        // PLANT_SEED_MOUND
+    ::godot::Color seed_;         // PLANT_SEED
+};
+
+}  // namespace ase::adp::godot

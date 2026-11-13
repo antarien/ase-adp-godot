@@ -12,12 +12,13 @@
  * @usecase     usecase:100386 - select a patch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-12
- * @modified    2026-10-25
- * @version     00.00.02.00000
+ * @modified    2026-11-07
+ * @version     00.00.03.00000
  */
 
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/types.hpp>
+#include <ase/math/math.hpp>
 
 namespace ase::adp::godot {
 
@@ -26,10 +27,15 @@ uint32_t patch_focus_place(uint32_t selected_place, uint32_t first_place) {
 }
 
 PatchFocusAim patch_focus_aim(const PlantSceneCamera& camera, const PlantOrigin& origin) {
+    // the direction the camera looks in, on the ground (x east, z north): heading 0 is +z, heading 90 is +x;
+    // the camera stands distance_m behind the stem base against it
+    const float heading = camera.heading_deg * ase::math::DEG_TO_RAD;
+    const float ahead_x = ase::math::sin(heading);
+    const float ahead_z = ase::math::cos(heading);
     PatchFocusAim aim;
-    aim.eye_x = origin.x;
+    aim.eye_x = origin.x - camera.distance_m * ahead_x;
     aim.eye_y = origin.y + camera.height_m;
-    aim.eye_z = origin.z - camera.distance_m;
+    aim.eye_z = origin.z - camera.distance_m * ahead_z;
     aim.target_x = origin.x;
     aim.target_y = origin.y + camera.look_m;
     aim.target_z = origin.z;

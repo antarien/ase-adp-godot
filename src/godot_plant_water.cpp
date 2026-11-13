@@ -1,19 +1,22 @@
 /**
- * ASE GODOT ADAPTER - THE WATER TABLE AT NN0 AND THE WATER ALONG A COURSE
+ * ASE GODOT ADAPTER - THE WATER OF THE BROOKS AT THE LEVEL ASE-HYDRO RECKONS
  *
  * @file        godot_plant_water.cpp
- * @brief       The one water plane at NN0 over every ground cell below it, and the ribbon of a river along a course
+ * @brief       The water plane in the bed of every brook at its bed plus the ase-hydro depth, and the ribbon along a course
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3. See godot_plant_water.hpp.
  *
- *              THE WATER STANDS AT NN0 (build_water_table): the terrain is generated around NN0
- *              (GEN_DEFAULT_BASE_HEIGHT of ase-terrain), and every ground cell with a corner below it carries one
- *              quad of the plane at GODOT_WATER_TABLE_M. A dug hole, a carved bed and a hollow of the generated
- *              ground fill alike; where the ground stands above the plane it hides it, so the shore is where
- *              ground and plane cross. The plane shares the corners of the ground, one vertex per terrain sample
- *              a wet cell names, the depth of the table above that sample in its colour. A vertex within the bed
- *              of a stream record carries that stream's velocity and course (flow_at); the shader moves the
- *              ripples along it, and outside every bed the plane stands still. The care view draws this plane
- *              and nothing else as its water.
+ *              THE WATER STANDS WHERE ASE-HYDRO PUTS IT (build_water_table, B0281): ase-hydro reckons the
+ *              depth of every brook (HydroHubStrmPubSystem), the stream port carries it, and the plane stands
+ *              in the bed of each brook at its bed plus that depth. The bed of a station is the lowest ground
+ *              vertex of its section within the reach of the bed (stream_levels); from the lower end upstream
+ *              the level never sinks under the level below it, the rule of the ribbon. A place in no bed holds
+ *              no water: the view reckons no water of its own, no table at a datum. Where the ground stands
+ *              above the plane it hides it, so the shore is where ground and plane cross. The plane shares the
+ *              corners of the ground, one vertex per ground vertex a wet cell names, the depth of the water
+ *              above that vertex in its colour; it reads the ground mesh as build_ground laid it and
+ *              patch_ground moved it, never the ports by object id (P0690). A vertex within the bed of a
+ *              stream record carries that stream's velocity and course (flow_at); the shader moves the
+ *              ripples along it. The care view draws this plane and nothing else as its water.
  *
  *              THE RIBBON (build_water) is the water of a river running along a course ABOVE the table, a brook
  *              falling from a mountain: the care view lays none now, the vivarium has no such river.
@@ -36,10 +39,10 @@
  * @design      DSGN_066
  * @category    render/pipeline/stage
  * @usecase     usecase:101339 - show the ground around plant
- * @actor       Care View Supplier (CARESUPPLY)
+ * @actor       Worldkeeper Perception Relay (WORLPERREL)
  * @created     2026-11-01
- * @modified    2026-11-05
- * @version     00.00.04.00000
+ * @modified    2026-11-13
+ * @version     00.00.06.00000
  */
 
 #include <ase/adp/godot/godot_plant_water.hpp>
@@ -48,7 +51,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <unordered_map>
 #include <vector>
 
 namespace ase::adp::godot {
@@ -178,56 +180,161 @@ void flow_at(float x, float z, const std::vector<VivariumStreamView>& streams, f
     }
 }
 
+/**
+ * The station of `stream` whose section holds (x, z): the place along the line between its ends, within its ends,
+ * no farther from that line than half the bed width plus the swing of a winding bed (GODOT_WATER_SWING_SHARE of
+ * the bed width), rounded to the nearest of the GODOT_WATER_STATIONS sections. false outside the bed, and for a
+ * bed without length or width.
+ */
+bool station_of(const VivariumStreamView& stream, float x, float z, std::size_t& station) {
+    const auto ax = static_cast<float>(stream.end_x - stream.x);
+    const auto az = static_cast<float>(stream.end_z - stream.z);
+    const float length2 = ax * ax + az * az;
+    const auto half_m = static_cast<float>(stream.half_m);
+    if (!(length2 > 0.0f) || !(half_m > 0.0f)) {
+        return false;
+    }
+    const float along = ((x - static_cast<float>(stream.x)) * ax + (z - static_cast<float>(stream.z)) * az) / length2;
+    if (along < 0.0f || along > 1.0f) {
+        return false;
+    }
+    const float dx = x - (static_cast<float>(stream.x) + along * ax);
+    const float dz = z - (static_cast<float>(stream.z) + along * az);
+    const float reach = half_m + (half_m + half_m) * GODOT_WATER_SWING_SHARE;
+    if (dx * dx + dz * dz > reach * reach) {
+        return false;
+    }
+    station = static_cast<std::size_t>(ase::math::round(along * static_cast<float>(GODOT_WATER_STATIONS)));
+    return true;
+}
+
+/**
+ * The water level of `stream` at its GODOT_WATER_STATIONS + 1 stations, written from `first` on into `levels`
+ * and `reached`: the bed of a station is the lowest vertex of `ground` its section holds (station_of), the level
+ * that bed plus the depth ase-hydro reckons for the stream. The water runs toward the lower of the two reached
+ * ends; from that end upstream the level is the bed plus the depth or the level below it, whichever is higher,
+ * so a bump of the bed dams the water behind it, the rule of build_water. A station no vertex falls into keeps
+ * reached 0. A dry stream reaches no station: it holds no water.
+ */
+void stream_levels(const VivariumStreamView& stream, const PlantMeshArrays& ground, std::size_t first,
+                   std::vector<float>& levels, std::vector<uint8_t>& reached) {
+    const std::size_t stations = static_cast<std::size_t>(GODOT_WATER_STATIONS) + 1u;
+    const auto depth_m = static_cast<float>(stream.depth_m);
+    if (!(depth_m > 0.0f)) {
+        return;
+    }
+    const std::size_t vertices = ground.positions.size() / 3u;
+    for (std::size_t v = 0u; v < vertices; ++v) {
+        std::size_t station = 0u;
+        if (!station_of(stream, ground.positions[v * 3u], ground.positions[v * 3u + 2u], station)) {
+            continue;
+        }
+        const float height = ground.positions[v * 3u + 1u];
+        if (reached[first + station] == 0u || height < levels[first + station]) {
+            levels[first + station] = height;
+            reached[first + station] = 1u;
+        }
+    }
+    std::size_t head = stations;
+    std::size_t tail = stations;
+    for (std::size_t station = 0u; station < stations; ++station) {
+        if (reached[first + station] != 0u) {
+            head = head == stations ? station : head;
+            tail = station;
+        }
+    }
+    const bool falls_to_end = head == stations || levels[first + tail] <= levels[first + head];
+    float below = 0.0f;
+    bool wet = false;
+    for (std::size_t step = 0u; step < stations; ++step) {
+        const std::size_t station = falls_to_end ? stations - 1u - step : step;
+        if (reached[first + station] == 0u) {
+            wet = false;
+            continue;
+        }
+        const float level = levels[first + station] + depth_m;
+        below = wet && below > level ? below : level;
+        levels[first + station] = below;
+        wet = true;
+    }
+}
+
 }  // namespace
 
-uint32_t build_water_table(const std::vector<VivariumStreamView>& streams,
-                           const std::vector<VivariumTerrainView>& samples,
-                           const std::vector<VivariumGroundCellView>& cells, PlantMeshArrays& out) {
-    // the samples by object id, as the cells name their corners
-    std::unordered_map<uint32_t, std::size_t> sample_of;
-    sample_of.reserve(samples.size());
-    for (std::size_t index = 0u; index < samples.size(); ++index) {
-        sample_of.emplace(samples[index].object_id, index);
+uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const PlantMeshArrays& ground,
+                           PlantMeshArrays& out) {
+    // the level ase-hydro gives every station of every stream, stream after stream
+    const std::size_t stations = static_cast<std::size_t>(GODOT_WATER_STATIONS) + 1u;
+    std::vector<float> levels(streams.size() * stations, 0.0f);
+    std::vector<uint8_t> reached(streams.size() * stations, 0u);
+    for (std::size_t stream = 0u; stream < streams.size(); ++stream) {
+        stream_levels(streams[stream], ground, stream * stations, levels, reached);
     }
-    // one plane vertex per sample a wet cell names, laid when the first cell names it
-    std::unordered_map<uint32_t, int32_t> vertex_of;
+    // the level over every ground vertex: the highest of the streams whose bed holds it; flooded 0 in no bed
+    const std::size_t ground_vertices = ground.positions.size() / 3u;
+    std::vector<float> level_of(ground_vertices, 0.0f);
+    std::vector<uint8_t> flooded(ground_vertices, 0u);
+    for (std::size_t v = 0u; v < ground_vertices; ++v) {
+        for (std::size_t stream = 0u; stream < streams.size(); ++stream) {
+            std::size_t station = 0u;
+            if (!station_of(streams[stream], ground.positions[v * 3u], ground.positions[v * 3u + 2u], station) ||
+                reached[stream * stations + station] == 0u) {
+                continue;
+            }
+            const float level = levels[stream * stations + station];
+            if (flooded[v] == 0u || level > level_of[v]) {
+                level_of[v] = level;
+                flooded[v] = 1u;
+            }
+        }
+    }
+    // one plane vertex per ground vertex a wet cell names, laid when the first cell names it; -1 not yet laid
+    std::vector<int32_t> vertex_of(ground_vertices, -1);
     uint32_t drawn = 0u;
-    for (const VivariumGroundCellView& cell : cells) {
-        const uint32_t corners[4] = {cell.sw, cell.se, cell.ne, cell.nw};
-        std::size_t at[4] = {0u, 0u, 0u, 0u};
+    for (std::size_t first = 0u; first + 6u <= ground.indices.size(); first += 6u) {
+        // the cell's corners sw, se, ne, nw out of its triangles (sw, se, ne) and (sw, ne, nw)
+        const int32_t corners[4] = {ground.indices[first], ground.indices[first + 1u], ground.indices[first + 2u],
+                                    ground.indices[first + 5u]};
         bool known = true;
         bool wet = false;
-        for (std::size_t corner = 0u; corner < 4u; ++corner) {
-            const auto found = sample_of.find(corners[corner]);
-            if (found == sample_of.end()) {
+        float cell_level = 0.0f;
+        bool cell_flooded = false;
+        for (const int32_t corner : corners) {
+            if (corner < 0 || static_cast<std::size_t>(corner) >= ground_vertices) {
                 known = false;
                 break;
             }
-            at[corner] = found->second;
-            wet = wet || static_cast<float>(samples[found->second].height) < GODOT_WATER_TABLE_M;
+            const auto at = static_cast<std::size_t>(corner);
+            if (flooded[at] == 0u) {
+                continue;
+            }
+            wet = wet || ground.positions[at * 3u + 1u] < level_of[at];
+            cell_level = cell_flooded && cell_level > level_of[at] ? cell_level : level_of[at];
+            cell_flooded = true;
         }
         if (!known || !wet) {
-            continue;  // a cell the port does not close, or one wholly above the table: no water over it
+            continue;  // an index past the ground, or a cell in no bed or wholly above its water: no water over it
         }
         int32_t vertex[4] = {0, 0, 0, 0};
         for (std::size_t corner = 0u; corner < 4u; ++corner) {
-            const VivariumTerrainView& sample = samples[at[corner]];
-            const auto laid = vertex_of.find(sample.object_id);
-            if (laid != vertex_of.end()) {
-                vertex[corner] = laid->second;
+            const auto at = static_cast<std::size_t>(corners[corner]);
+            if (vertex_of[at] >= 0) {
+                vertex[corner] = vertex_of[at];
                 continue;
             }
-            const auto x = static_cast<float>(sample.x);
-            const auto z = static_cast<float>(sample.z);
-            const float green =
-                channel_of(GODOT_WATER_TABLE_M - static_cast<float>(sample.height), GODOT_WATER_DEPTH_FULL_M);
+            const float x = ground.positions[at * 3u];
+            const float height = ground.positions[at * 3u + 1u];
+            const float z = ground.positions[at * 3u + 2u];
+            // a corner on the bank, outside the bed, carries the water of the cell, its ground above it hides it
+            const float level = flooded[at] != 0u ? level_of[at] : cell_level;
+            const float green = channel_of(level - height, GODOT_WATER_DEPTH_FULL_M);
             float red = 0.0f;
             float course_x = 0.0f;
             float course_z = 0.0f;
             flow_at(x, z, streams, red, course_x, course_z);
             vertex[corner] = static_cast<int32_t>(out.positions.size() / 3u);
-            vertex_of.emplace(sample.object_id, vertex[corner]);
-            append3(out.positions, x, GODOT_WATER_TABLE_M, z);
+            vertex_of[at] = vertex[corner];
+            append3(out.positions, x, level, z);
             append3(out.normals, 0.0f, 1.0f, 0.0f);
             out.uvs.push_back(x);
             out.uvs.push_back(z);

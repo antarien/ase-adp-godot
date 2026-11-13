@@ -20,8 +20,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-28
- * @version     00.00.01.00004
+ * @modified    2026-11-12
+ * @version     00.00.01.00005
  */
 
 #include "test_godot_host_support.hpp"
@@ -162,6 +162,13 @@ TEST_CASE("03.11: the sky port lights the scene - a unit sun direction, colours 
         }
         CHECK(moon.intensity >= 0.0);
         CHECK(moon.intensity <= 1.0);
+        // usecase:101276: the disc is the moonlight darkened by the planet's shadow, never brighter than it
+        CHECK(moon.disc_r >= 0.0);
+        CHECK(moon.disc_g >= 0.0);
+        CHECK(moon.disc_b >= 0.0);
+        CHECK(moon.disc_r <= moon.r);
+        CHECK(moon.disc_g <= moon.g);
+        CHECK(moon.disc_b <= moon.b);
     }
 
     // once known, the sky stays known while bodies rise: a publication with two moons, a comet, a planet, a
@@ -182,6 +189,43 @@ TEST_CASE("03.11: the sky port lights the scene - a unit sun direction, colours 
     }
     MESSAGE("most bodies in one sky publication: " << most_bodies);
     CHECK(dark_frames == 0u);
+}
+
+TEST_CASE("D2293: the wind record reaches the sky view - a drift on the world grid as long as the wind share, held between sets") {
+    AdapterEnvironment& env = environment();
+    REQUIRE(env.booted == ase::kernel::HostStatusOk);
+    GodotHostResourceManager& resources = env.resources;
+
+    // usecase:101530 tint the sky by weather: ase-pl-sky files its wind record (GODOT_SKY_RECORD_WIND) only once
+    // ase-weather handed wind over and SkyAtspWthrSystem derived the drift; the haze and the clouds move by it
+    constexpr uint32_t kBoundFrames = 128u;
+    for (uint32_t frame = 0u; frame < kBoundFrames && !resources.get_sky().wind_known; ++frame) {
+        advance_frames(resources, 1u);
+    }
+    const VivariumSkyView& sky = resources.get_sky();
+    REQUIRE(sky.known);
+    REQUIRE(sky.wind_known);
+    CHECK(sky.drift_x >= GODOT_SKY_DRIFT_MIN);
+    CHECK(sky.drift_x <= GODOT_SKY_DRIFT_MAX);
+    CHECK(sky.drift_z >= GODOT_SKY_DRIFT_MIN);
+    CHECK(sky.drift_z <= GODOT_SKY_DRIFT_MAX);
+    CHECK(sky.wind >= GODOT_SKY_WIND_MIN);
+    CHECK(sky.wind <= GODOT_SKY_WIND_MAX);
+    // the plugin folds the wind share into the drift: sin and cos of the bearing times the share, so the drift is
+    // exactly as long as the share it carries beside it
+    const float reach = ase::math::sqrt(static_cast<float>(sky.drift_x * sky.drift_x + sky.drift_z * sky.drift_z));
+    CHECK(reach == doctest::Approx(sky.wind).epsilon(1.0e-4));
+    MESSAGE("wind share " << sky.wind << ", drift east " << sky.drift_x << ", north " << sky.drift_z);
+
+    // once a wind record arrived the view keeps a drift in every later sky: a set without one holds the last
+    constexpr uint32_t kHoldFrames = 64u;
+    uint32_t calm_frames = 0u;
+    for (uint32_t frame = 0u; frame < kHoldFrames; ++frame) {
+        advance_frames(resources, 1u);
+        const VivariumSkyView& held = resources.get_sky();
+        calm_frames += (held.known && !held.wind_known) ? 1u : 0u;
+    }
+    CHECK(calm_frames == 0u);
 }
 
 TEST_CASE("03.11: the ground reaches the view - unit normals on every sample, cells whose corners stand on the terrain port") {

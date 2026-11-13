@@ -2,7 +2,7 @@
  * ASE GODOT ADAPTER - VIVARIUM VIEW DEBUG MODE
  *
  * @file        godot_vivarium_debug.cpp
- * @brief       VivariumView - the debug buttons: the time lapse, the jump to a stage or an hour, the relief
+ * @brief       VivariumView - the debug buttons: the time lapse, the jump to a stage or an hour, the relief, the date entry
  * @description Operator order of 2026-10-26: the birch grows over game years, and its life course must be seen
  *              up to the adult tree without changing any server time. Launched with modes.debug.argument the
  *              view draws the buttons of the section "debug" in their own colours below the info lines, unlike
@@ -17,23 +17,23 @@
  *              ase-time: what a game second is stands in ase-time's design and on the star, never here. The
  *              lapse has no target and no end; it holds until another factor is asked.
  *
- *              THE JUMP (debug.jumps) moves the clock to a target: a stage of the selected patch, or an hour of
- *              the game day. Both are the same case - only the recognition of the target differs. Every tick up
- *              to the target is an ordinary tick of the client's own clock, computed by every system of the host,
- *              across the day change too; the graphics then show the state at the new time. The pace stays as it
- *              was before the jump - the jump never touches the pace port. During a jump the frame hands the host
- *              up to debug.lapse_s beyond its own real time and lets it run debug.lapse_steps more ticks
- *              (VivariumView::jump_feed in godot_vivarium_clock.cpp, GodotHostResourceManager::advance); how
- *              many ticks a frame gets through is what the client's processor computes, nothing is loaded and
- *              nothing skipped. The ticks a jump needs are the game seconds to its target over the game seconds
- *              of one tick at the running pace; for Madura that is PLT_SPEC_GROWTH_TIME of the species.
+ *              THE JUMP (debug.jumps) sets the clock to a target: a stage of the selected patch at the game hour
+ *              ase-plant forecasts for it, an hour of the game day, a SURA date whole VECTUM ahead, the maximum
+ *              of the next eclipse of the sun or of the moon, or the next rise of a moon that ase-ephemeris
+ *              forecasts. All of them are the same case - only the recognition of the target differs, and every
+ *              one is ONE write into ase-time's clock (CAUSA_ASE_TIME, section "The Seek Contract"): through the
+ *              seek port, or for a date through the date port and ase-calendar. Nothing is replayed and no time is
+ *              fed beyond the frame's own; every module computes its state at the new time in its own ticks. This
+ *              unit reads, draws and dispatches the jump buttons; the ask, the start screen of the jump and its end
+ *              stand in godot_vivarium_jump.cpp (VivariumView::ask_jump, ::seek_jump, ::follow_debug), the share
+ *              the start screen shows in godot_vivarium_clock.cpp. The pace stays as it was before the jump - the
+ *              jump never touches the pace port.
  *
- *              WHEN THE STAGES COME (catalogue of ase-plant, betula_pendula): Semente from the start; Broto with
- *              the first pour that lifts the soil to PLT_SPEC_GERM_REL; Crescendo once the shoot reaches
- *              PLANT_SPRT_SIZE of the largest size of the species; Madura when ase-plant marks the stand mature
- *              (plant_stge_mtur_sys.cpp, which reads PLT_SPEC_GROWTH_TIME against the age of the stand). During
- *              a stage jump the patch is watered whenever its soil falls below debug.keep_soil_rel - the keeper's
- *              care the jump would otherwise skip.
+ *              THE FREE DATE ENTRY (debug.date, operator order of 2026-11-08) jumps to ANY SURA date, ahead or
+ *              back, beside the fixed jump buttons: fields of VECTUM, LUNBREX, TUMBRAE and HORAX, steps that move
+ *              them, go and now. This unit reads the section through VivariumView::load_debug_date, hands a tap
+ *              its buttons miss to VivariumView::date_tap and draws the entry with VivariumView::draw_debug_date;
+ *              all three stand in godot_vivarium_date.cpp.
  *
  *              THE RELIEF BUTTONS (debug.reliefs, usecase:6018 derive terrain heights) change the relief of the
  *              whole ground at runtime. A button asks the elevation port for its height amplitude and ground level
@@ -58,8 +58,8 @@
  * @usecase     usecase:6018 - derive terrain heights
  * @actor       Plant Keeper (PLNTKEEPER), Terrain Height Shaper (TERRHEISHA)
  * @created     2026-10-26
- * @modified    2026-11-06
- * @version     00.00.01.00008
+ * @modified    2026-11-09
+ * @version     00.00.02.00006
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -109,23 +109,11 @@ bool VivariumView::load_debug(const ::godot::Dictionary& root) {
     if (debug_.icon_font.is_null()) {
         return fail_config("debug.icon_font");
     }
-    if (!read_number(debug, "keep_soil_rel", debug_.keep_soil_rel) || !(debug_.keep_soil_rel > 0.0) ||
-        debug_.keep_soil_rel > 1.0) {
-        return fail_config("debug.keep_soil_rel");
+    // THE SETTLE OF A JUMP: the simulated seconds the host runs at the new time after the one write, before
+    // follow_debug judges the landing. Above 0; the jump hands the host no second beyond the frame's own.
+    if (!read_number(debug, "settle_s", debug_.settle_s) || !(debug_.settle_s > 0.0)) {
+        return fail_config("debug.settle_s");
     }
-    // The feed of a jump: the real seconds a frame hands the host beyond its own, and the ticks it may run
-    // for them on top of catch_up_steps. Both above 0, the steps whole - a feed that hands time and may run
-    // no tick for it only piles up a backlog.
-    double lapse_steps = 0.0;
-    if (!read_number(debug, "lapse_s", debug_.lapse_s) || !(debug_.lapse_s > 0.0)) {
-        return fail_config("debug.lapse_s");
-    }
-    if (!read_number(debug, "lapse_steps", lapse_steps) || !(lapse_steps >= 1.0) ||
-        lapse_steps > static_cast<double>(GODOT_DEBUG_LAPSE_STEPS_MAX) ||
-        ase::math::floor(static_cast<float>(lapse_steps)) != static_cast<float>(lapse_steps)) {
-        return fail_config("debug.lapse_steps");
-    }
-    debug_.lapse_steps = static_cast<uint32_t>(lapse_steps);
     // THE TIME LAPSE BUTTONS: a factor of the base pace, 0 or above; 0 gives the default pace back.
     const ::godot::Variant buttons_value = debug.get("buttons", ::godot::Variant());
     if (buttons_value.get_type() != ::godot::Variant::ARRAY) {
@@ -170,10 +158,49 @@ bool VivariumView::load_debug(const ::godot::Dictionary& root) {
         }
         const bool names_stage = entry.has("stage");
         const bool names_hour = entry.has("hour");
-        if (names_stage == names_hour) {
-            return fail_config("debug.jumps[]: stage or hour");
+        const bool names_years = entry.has("years");
+        const bool names_eclipse = entry.has("eclipse");
+        const bool names_moonrise = entry.has("moonrise");
+        const uint32_t named = (names_stage ? 1u : 0u) + (names_hour ? 1u : 0u) + (names_years ? 1u : 0u) +
+                               (names_eclipse ? 1u : 0u) + (names_moonrise ? 1u : 0u);
+        if (named != 1u) {
+            return fail_config("debug.jumps[]: stage, hour, years, eclipse or moonrise");
         }
-        if (names_stage) {
+        if (names_moonrise) {
+            // A MOONRISE JUMP carries no number: it lands at ase-ephemeris' forecast of the next rise of a moon.
+            const ::godot::Variant moonrise_value = entry.get("moonrise", ::godot::Variant());
+            if (moonrise_value.get_type() != ::godot::Variant::BOOL || !static_cast<bool>(moonrise_value)) {
+                return fail_config("debug.jumps[].moonrise");
+            }
+            jump.moonrise = true;
+        } else if (names_eclipse) {
+            // AN ECLIPSE JUMP names the range of ase-ephemeris ECLIPSE_* kinds it lands on, [low, high],
+            // whole, 1 to GODOT_ECLIPSE_KIND_MAX and low not above high: [1, 2] the sun, [3, 4] the moon.
+            const ::godot::Variant range_value = entry.get("eclipse", ::godot::Variant());
+            if (range_value.get_type() != ::godot::Variant::ARRAY) {
+                return fail_config("debug.jumps[].eclipse");
+            }
+            const ::godot::Array range = range_value;
+            if (range.size() != 2) {
+                return fail_config("debug.jumps[].eclipse");
+            }
+            const ::godot::Variant::Type low_type = range[0].get_type();
+            const ::godot::Variant::Type high_type = range[1].get_type();
+            if ((low_type != ::godot::Variant::INT && low_type != ::godot::Variant::FLOAT) ||
+                (high_type != ::godot::Variant::INT && high_type != ::godot::Variant::FLOAT)) {
+                return fail_config("debug.jumps[].eclipse");
+            }
+            const double low = static_cast<double>(range[0]);
+            const double high = static_cast<double>(range[1]);
+            const double kind_max = static_cast<double>(GODOT_ECLIPSE_KIND_MAX);
+            if (!(low >= 1.0) || !(high >= low) || high > kind_max ||
+                ase::math::floor(static_cast<float>(low)) != static_cast<float>(low) ||
+                ase::math::floor(static_cast<float>(high)) != static_cast<float>(high)) {
+                return fail_config("debug.jumps[].eclipse");
+            }
+            jump.eclipse_low = static_cast<uint8_t>(low);
+            jump.eclipse_high = static_cast<uint8_t>(high);
+        } else if (names_stage) {
             double stage = 0.0;
             if (!read_number(entry, "stage", stage) || !(stage >= 0.0) ||
                 stage >= static_cast<double>(GODOT_STAGE_COUNT) ||
@@ -181,6 +208,12 @@ bool VivariumView::load_debug(const ::godot::Dictionary& root) {
                 return fail_config("debug.jumps[].stage");
             }
             jump.stage = static_cast<uint8_t>(stage);
+        } else if (names_years) {
+            // A DATE JUMP names whole VECTUM ahead of the running one, 1 or more.
+            if (!read_number(entry, "years", jump.years) || !(jump.years >= 1.0) ||
+                ase::math::floor(static_cast<float>(jump.years)) != static_cast<float>(jump.years)) {
+                return fail_config("debug.jumps[].years");
+            }
         } else if (!read_number(entry, "hour", jump.hour) || !(jump.hour >= 0.0)) {
             return fail_config("debug.jumps[].hour");
         }
@@ -219,6 +252,10 @@ bool VivariumView::load_debug(const ::godot::Dictionary& root) {
         }
         debug_.reliefs.push_back(relief);
     }
+    // THE FREE DATE ENTRY (debug.date) is read, answered and drawn by godot_vivarium_date.cpp.
+    if (!load_debug_date(debug)) {
+        return false;
+    }
     debug_.on = launched_with(modes_.debug_argument);
     return true;
 }
@@ -245,7 +282,7 @@ bool VivariumView::debug_tap(const ::godot::Vector2& at) {
             return true;
         }
     }
-    return false;
+    return date_tap(at);
 }
 
 void VivariumView::ask_pace(const VivariumDebugButton& button) {
@@ -261,61 +298,6 @@ void VivariumView::ask_pace(const VivariumDebugButton& button) {
     node_->queue_redraw();
 }
 
-void VivariumView::ask_jump(const VivariumDebugJump& jump, uint32_t index) {
-    // THE JUMP never touches the pace port: the clock reaches the target by computing every tick up to it,
-    // the feed of jump_feed carries the frames there, and the pace asked before stays.
-    const VivariumClockView& clock = resources_.get_clock();
-    if (jump.stage != GODOT_STAGE_NONE) {
-        // A stage jump watches the selected patch: without one there is nothing to jump to.
-        const ::godot::String stage_word = ::godot::String::num_uint64(jump.stage);
-        if (selected_place_ == GODOT_NO_PLACE || resources_.get_patch_at(selected_place_) == nullptr) {
-            note("debug jump stage=" + stage_word + " result=disabled");
-            return;
-        }
-        VivariumJump next;
-        next.running = true;
-        next.button = index;
-        next.stage = jump.stage;
-        next.place = selected_place_;
-        next.asked_day = clock.known ? clock.day : 0.0;
-        debug_.jump = next;
-        note("debug jump stage=" + stage_word + " " + measure(selected_place_) + " result=ok");
-        node_->queue_redraw();
-        return;
-    }
-    // AN HOUR JUMP computes its target from the clock port: the measured game seconds of one hour, the
-    // clock's game seconds less the hour of the day give the start of the running day. Day 0 starts at game
-    // second 0, so that start over the day count is the length of a day. The feed needs the measured rate.
-    const ::godot::String hour_word = ::godot::String::num(jump.hour, GODOT_LOG_DECIMALS);
-    const double per_hour_s = hour_length_.seconds_per_hour;
-    if (!clock.known || !(per_hour_s > 0.0) || !(hour_length_.game_per_real > 0.0)) {
-        note("debug jump hour=" + hour_word + " result=unmeasured");
-        return;
-    }
-    const double day_start_s = clock.elapsed_s - clock.hour * per_hour_s;
-    const bool ahead = jump.hour > clock.hour;
-    VivariumJump next;
-    next.running = true;
-    next.button = index;
-    next.hour = jump.hour;
-    next.asked_day = clock.day;
-    if (ahead) {
-        next.target_s = day_start_s + jump.hour * per_hour_s;  // the hour of the running day
-    } else if (clock.day >= 1.0) {
-        next.target_s = day_start_s + day_start_s / clock.day + jump.hour * per_hour_s;  // the same hour tomorrow
-    }
-    // Behind the clock on day 0 the length of a day is not measurable yet: target_s stays below 0, the jump
-    // runs on to the day change one game hour per feed at most, and follow_debug computes the target there.
-    debug_.jump = next;
-    note("debug jump hour=" + hour_word + " day=" + ::godot::String::num(clock.day, 0) +
-         " clock_hour=" + ::godot::String::num(clock.hour, GODOT_LOG_DECIMALS) +
-         " when=" + (ahead ? "this_day" : "next_day") +
-         " target_s=" + ::godot::String::num(next.target_s, GODOT_LOG_DECIMALS) +
-         " elapsed_s=" + ::godot::String::num(clock.elapsed_s, GODOT_LOG_DECIMALS) +
-         " game_per_real=" + ::godot::String::num(hour_length_.game_per_real, GODOT_LOG_DECIMALS) + " result=ok");
-    node_->queue_redraw();
-}
-
 void VivariumView::ask_shape(const VivariumDebugRelief& relief) {
     // The relief goes through the elevation port of the host, the same port the start configuration uses
     // for the ground: ase-pl-flora files it on the star, ase-terrain derives the heights from it.
@@ -328,62 +310,6 @@ void VivariumView::ask_shape(const VivariumDebugRelief& relief) {
     }
     debug_.height_scale_m = relief.height_scale_m;
     node_->queue_redraw();
-}
-
-void VivariumView::follow_debug() {
-    VivariumJump& jump = debug_.jump;
-    if (!jump.running) {
-        return;
-    }
-    // THE KEEPER'S CARE DURING A JUMP: a pour whenever the soil fell below keep_soil_rel and no pour is on
-    // its way - through Regar, the way the player waters, on the patch the camera shows.
-    const uint32_t cared = jump.stage != GODOT_STAGE_NONE ? jump.place : selected_place_;
-    const VivariumPatchView* patch = resources_.get_patch_at(cared);
-    if (jump.stage != GODOT_STAGE_NONE) {
-        if (patch == nullptr) {
-            return;  // no record yet in this frame; the next snapshot carries it
-        }
-        // THE END OF A STAGE JUMP: the stage reached, or the stand dead - a dead birch grows to no stage.
-        const bool reached = patch->stage != GODOT_CODE_UNKNOWN && patch->stage >= jump.stage;
-        const bool dead = patch->condition == GODOT_COND_DEAD;
-        if (reached || dead) {
-            note(::godot::String("debug jump ") + (reached ? "reached" : "ended reason=dead") +
-                 " stage=" + ::godot::String::num_uint64(patch->stage) + " " + measure(jump.place));
-            jump = VivariumJump{};
-            node_->queue_redraw();
-            return;
-        }
-    } else {
-        const VivariumClockView& clock = resources_.get_clock();
-        if (!clock.known) {
-            return;
-        }
-        if (jump.target_s < 0.0) {
-            // On to the day change: the new day's start is the clock's game seconds less its hour.
-            if (!(clock.day > jump.asked_day) || !(hour_length_.seconds_per_hour > 0.0)) {
-                return;
-            }
-            jump.target_s = clock.elapsed_s - clock.hour * hour_length_.seconds_per_hour +
-                            jump.hour * hour_length_.seconds_per_hour;
-            note("debug jump day_turned day=" + ::godot::String::num(clock.day, 0) +
-                 " target_s=" + ::godot::String::num(jump.target_s, GODOT_LOG_DECIMALS));
-        }
-        // THE END OF AN HOUR JUMP: the clock's game seconds reached the target.
-        if (clock.elapsed_s >= jump.target_s) {
-            note("debug jump reached hour=" + ::godot::String::num(jump.hour, GODOT_LOG_DECIMALS) +
-                 " day=" + ::godot::String::num(clock.day, 0) +
-                 " clock_hour=" + ::godot::String::num(clock.hour, GODOT_LOG_DECIMALS) +
-                 " target_s=" + ::godot::String::num(jump.target_s, GODOT_LOG_DECIMALS) +
-                 " elapsed_s=" + ::godot::String::num(clock.elapsed_s, GODOT_LOG_DECIMALS) + " " +
-                 measure(selected_place_));
-            jump = VivariumJump{};
-            node_->queue_redraw();
-            return;
-        }
-    }
-    if (patch != nullptr && patch->soil_rel < debug_.keep_soil_rel && selected_place_ == cared && can_water()) {
-        water();
-    }
 }
 
 void VivariumView::draw_debug() {
@@ -427,6 +353,7 @@ void VivariumView::draw_debug() {
                            relief.label, ::godot::HORIZONTAL_ALIGNMENT_CENTER, relief.rect.size.x, GODOT_FONT_SMALL,
                            debug_.text);
     }
+    draw_debug_date(text_lift);
 }
 
 }  // namespace ase::adp::godot

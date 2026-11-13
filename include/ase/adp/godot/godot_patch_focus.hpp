@@ -7,8 +7,9 @@
  * @brief       Which patch the care view looks at, and where the camera stands against its stem base
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 point 2 and V2: tapping a patch moves the camera to its
  *              birch. The view looks at the selected place, and without a selection at the first place of
- *              the start configuration; the camera stands `distance_m` south of the stem base and
- *              `height_m` above it and looks at the point `look_m` above it. The stem base is the patch's
+ *              the start configuration; the camera stands `distance_m` from the stem base against the
+ *              compass direction `heading_deg` it looks in, `height_m` above it, and looks at the point
+ *              `look_m` above it. The stem base is the patch's
  *              origin as its record carries it (PlantOrigin) - nothing is computed about the plant itself.
  *
  *              ONE RULE FOR THE FOCUS: the scene aims its camera and draws the ground of the focused patch,
@@ -24,8 +25,8 @@
  * @usecase     usecase:100386 - select a patch
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-12
- * @modified    2026-10-25
- * @version     00.00.02.00000
+ * @modified    2026-11-07
+ * @version     00.00.03.00000
  */
 
 #include <ase/adp/godot/godot_plant_geometry.hpp>
@@ -40,6 +41,7 @@ struct PlantSceneCamera {
     float height_m = 0.0f;    // metres of the camera above the stem base
     float look_m = 0.0f;      // metres above the stem base the camera looks at
     float fov_deg = 0.0f;     // vertical field of view, degrees
+    float heading_deg = 0.0f; // compass direction the camera looks in, degrees from north towards east (0 north, 90 east)
 };
 
 /** Where the camera stands and the point it looks at, in world metres (x east, y up, z north). */
@@ -55,7 +57,12 @@ struct PatchFocusAim {
 /** The place the view looks at: the selected one, and without a selection (GODOT_NO_PLACE) `first_place`. */
 [[nodiscard]] uint32_t patch_focus_place(uint32_t selected_place, uint32_t first_place);
 
-/** The near view onto `origin`: `distance_m` south of it and `height_m` above, looking at `look_m` above it. */
+/**
+ * The near view onto `origin`: `distance_m` behind it against `heading_deg` and `height_m` above, looking at
+ * `look_m` above it. Heading 0 stands the camera south of the stem base looking north, over the birch place to
+ * the brook behind it; the configuration keeps it there and allows only a small pan. Whether a moon or a star
+ * stands in the frame is solved in the simulation, never by turning the camera alone.
+ */
 [[nodiscard]] PatchFocusAim patch_focus_aim(const PlantSceneCamera& camera, const PlantOrigin& origin);
 
 /**
