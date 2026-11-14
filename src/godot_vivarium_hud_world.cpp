@@ -25,10 +25,11 @@
  *              (flora.root.v1 zone and segments), N0465 (the things as asset rows), N0487 (physics.body.v1 bodies
  *              of the tool place and the ground things), carrier N0448
  * @created     2026-11-11
- * @modified    2026-11-13
- * @version     00.00.01.00007
+ * @modified    2026-11-15
+ * @version     00.00.01.00008
  */
 
+#include <ase/adp/godot/godot_figure_hand.hpp>
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/types.hpp>
 
@@ -159,8 +160,36 @@ void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOri
         right = right.normalized();
         ahead = ahead.normalized();
     }
-    hud_carry_.fill(hud_now_, world.patch, right, ahead, hud_ground_);
-    open_gap(VivariumCarryBridge::GAP_BODY, "physics.body.v1.body_y");  // tool place and ground things (N0487)
+    // The rack body (usecase:101625): the view asks the host once to lay ase-pl-toolrack's rack at the tool place
+    // off the patch (toolrack.scene.v1 lay), ase-physics lets it fall, and toolrack.rack.v1 hands its place back in
+    // the patch frame; the tool place is then that body.
+    bool body_known = false;
+    ::godot::Vector3 body;
+    if (patch != nullptr && resources_.rack_offered()) {
+        if (!hud_carry_.rack_asked() && resources_.running()) {
+            hud_carry_.ask_rack();
+            const ::godot::Vector3 offset = hud_carry_.rack_offset(right, ahead);
+            const ase::kernel::HostStatus laid = resources_.lay_rack(patch->object_id, offset.x, offset.z);
+            note("rack lay at patch " + ::godot::String::num_uint64(patch->object_id) + " x=" +
+                 ::godot::String::num(offset.x, 2) + " z=" + ::godot::String::num(offset.z, 2) +
+                 " result=" + GodotHostResourceManager::status_name(laid));
+        }
+        for (const VivariumRackView& rack : resources_.get_racks()) {
+            if (rack.object_id == patch->object_id) {
+                body_known = true;
+                body = world.patch + ::godot::Vector3(static_cast<float>(rack.x), static_cast<float>(rack.y),
+                                                      static_cast<float>(rack.z));
+            }
+        }
+    } else {
+        open_gap(VivariumCarryBridge::GAP_BODY, "toolrack.rack.v1");  // the host offers no rack port (N0487)
+    }
+    hud_carry_.fill(hud_now_, world.patch, right, ahead, hud_ground_, body_known, body);
+    open_gap(VivariumCarryBridge::GAP_BODY, "physics.body.v1.body_y");  // the loose ground things (N0487)
+    // 06 8.3: the tool place in 3D - the rack body and every tool on the ground as instances of their files,
+    // from the same places the HUD hit-tests by; what stands in 3D the 2D ground draws as shadow and hit box only
+    hud_now_.rack_world.bodied = lay_tools(scene_, hud_now_.world.rack, hud_carry_.rack_along(), figure_look_.rack,
+                                           hud_carry_.ground_things(), figure_look_.tools);
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.after_rel");  // the preview after the pour (N0454)
     open_gap(GODOT_HUD_GAP_ROOT, "flora.root.v1.zone_m");       // the root zone under the brush (N0463)
     hud_hand_.frame(hand, patch, reticle, hud_bridge_sap_l_, hud_.pouring());  // the hold as the HUD keeps it, before compose
@@ -223,6 +252,9 @@ void VivariumView::drag_ground(DragLayerFrame& drag) const {
         drag.ground_hit = true;
         drag.ground = ::godot::Vector3(x, static_cast<float>(height), z);
     }
+    // 8.6: the ray of the camera through the finger onto the rack body, read where the finger stands now
+    drag.rack_world.struck =
+        drag.rack_world.bodied && rack_struck(scene_, node_->get_viewport()->get_camera_3d(), hud_finger_);
 }
 
 }  // namespace ase::adp::godot

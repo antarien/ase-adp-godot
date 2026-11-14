@@ -255,22 +255,50 @@ bool VivariumCarryBridge::load(const UiTheme& theme, std::string& failed) {
     return true;
 }
 
-void VivariumCarryBridge::fill(VivariumHudFrame& now, const ::godot::Vector3& patch, const ::godot::Vector3& right,
-                               const ::godot::Vector3& ahead, const UiGround& ground) {
+::godot::Vector3 VivariumCarryBridge::rack_offset(const ::godot::Vector3& right, const ::godot::Vector3& ahead) {
     // The tool place stands where the camera of the first frame sees it beside the patch.
     if (!rack_placed_) {
         rack_placed_ = true;
         rack_right_ = right;
         rack_view_ = ahead;
-        rack_place_ = patch + right * static_cast<float>(rack_across_) + ahead * static_cast<float>(rack_ahead_);
+        rack_offset_ = right * static_cast<float>(rack_across_) + ahead * static_cast<float>(rack_ahead_);
     }
-    // NOT BOUND (GAP_BODY, N0487): the tool place is to be an ase-physics body whose height the port hands out as
-    // HUB_PHYS_BODY_Y after gravity and ground contact. Until it delivers, the bridge sets the height to the ground
-    // as it lies now, read every frame, so that a place dug under does not hang at the height of the first frame.
-    // This is a bridge default and no physics; it goes when the body port is read here (R015).
-    double rack_height = 0.0;
-    if (ground.height(rack_place_.x, rack_place_.z, rack_height)) {
-        rack_place_.y = static_cast<float>(rack_height);
+    return rack_offset_;
+}
+
+::godot::Vector3 VivariumCarryBridge::rack_along() const {
+    return rack_right_;
+}
+
+std::vector<GroundThing>& VivariumCarryBridge::ground_things() {
+    return ground_things_;
+}
+
+bool VivariumCarryBridge::rack_asked() const {
+    return rack_asked_;
+}
+
+void VivariumCarryBridge::ask_rack() {
+    rack_asked_ = true;
+}
+
+void VivariumCarryBridge::fill(VivariumHudFrame& now, const ::godot::Vector3& patch, const ::godot::Vector3& right,
+                               const ::godot::Vector3& ahead, const UiGround& ground, bool body_known,
+                               const ::godot::Vector3& body) {
+    // The tool place is the rack body of ase-pl-toolrack once ase-physics has let it fall (usecase:101625): its
+    // place on toolrack.rack.v1 is the place, its height the rest height physics found on the ground there.
+    if (body_known) {
+        (void)rack_offset(right, ahead);  // the slots run along the camera of the first frame, as the lay did
+        rack_place_ = body;
+    } else {
+        rack_place_ = patch + rack_offset(right, ahead);
+        // NOT BOUND (GAP_BODY, N0487): the host offers no rack port yet or its body was not read; the bridge sets
+        // the height to the ground as it lies now, a bridge default and no physics. It stops acting the frame the
+        // rack body stands on toolrack.rack.v1.
+        double rack_height = 0.0;
+        if (ground.height(rack_place_.x, rack_place_.z, rack_height)) {
+            rack_place_.y = static_cast<float>(rack_height);
+        }
     }
 
     // The stem place plugTap lays the trough beside. The dibber's hole: a sowing apply() accepted gets this frame's
@@ -364,17 +392,19 @@ void VivariumCarryBridge::fill(VivariumHudFrame& now, const ::godot::Vector3& pa
                               weight(thing), thing.fill_l + thing.sap_l, facts.cap_l, facts.verbs, level};
             held = true;
         } else if (same_place(thing.place, GODOT_HUD_PLACE_GROUND)) {
-            // A tool at the place leans at its slot along the place; any other lies where it was let go.
+            // A tool at the place leans at its slot along the place, at the height of the place; any other lies
+            // where it was let go.
             ::godot::Vector3 place = thing.ground;
             if (thing.rack) {
                 place = rack_place_ + rack_right_ * static_cast<float>(thing.along) +
                         rack_view_ * static_cast<float>(slot_ahead_);
-            }
-            // NOT BOUND (GAP_BODY, N0487): the height of a thing on the ground is to come from its ase-physics body
-            // (HUB_PHYS_BODY_Y); until that port delivers, the bridge lays it on the ground under it.
-            double height = 0.0;
-            if (ground.height(place.x, place.z, height)) {
-                place.y = static_cast<float>(height);
+            } else {
+                // NOT BOUND (GAP_BODY, N0487): the height of a loose thing on the ground is to come from its
+                // ase-physics body (HUB_PHYS_BODY_Y); until that port delivers, the bridge lays it on the ground.
+                double height = 0.0;
+                if (ground.height(place.x, place.z, height)) {
+                    place.y = static_cast<float>(height);
+                }
             }
             ground_things_.push_back(GroundThing{thing.key, facts.id, facts.tone, place, thing.angle,
                                                  facts.length_cm, thing.order, thing.rack});

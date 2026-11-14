@@ -50,8 +50,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0451 (flora.carry.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-11
- * @version     00.00.01.00003
+ * @modified    2026-11-15
+ * @version     00.00.01.00005
  */
 
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
@@ -92,6 +92,8 @@ struct RackTool {
 struct ToolRackWorld {
     const UiAnchor* anchor = nullptr;  // the projection of this frame
     ::godot::Vector3 place;            // the tool place on the ground
+    bool bodied = false;               // the rack body stands in the 3D scene (lay_tools): only its shadow is drawn here
+    bool struck = false;               // the camera ray of the last press met the rack body (rack_struck): D01 while bodied
 };
 
 /** The list of the mode rack this frame. */
@@ -137,8 +139,13 @@ public:
 
     /** A drag at `point` stands on the tool place: within hud_drop_rack_radius of the place lifted by
      *  hud_drop_rack_lift (the mockup's dropTarget); false while the place is seen nowhere in the picture
-     *  (no UiAnchor, or the place stands behind the camera). */
-    bool over(const ToolRackWorld& now, const ::godot::Vector2& point) const;
+     *  (no UiAnchor, or the place stands behind the camera). While the rack body stands in the scene (bodied,
+     *  PLAN_ASE_VIVARIUM_PHASE_06_HUD 8.6) the place takes the drag where the camera ray through the finger meets
+     *  the body (struck), or where `ground`, the ground under the finger (`ground_hit`), lies within the same radius
+     *  measured in scene metres around the place: hud_drop_rack_radius over the frame length of one scene metre
+     *  at the place's depth. */
+    bool over(const ToolRackWorld& now, const ::godot::Vector2& point, bool ground_hit,
+              const ::godot::Vector3& ground) const;
 
 private:
     /** The sprite of the drawing `art`, read once; nullptr with the reason in `failed`. */

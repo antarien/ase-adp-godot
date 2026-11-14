@@ -13,8 +13,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0452 (flora.stow.v1), N0451 (flora.carry.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.01.00003
+ * @modified    2026-11-15
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_hud_drag_layer.hpp>
@@ -165,7 +165,7 @@ bool DragLayer::aim(const DragLayerFrame& now, std::string& failed) {
         target_.automatic = true;
     } else if (finger_.y < now.world->ground_line() && now.ground_hit) {
         target_.place = GODOT_HUD_PLACE_GROUND;
-        if (now.rack->over(now.rack_world, finger_)) {
+        if (now.rack->over(now.rack_world, finger_, now.ground_hit, now.ground)) {
             target_.where = GODOT_HUD_WHERE_RACK;
             target_.rack = true;
         } else {

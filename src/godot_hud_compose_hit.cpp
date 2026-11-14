@@ -20,8 +20,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
- * @version     00.00.01.00008
+ * @modified    2026-11-15
+ * @version     00.00.01.00009
  */
 
 #include <ase/adp/godot/godot_hud_compose.hpp>
@@ -190,7 +190,9 @@ VivariumHudHit VivariumHud::hit_world(const ::godot::Vector2& point, const Vivar
             out.from = GODOT_HUD_PLACE_GROUND;
             return out;
         }
-        if (world_.hit_rack(point)) {
+        // D01: a rack body in the scene is hit by the ray of the camera through the finger (rack_struck), the
+        // drawn place by its box in mockup metres (WorldDrop::hit_rack)
+        if (now.rack_world.bodied ? now.rack_world.struck : world_.hit_rack(point)) {
             out.act = ACT_RACK;
             return out;
         }

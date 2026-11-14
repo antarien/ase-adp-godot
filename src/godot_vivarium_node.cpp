@@ -125,6 +125,8 @@ void VivariumView::ready() {
         for (auto& [kind, tool] : figure_look_.tools) {
             start_figure_load(tool.load, asset_root_, tool.file);
         }
+        // 06 8.3: the body of the tool place (role rack) loads the same way; lay_tools stands it once taken
+        start_figure_load(figure_look_.rack.load, asset_root_, figure_look_.rack.file);
         // PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7: the asset showcase beside the one game host, from
         // the binding of the configuration; its line follows the boot line.
         if (launched_with(modes_.assets_argument)) {

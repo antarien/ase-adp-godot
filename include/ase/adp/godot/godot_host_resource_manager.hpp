@@ -159,6 +159,8 @@ struct VivariumStartConfig {
     std::string sky_port;            // host port of the sky and the light of the scene (ase-pl-sky: sky.scene.v1)
     std::string stars_port;          // host port of the visible star set at its places on the celestial sphere (ase-pl-sky: sky.stars.v1)
     std::string seed_port;           // host port of the seed bodies of ase-physics (ase-pl-flora: flora.seed.v1)
+    std::string toolrack_scene_port; // host port the tool rack of a patch is laid through (ase-pl-toolrack: toolrack.scene.v1)
+    std::string toolrack_rack_port;  // host port of the tool rack bodies of ase-physics (ase-pl-toolrack: toolrack.rack.v1)
     std::string tile_port;           // host port of the bark tiling of the internodes (ase-pl-flora: flora.tile.v1)
     std::string sway_port;           // host port of the sway of the organs on a branch (ase-pl-flora: flora.sway.v1)
     std::string bark_port;           // host port of the vertices of the bark tube of every axis (ase-pl-flora: flora.mesh.bark.v1)
@@ -705,6 +707,19 @@ struct VivariumSeedView {
 };
 
 /**
+ * One tool rack body as the last snapshot of the rack port showed it - a copy (usecase:101625 carry a tool in
+ * hand). ase-physics holds the rack as a prop body and sets it down on the ground; ase-pl-toolrack lays its
+ * place patch-local (origin at the stem foot, y up, x east, z north), and object_id names the patch whose frame
+ * the rack stands in. The view draws the rack and its tools there and computes none of its height.
+ */
+struct VivariumRackView {
+    uint32_t object_id = 0;   // the patch the rack stands at, as the plugin names it on its port
+    double   x = 0.0;         // metres east of the stem foot
+    double   y = 0.0;         // metres above the stem foot, the rest height ase-physics found
+    double   z = 0.0;         // metres north of the stem foot
+};
+
+/**
  * One figure as the last snapshot of the body port showed it - a copy (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE
  * 07.8, ase-pl-avatar). ase-player moves the figure; the plugin lays its place with the height as its own
  * axis, and the view takes the three axes in Godot's order (east, up, north) and computes none of them.
@@ -886,6 +901,13 @@ public:
      * Reception run, ase-terrain carves the bed and ase-hydro lets its water run.
      */
     ase::kernel::HostStatus lay_brook(const VivariumBrookSpec& brook);
+    /**
+     * Lay the tool rack of the patch `patch` at `x`, `z`, metres east and north of its stem foot
+     * (usecase:101625): a lay request on the toolrack scene port; ase-pl-toolrack files it in its next
+     * Reception run as one prop body to ase-physics, which drops it onto the ground. A patch holds one rack;
+     * a second request on it is refused by the plugin. HostStatusNotFound while the host offers no rack port.
+     */
+    ase::kernel::HostStatus lay_rack(uint32_t patch, double x, double z);
     /**
      * Flatten a disc of the ground where the player tapped (03.8): a flatten request on the flatten port
      * with the centre `x`, `z` and the radius `radius_m`, metres; ase-pl-flora files it in its next
@@ -1069,6 +1091,14 @@ public:
      */
     [[nodiscard]] const std::vector<VivariumSeedView>& get_seeds() const;
     /**
+     * The tool rack bodies as the rack port showed them, read with every snapshot: ase-physics drops a laid
+     * rack in its kinetic steps and keeps its rest place. Empty while no rack is laid or the host offers no
+     * rack port.
+     */
+    [[nodiscard]] const std::vector<VivariumRackView>& get_racks() const;
+    /** true when the running host offers both rack ports of the start configuration. */
+    [[nodiscard]] bool rack_offered() const;
+    /**
      * The figures as the body port showed them, read with every snapshot: ase-player moves them in every
      * frame. Empty while the host offers no body port or no figure stands.
      */
@@ -1173,6 +1203,7 @@ private:
     ase::kernel::HostStatus read_sky();
     ase::kernel::HostStatus read_stars();
     ase::kernel::HostStatus read_seeds();
+    ase::kernel::HostStatus read_racks();
     ase::kernel::HostStatus read_figures();
     ase::kernel::HostStatus lay_patches();
     ase::kernel::HostStatus lay_ground();
@@ -1218,6 +1249,7 @@ private:
     VivariumSkyView                                  sky_;      // the sky and the light of the scene, last read
     uint64_t                                         star_generation_ = 0;  // star sets read since the start, never reset
     std::vector<VivariumSeedView>                    seeds_;    // the seed bodies, last read
+    std::vector<VivariumRackView>                    racks_;    // the tool rack bodies, last read
     std::vector<VivariumFigureView>                  figures_;  // the figures of the body port, last read
     VivariumFigureCameraView                         figure_camera_;  // the player camera of the camera port, last read
     std::vector<VivariumFigureGearView>              figure_gear_;    // the pieces of the gear port, last read

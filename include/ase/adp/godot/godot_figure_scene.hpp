@@ -88,6 +88,7 @@ struct FigureSceneLook {
     FigureSceneLoad                    load;      // the task that parses and packs the file (godot_figure_load.hpp); while it runs no figure node is built
     FigureSceneMotion                  motion;    // how the body turns toward the course of the port, SHA's measures
     std::unordered_map<uint32_t, FigureHandTool> tools;  // the tools of the hand (roles hand.<item key>), keyed by name_id of the item key
+    FigureHandTool                     rack;      // the body of the tool place (role rack), loaded like a tool; lay_tools stands it
 };
 
 /**

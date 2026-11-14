@@ -13,8 +13,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0451 (flora.carry.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-11
- * @version     00.00.01.00002
+ * @modified    2026-11-15
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_hud_tool_rack.hpp>
@@ -247,6 +247,11 @@ bool ToolRack::draw_world(UiPen& canvas, const ::godot::Transform2D& frame, cons
                                      0.0f, foot + at(shadow_dx_, shadow_dy_)));
     canvas.draw_circle(::godot::Vector2(), 1.0f, shadow_);
     canvas.draw_set_transform_matrix(frame);
+    if (now.bodied) {
+        // the rack body of ase-pl-toolrack stands as its file in the 3D scene (lay_tools); the ground keeps its shadow
+        canvas.draw_set_transform_matrix(::godot::Transform2D());
+        return true;
+    }
     for (const double side : {-stake_half_, stake_half_}) {
         const ::godot::Vector2 low = foot + at(k * side, 0.0);
         const ::godot::Vector2 high = foot + at(k * side, -k * stake_h_);
@@ -403,9 +408,27 @@ bool ToolRack::draw_list(UiPen& canvas, const ::godot::Transform2D& frame, const
     return true;
 }
 
-bool ToolRack::over(const ToolRackWorld& now, const ::godot::Vector2& point) const {
+bool ToolRack::over(const ToolRackWorld& now, const ::godot::Vector2& point, bool ground_hit,
+                    const ::godot::Vector3& ground) const {
     if (now.anchor == nullptr) {
         return false;
+    }
+    if (now.bodied) {
+        // 8.6: the body in the scene takes the drag where the ray through the finger meets it (rack_struck); the
+        // ground takes it within the drop radius in scene metres around the place. metre() gives the frame length
+        // of one mockup metre, the scene's metre times hud_world_metre_scale, so the scene's metre is that over
+        // the scale and the radius in scene metres is the frame radius over the scene's metre.
+        if (now.struck) {
+            return true;
+        }
+        ::godot::Vector2 foot;
+        double length = 0.0;
+        if (!ground_hit || !metre(*now.anchor, now.place, foot, length) || length <= 0.0) {
+            return false;
+        }
+        const double radius = drop_radius_ * metre_scale_ / length;
+        const ::godot::Vector2 apart(ground.x - now.place.x, ground.z - now.place.z);
+        return static_cast<double>(apart.length()) < radius;
     }
     ::godot::Vector2 foot;
     if (!now.anchor->place(now.place, foot)) {

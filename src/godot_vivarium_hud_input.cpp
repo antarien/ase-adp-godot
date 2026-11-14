@@ -27,11 +27,12 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.01.00011
+ * @modified    2026-11-15
+ * @version     00.00.01.00012
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
+#include <ase/adp/godot/godot_figure_hand.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/godot_plant_clouds.hpp>
 #include <ase/adp/godot/types.hpp>
@@ -99,6 +100,9 @@ void VivariumView::hud_input(const ::godot::Ref<::godot::InputEvent>& local) {
         hud_finger_ = at;
         // THE PRESS NAMES WHAT IT HIT: a tap whose act changes no mode (a rest row of the trail, a drawer body, the
         // empty band) leaves no edge, and a tap that rests where a sign was meant looks like one that never came.
+        // D01: the ray of the camera through the finger onto the rack body, read before the HUD asks what it hit
+        hud_now_.rack_world.struck =
+            hud_now_.rack_world.bodied && rack_struck(scene_, node_->get_viewport()->get_camera_3d(), at);
         const VivariumHudHit hit = hud_.hit(point, hud_now_);
         const std::string tap = "hud tap act=" + std::string(hit.act != nullptr ? hit.act : "none") +
                                 (hit.index != UINT32_MAX ? " index=" + std::to_string(hit.index) : std::string()) +

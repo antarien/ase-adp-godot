@@ -212,6 +212,11 @@ void VivariumView::follow_figure(double elapsed_s) {
                  text_of(tool.file) + " " + figure_load_times(tool.load));
         }
     }
+    // the body of the tool place: the frame its task completed, lay_tools redraws it from the file
+    if (take_figure_load(figure_look_.rack.load, figure_look_.rack.model)) {
+        note(::godot::String("rack file ") + (figure_look_.rack.model.is_valid() ? "loaded " : "not loaded ") +
+             text_of(figure_look_.rack.file) + " " + figure_load_times(figure_look_.rack.load));
+    }
     const std::vector<VivariumFigureView>& figures = resources_.get_figures();
     const VivariumFigureCodeView& codes = resources_.get_figure_code();
     fill_figures(scene_, figures, resources_.get_figure_gear(), figure_look_, codes);

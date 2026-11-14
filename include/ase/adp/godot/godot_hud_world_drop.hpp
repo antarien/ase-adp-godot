@@ -37,8 +37,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0451 (flora.carry.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-11
- * @version     00.00.01.00003
+ * @modified    2026-11-14
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
@@ -69,6 +69,7 @@ struct GroundThing {
     double length_cm = 0.0;     // D.len: its longest piece
     int64_t order = 0;          // o.zo: the last moved has the highest
     bool at_rack = false;       // o.rack: it hangs at the tool place
+    bool bodied = false;        // a body of its file stands for it in the 3D scene (lay_tools): the ground keeps its shadow and hit box, not its drawing
 };
 
 /** What the ground shows this frame. */

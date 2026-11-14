@@ -13,8 +13,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0451 (flora.carry.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-11
- * @version     00.00.01.00003
+ * @modified    2026-11-14
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_hud_world_drop.hpp>
@@ -168,13 +168,16 @@ bool WorldDrop::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Wor
             canvas.draw_set_transform_matrix(frame);
         }
 
-        // drawItemAt: the foot at the place, turned, the drawing's bottom middle on the foot.
-        UiItemSpritePlace place;
-        const ::godot::Transform2D turned(static_cast<float>(thing.angle), entry.foot);
+        // drawItemAt: the foot at the place, turned, the drawing's bottom middle on the foot. A thing whose file
+        // stands as a body in the 3D scene (lay_tools) is that body; its box and hit box still come from here.
         const ::godot::Vector2 corner(static_cast<float>(-drawing->view_width() * k / 2.0),
                                       static_cast<float>(-drawing->view_height() * k));
-        drawing->draw_scaled(canvas, frame * turned, corner, k, place);
-        canvas.draw_set_transform_matrix(frame);
+        if (!thing.bodied) {
+            UiItemSpritePlace place;
+            const ::godot::Transform2D turned(static_cast<float>(thing.angle), entry.foot);
+            drawing->draw_scaled(canvas, frame * turned, corner, k, place);
+            canvas.draw_set_transform_matrix(frame);
+        }
 
         if (thing.at_rack) {
             continue;  // a thing at the tool place is picked from the rack list, not from the ground

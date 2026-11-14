@@ -17,8 +17,11 @@
  *              leaning at it and the things lying on the ground.
  *
  *              THE TOOL PLACE stands beside the patch as the camera of the first frame sees it: across along the
- *              camera's right and ahead along its view on the ground, its height the ground's there. A tool leans
- *              at its slot along the place, slot_first plus slot_step for each tool before it.
+ *              camera's right and ahead along its view on the ground (rack_offset). The view lays the rack body of
+ *              ase-pl-toolrack there (usecase:101625, toolrack.scene.v1 lay); once ase-physics has let it fall
+ *              and the body stands on toolrack.rack.v1, fill() takes the place of the body, its height the rest
+ *              height physics found. A tool leans at its slot along the place, slot_first plus slot_step for each
+ *              tool before it, at the height of the place.
  *
  *              THE ACTS. take and equip lift a thing into the hand and stow what it held; stow puts the hand's
  *              thing back where it came from, else into the pack, else to the tool place; send moves a thing to
@@ -33,8 +36,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0451 (flora.carry.v1), N0452 (flora.stow.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
- * @version     00.00.01.00002
+ * @modified    2026-11-14
+ * @version     00.00.01.00003
  */
 
 #include <ase/adp/godot/godot_hud_bark_vessel.hpp>
@@ -65,11 +68,30 @@ public:
     bool load(const UiTheme& theme, std::string& failed);
 
     /**
+     * The tool place's offset from the patch (usecase:101625): fixed on the first call from the camera's `right`
+     * and `ahead` on the ground plane, right times hud_bridge_rack_across plus ahead times hud_bridge_rack_ahead.
+     * Its x and z are what the view hands to toolrack.scene.v1 lay; every later call returns the same offset.
+     */
+    ::godot::Vector3 rack_offset(const ::godot::Vector3& right, const ::godot::Vector3& ahead);
+
+    /** True once the view asked the host to lay the rack body; the view asks once (ask_rack). */
+    bool rack_asked() const;
+    /** The way the slots of the tool place run: the camera's right of the frame the place was laid by. */
+    ::godot::Vector3 rack_along() const;
+    /** The things on the ground of the last fill, which the frame's world points at; lay_tools marks those it stands in 3D. */
+    std::vector<GroundThing>& ground_things();
+
+    /** Marks that the view asked the host to lay the rack body. */
+    void ask_rack();
+
+    /**
      * Fills the carry groups of `now`. `patch` is the patch in focus, `right` and `ahead` the camera's right and
-     * view on the ground plane (unit length), `ground` the terrain the things lie on.
+     * view on the ground plane (unit length), `ground` the terrain the things lie on. `body_known` says the rack
+     * body of ase-physics stands at `body` (world, from toolrack.rack.v1); the tool place then is that body.
      */
     void fill(VivariumHudFrame& now, const ::godot::Vector3& patch, const ::godot::Vector3& right,
-              const ::godot::Vector3& ahead, const UiGround& ground);
+              const ::godot::Vector3& ahead, const UiGround& ground, bool body_known,
+              const ::godot::Vector3& body);
 
     /** Applies take, equip, stow or send. False when the act was refused, `note` names what was done or why not. */
     bool apply(const VivariumHudRequest& request, std::string& note);
@@ -102,10 +124,12 @@ public:
     static constexpr const char* GAP_PLANT = "N0485";
 
     /**
-     * The register task of the bodies of the tool place and the things on the ground (N0487, carrier N0448): they
-     * are to be ase-physics bodies (HUB_PHYS_REG_BODY_ADD with mass and fall), falling by PhysicsGravSystem onto the
-     * dug ground and handed out on a port as HUB_PHYS_BODY_X/Y/Z. Until that port delivers, fill() sets their
-     * height to the ground under them each frame, a bridge default and no physics.
+     * The register task of the bodies of the things on the ground (N0487, carrier N0448): they are to be
+     * ase-physics bodies (HUB_PHYS_REG_BODY_ADD with mass and fall), falling by PhysicsGravSystem onto the dug
+     * ground and handed out on a port as HUB_PHYS_BODY_X/Y/Z. The tool place is such a body already
+     * (ase-pl-toolrack, toolrack.rack.v1); a thing lying loose on the ground is not, and fill() sets its height to
+     * the ground under it each frame, a bridge default and no physics. The same default holds the tool place while
+     * the host offers no rack port or its body has not been read yet.
      */
     static constexpr const char* GAP_BODY = "N0487";
 
@@ -269,7 +293,9 @@ private:
     double slot_ahead_ = 0.0;       // hud_bridge_rack_slot_ahead
     double slot_angle_ = 0.0;       // hud_bridge_rack_slot_angle
     bool rack_placed_ = false;      // the tool place was set from the first frame's camera
-    ::godot::Vector3 rack_place_;   // the tool place on the ground
+    bool rack_asked_ = false;       // the view asked the host to lay the rack body (toolrack.scene.v1 lay)
+    ::godot::Vector3 rack_offset_;  // the tool place off the patch, from the first frame's camera
+    ::godot::Vector3 rack_place_;   // the tool place: the rack body of ase-physics, else beside the patch
     ::godot::Vector3 rack_right_;   // the camera's right of that frame, along which the slots run
     ::godot::Vector3 rack_view_;    // the camera's view of that frame, ahead of the place
     int64_t next_order_ = 0;        // ++ZO

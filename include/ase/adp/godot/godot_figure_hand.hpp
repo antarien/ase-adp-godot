@@ -16,6 +16,15 @@
  *              gap N0448 names); a kind the list names no role for is that block in the error material of
  *              the figure. The piece is rebuilt when its kind changes or its file arrives and leaves when the
  *              port carries no piece in that hand.
+ *              THE TOOL PLACE IN 3D (PLAN_ASE_VIVARIUM_PHASE_06_HUD 8.3): the same tool files stand in the scene
+ *              when a tool is not carried. The rack body of ase-pl-toolrack is an instance of the file of the
+ *              role rack (prop_tool_rack_fork, its origin the ground point between the stakes) at the place the
+ *              carry bridge gives (toolrack.rack.v1); a tool at the place leans against its crossbar with its
+ *              lowest point on the ground at its slot, a tool let go lies flat where it was let go. How far a
+ *              tool reaches below its grip and how thick it is are read from the bounds of its loaded file, so
+ *              the adapter guesses no length. A thing the asset list names no tool for keeps its 2D drawing.
+ *              A tap reaches the place through its body: rack_struck casts the ray of the camera through the
+ *              finger onto the bounds of the rack body, the way VivariumView::pick_ground meets the ground (D01).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -24,17 +33,21 @@
  * @usecase     usecase:101625 - carry a tool in hand
  * @actor       SS/PC
  * @created     2026-11-14
- * @modified    2026-11-14
- * @version     00.00.02.00001
+ * @modified    2026-11-15
+ * @version     00.00.03.00002
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
 #include <ase/adp/godot/godot_figure_load.hpp>
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_hud_world_drop.hpp>
 
+#include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
+#include <godot_cpp/variant/vector2.hpp>
+#include <godot_cpp/variant/vector3.hpp>
 
 #include <cstdint>
 #include <string>
@@ -72,5 +85,31 @@ uint32_t hand_kind(uint32_t figure, const std::vector<VivariumFigureGearView>& g
  */
 void carry_tool(::godot::Node3D* socket, uint32_t kind, const std::unordered_map<uint32_t, FigureHandTool>& tools,
                 const ::godot::Ref<::godot::Material>& stand_in);
+
+/**
+ * The body of the tool place as the asset list names it under the role rack: its asset, the bound file and the
+ * error material of that asset, bound like a tool of the hand. The load is not started here.
+ */
+[[nodiscard]] FigureHandTool bind_rack_body(const VivariumAssetBinding& binding,
+                                            const std::unordered_map<std::string, std::string>& roles);
+
+/**
+ * Stands the tool place and the tools on the ground below `scene`: the rack body at `rack`, its crossbar along
+ * `along` (the right of the camera the place was laid by); every thing of `things` whose item `tools` names leans
+ * at its slot (at_rack) or lies at its place, an instance of its file once loaded, else a block in its error
+ * material. A thing that left the ground leaves the scene; a thing whose item has no tool is not drawn here.
+ * Every thing it stands is marked bodied, so the ground of the HUD draws its shadow and hit box and not its
+ * picture; true when the rack body stands.
+ */
+bool lay_tools(::godot::Node3D* scene, const ::godot::Vector3& rack, const ::godot::Vector3& along,
+               const FigureHandTool& rack_body, std::vector<GroundThing>& things,
+               const std::unordered_map<uint32_t, FigureHandTool>& tools);
+
+/**
+ * THE TAP ON THE TOOL PLACE IN THE WORLD (D01, PLAN_ASE_VIVARIUM_PHASE_06_HUD 8.6): true when the ray of `camera`
+ * through the viewport point `at` meets the bounds of the rack body lay_tools stood below `scene`, the meshes of
+ * its file or its block, in the space of the scene; false while no rack body stands or no camera draws.
+ */
+bool rack_struck(::godot::Node3D* scene, const ::godot::Camera3D* camera, const ::godot::Vector2& at);
 
 }  // namespace ase::adp::godot

@@ -107,6 +107,17 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.seed");
     }
     start_.seed_port = utf8_of(text);
+    // The tool rack of ase-pl-toolrack (usecase:101625 carry a tool in hand): the view lays the rack of the
+    // patch through the scene port, ase-physics drops it as a prop body, and the view draws the rack where
+    // the rack port says and computes none of its height.
+    if (!read_text(ports, "toolrack_scene", text)) {
+        return fail_config("ports.toolrack_scene");
+    }
+    start_.toolrack_scene_port = utf8_of(text);
+    if (!read_text(ports, "toolrack_rack", text)) {
+        return fail_config("ports.toolrack_rack");
+    }
+    start_.toolrack_rack_port = utf8_of(text);
     // The bark tiling of the internodes (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2, the material data of
     // a section): ase-render-data computed it, the view scales the bark texture by it and computes none.
     if (!read_text(ports, "tile", text)) {

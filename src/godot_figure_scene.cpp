@@ -286,6 +286,7 @@ FigureSceneLook bind_figure_look(const VivariumAssetBinding& binding,
     // the file itself loads in a task of the WorkerThreadPool (godot_figure_load.hpp), not here
     look.stand_in = error_material(binding, look.name);
     look.tools = bind_hand_tools(binding, roles);  // the tools of the hand; their files load beside the figure file
+    look.rack = bind_rack_body(binding, roles);    // the tool place's body; its file loads beside the tools
     return look;
 }
 

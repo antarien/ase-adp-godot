@@ -566,6 +566,20 @@ bool seed_view_of(const KernelHostRecord& record, VivariumSeedView& out) {
     return true;
 }
 
+/**
+ * One rack record as a view. false for a record that misses a key or carries a value that is no finite
+ * number: the rack port writes x, y and z of every rack (ase-pl-toolrack, ToolrackHostBodyExptSystem), so a
+ * gap is a broken port, never a rack drawn at the stem foot.
+ */
+bool rack_view_of(const KernelHostRecord& record, VivariumRackView& out) {
+    out = VivariumRackView{};
+    out.object_id = record.object_id;
+    out.x = record_value(record, GODOT_KEY_X);
+    out.y = record_value(record, GODOT_KEY_Y);
+    out.z = record_value(record, GODOT_KEY_Z);
+    return std::isfinite(out.x) && std::isfinite(out.y) && std::isfinite(out.z);
+}
+
 /** The record of one object id among the first `written` records of a snapshot; nullptr when absent. */
 const KernelHostRecord* sky_record(const std::vector<KernelHostRecord>& records, uint32_t written, uint32_t id) {
     for (uint32_t i = 0u; i < written && i < records.size(); ++i) {
@@ -1830,6 +1844,7 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     template_generation_ += 1u;
     sky_ = VivariumSkyView{};
     seeds_.clear();
+    racks_.clear();
     figures_.clear();
     figure_camera_ = VivariumFigureCameraView{};
     figure_gear_.clear();
@@ -2441,6 +2456,10 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     if (seeds != ase::kernel::HostStatusOk) {
         return seeds;
     }
+    const HostStatus racks = read_racks();
+    if (racks != ase::kernel::HostStatusOk) {
+        return racks;
+    }
     return read_figures();
 }
 
@@ -2875,6 +2894,32 @@ HostStatus GodotHostResourceManager::read_seeds() {
     return ase::kernel::HostStatusOk;
 }
 
+HostStatus GodotHostResourceManager::read_racks() {
+    // THE RACKS ARE READ EVERY SNAPSHOT (usecase:101625): ase-physics drops a laid rack in its kinetic steps and
+    // ase-pl-toolrack lays the rack port anew in every Production run (ToolrackHostBodyExptSystem). A host
+    // without the plugin offers no rack port: no rack, nothing broken.
+    racks_.clear();
+    if (!rack_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.toolrack_rack_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    racks_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumRackView view;
+        if (!rack_view_of(organ_records_[i], view)) {
+            racks_.clear();
+            return refuse_record(*host_, config_.toolrack_rack_port, organ_records_[i].object_id,
+                                 "rack body incomplete or out of range");
+        }
+        racks_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
 HostStatus GodotHostResourceManager::read_figures() {
     // THE FIGURES ARE READ EVERY SNAPSHOT (07.8): ase-player moves a figure in every frame and ase-pl-avatar lays the
     // body port anew in every Production run (AvatarHostBodyExptSystem), the camera port after it
@@ -3171,6 +3216,22 @@ HostStatus GodotHostResourceManager::flatten(double x, double z, double radius_m
     return host_->submit(config_.flatten_port.c_str(), config_.op_flatten.c_str(), &input);
 }
 
+HostStatus GodotHostResourceManager::lay_rack(uint32_t patch, double x, double z) {
+    // The request names the patch and a place in its frame: the body and its height are ase-physics', the
+    // range check and the one rack per patch the plugin's (ToolrackHostPlcmSystem).
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!rack_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = patch;
+    (void)put_value(input, GODOT_KEY_X, x);
+    (void)put_value(input, GODOT_KEY_Z, z);
+    return host_->submit(config_.toolrack_scene_port.c_str(), config_.op_lay.c_str(), &input);
+}
+
 HostStatus GodotHostResourceManager::lower(double x, double z, double radius_m, double depth_m) {
     // A spade stroke names a place, no patch: ase-pl-flora files it as a dig order, ase-terrain lowers the disc.
     if (!running()) {
@@ -3358,6 +3419,16 @@ const VivariumSkyView& GodotHostResourceManager::get_sky() const {
 
 const std::vector<VivariumSeedView>& GodotHostResourceManager::get_seeds() const {
     return seeds_;
+}
+
+const std::vector<VivariumRackView>& GodotHostResourceManager::get_racks() const {
+    return racks_;
+}
+
+bool GodotHostResourceManager::rack_offered() const {
+    // both rack ports of the configuration, or none: a rack laid where it cannot be read is no rack
+    return host_ && !config_.toolrack_scene_port.empty() && !config_.toolrack_rack_port.empty() &&
+           host_->has_port(config_.toolrack_scene_port.c_str()) && host_->has_port(config_.toolrack_rack_port.c_str());
 }
 
 const std::vector<VivariumFigureView>& GodotHostResourceManager::get_figures() const {
@@ -3572,6 +3643,7 @@ void GodotHostResourceManager::clear_all() {
     template_generation_ += 1u;  // and its templates
     sky_ = VivariumSkyView{};   // and its light
     seeds_.clear();             // and its seeds
+    racks_.clear();             // and its tool racks
     figures_.clear();           // and its figures
     figure_camera_ = VivariumFigureCameraView{};  // and the camera following one
     figure_gear_.clear();       // and what the figures carry
