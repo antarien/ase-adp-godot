@@ -13,7 +13,7 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
  * @modified    2026-11-13
- * @version     00.00.01.00004
+ * @version     00.00.01.00005
  */
 
 #include <ase/adp/godot/godot_hud_ui_text_block.hpp>
@@ -255,7 +255,8 @@ void UiTextBlock::draw(UiPen& canvas, const ::godot::Transform2D& frame, const U
     // edge, so half of it stands outside the fill: that half is the radius, in screen pixels, which the text server
     // takes in its own outline units. Oversampling 1: the raster size already is the screen's, a second factor from
     // the viewport would raster it again.
-    const int64_t stroke = outline(pixel);
+    // A bare text (m.html 756, the stack count) carries no sh: its fill alone.
+    const int64_t stroke = place.bare ? 0 : outline(pixel);
     if (stroke > 0) {
         for (const UiTextGlyph& glyph : glyphs_) {
             server->font_draw_glyph_outline(glyph.font, item, glyph.raster, stroke, glyph.pos, glyph.index, shadow,
@@ -298,8 +299,8 @@ void UiTextBlock::warm(const UiPen& canvas, const ::godot::Transform2D& frame, d
     const ::godot::Ref<::godot::TextServer> server = ::godot::TextServerManager::get_singleton()->get_primary_interface();
     if (warm_raster_ != raster) {
         // The shaping: the face's shaping tables at this raster are built on the first line shaped at it, and the
-        // shaper names each character's glyph in the font that carries it - the face or a fallback of its rids -
-        // as draw() takes it from shape(). Upper case where the class writes it, so the glyphs are the drawn ones.
+        // shaper names each character's glyph in the face's own font (its rids; UiTheme gives no face a second
+        // font) as draw() takes it from shape(). Upper case where the class writes it, so the glyphs are the drawn ones.
         ::godot::String sample = ::godot::String(WARM_NUMBERS) + theme_->alphabet();
         if (upper_) {
             sample = sample.to_upper();

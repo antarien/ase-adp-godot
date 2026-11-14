@@ -41,8 +41,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-13
- * @version     00.00.04.00020
+ * @modified    2026-11-14
+ * @version     00.00.04.00022
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -116,6 +116,15 @@ void VivariumView::ready() {
         // 03.2: the materials and organ template files of the stage are read once, here, through the
         // loader the asset showcase shares; a missing one is drawn in the error material
         scene_look_ = bind_plant_look(assets_, asset_root_, asset_roles_);
+        // 07.9: the figure file of the stage (role figure) or the error material of its stand-in body. The file
+        // (169.6 MB) is parsed and packed by a task of the WorkerThreadPool, so this ready() returns and the
+        // start screen draws while it loads; follow_figure takes the pack and warms it behind the screen
+        figure_look_ = bind_figure_look(assets_, asset_roles_, figure_look_.motion);  // the motion load_figure_hud read
+        start_figure_load(figure_look_.load, asset_root_, figure_look_.file);
+        // 07.10: each tool of the hand loads in its own task; its node stays a block until its pack is taken
+        for (auto& [kind, tool] : figure_look_.tools) {
+            start_figure_load(tool.load, asset_root_, tool.file);
+        }
         // PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7: the asset showcase beside the one game host, from
         // the binding of the configuration; its line follows the boot line.
         if (launched_with(modes_.assets_argument)) {
@@ -138,6 +147,11 @@ void VivariumView::exit_tree() {
         return;
     }
     note("exit " + measure(GODOT_NO_PLACE));
+    // a figure file still loading writes into figure_look_: the view waits for its task before it leaves
+    end_figure_load(figure_look_.load);
+    for (auto& [kind, tool] : figure_look_.tools) {
+        end_figure_load(tool.load);
+    }
     resources_.clear_all();
     drain_log();
 }
@@ -189,7 +203,9 @@ void VivariumView::boot_host(bool new_seeds) {
     debug_.height_scale_m = sown.ground.height_scale_m;
 
     const VivariumBundleInfo& bundle = resources_.get_bundle();
-    build_line_ =::godot::String("adapter ") + ASE_ADP_GODOT_VERSION + texts_.separator + "client " +
+    // The adapter's version comes from build.identity like the client's: stage_native.py writes it at stage time,
+    // so a version step never reaches a compile line and never rebuilds a unit.
+    build_line_ =::godot::String("adapter ") + identity_value(identity_, "adapter_version") + texts_.separator + "client " +
                   identity_value(identity_, "client_commit") + texts_.separator +
                   ::godot::String::num_uint64(bundle.units.size()) + " units";
     // The build line keeps to the surface: it shrinks until it fits beside the title's margins.
@@ -274,7 +290,7 @@ void VivariumView::restart() {
     return ::godot::String("boot")
         + " client=" + identity_value(identity_, "client_commit")
         + " client_version=" + identity_value(identity_, "client_version")
-        + " adapter=" + ASE_ADP_GODOT_VERSION
+        + " adapter=" + identity_value(identity_, "adapter_version")
         + " kernel=" + identity_value(identity_, "kernel_version")
         + " set=" + set
         + " ase_api=" + api
@@ -354,6 +370,7 @@ void VivariumView::process(double delta) {
         follow_water();
         const uint64_t scene_start_usec = clock->get_ticks_usec();
         follow_scene(elapsed_s);
+        follow_figure(elapsed_s);  // after the scene: the player camera overrides the fixed view's aim of this frame (07.6)
         follow_initialisation();
         const uint64_t hud_start_usec = clock->get_ticks_usec();
         tick_hud(elapsed_s);  // the HUD's clock: long presses, held pours (godot_vivarium_hud_input.cpp)

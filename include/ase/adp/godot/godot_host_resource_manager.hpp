@@ -18,8 +18,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-12
- * @version     00.00.04.00017 [seed]
+ * @modified    2026-11-14
+ * @version     00.00.04.00020 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -89,7 +89,7 @@ namespace ase::adp::godot {
 using VivariumStageReadFn = bool (*)(const char* name, std::string& out, void* user);
 
 /**
- * One patch of the start configuration (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS, "Fläche und Art"): the
+ * One patch of the start configuration (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS, section on patch and species): the
  * game host asks ase-pl-flora for it with one lay request on the scene port after its start.
  */
 struct VivariumPatchSpec {
@@ -161,6 +161,7 @@ struct VivariumStartConfig {
     std::string seed_port;           // host port of the seed bodies of ase-physics (ase-pl-flora: flora.seed.v1)
     std::string tile_port;           // host port of the bark tiling of the internodes (ase-pl-flora: flora.tile.v1)
     std::string sway_port;           // host port of the sway of the organs on a branch (ase-pl-flora: flora.sway.v1)
+    std::string bark_port;           // host port of the vertices of the bark tube of every axis (ase-pl-flora: flora.mesh.bark.v1)
     std::string stream_port;         // host port of the water of the brooks (ase-pl-flora: flora.stream.v1)
     std::string level_port;          // host port the player levels a patch through (ase-pl-flora: flora.level.v1)
     std::string flatten_port;        // host port the player flattens the ground at a place through (ase-pl-flora: flora.flatten.v1)
@@ -177,7 +178,33 @@ struct VivariumStartConfig {
     std::string view_port;           // host port the view hands the place of its camera through (ase-pl-flora: flora.view.v1)
     std::string template_corner_port;   // host port of the corners of the organ templates (ase-pl-flora: flora.template.corner.v1)
     std::string template_triangle_port;  // host port of the triangles of the organ templates (ase-pl-flora: flora.template.triangle.v1)
-    std::string op_irrigate;         // submit operation that pours on one patch
+    std::string figure_body_port;    // host port of the figures the view draws (ase-pl-avatar: avatar.body.v1)
+    std::string figure_camera_port;  // host port of the player camera while it follows a figure (ase-pl-avatar: avatar.camera.v1)
+    std::string figure_spawn_port;   // host port the view asks for the figure of its seat through (ase-pl-avatar: avatar.spawn.v1)
+    std::string figure_stick_port;   // host port the stick of the left half leads the figure through (ase-pl-avatar: avatar.stick.v1)
+    std::string figure_orbit_port;   // host port the drag of the right half turns the player camera through (ase-pl-avatar: avatar.orbit.v1)
+    std::string figure_switch_port;  // host port the button cam.mode switches the camera through (ase-pl-avatar: avatar.switch.v1)
+    std::string figure_release_port; // host port soul.mode hands the figure to the AI through (ase-pl-avatar: avatar.release.v1)
+    std::string figure_seize_port;   // host port soul.mode takes the figure back from the AI through (ase-pl-avatar: avatar.seize.v1)
+    std::string figure_hold_port;    // host port the hand of Phase 06 puts its thing into the figure's hand through (ase-pl-avatar: avatar.hold.v1)
+    std::string figure_drop_port;    // host port the hand of Phase 06 empties the figure's hand through (ase-pl-avatar: avatar.drop.v1)
+    std::string figure_gear_port;    // host port of the pieces every figure carries (ase-pl-avatar: avatar.gear.v1)
+    std::string figure_code_port;    // host port of the codes gait, soul and camera of the body record are compared against (ase-pl-avatar: avatar.code.v1)
+    std::string figure_rig_port;     // host port the scene reports the measured skeleton of a figure through (ase-pl-avatar: avatar.rig.v1)
+    std::string figure_turn_port;    // host port the drag of the right half turns the figure itself through (ase-pl-avatar: avatar.turn.v1)
+    std::string op_measure;          // submit operation that reports eye height and height of a figure's skeleton
+    std::string op_spawn;           // submit operation that asks for the figure of a seat at a place
+    std::string op_steer;            // submit operation that leads the figure with the stick
+    std::string op_turn;             // submit operation that turns the player camera by a drag
+    std::string op_switch;           // submit operation that moves the active mark between fixed view and player camera
+    std::string op_release;          // submit operation that hands the soul of the figure to the AI (SS/PC to AI/PC)
+    std::string op_seize;            // submit operation that takes the soul of the figure back (AI/PC to SS/PC)
+    std::string op_hold;             // submit operation that puts an item into the right hand of the figure (07.10)
+    std::string op_drop;             // submit operation that empties the right hand of the figure (07.10)
+    uint32_t    figure_seat = 0;     // the seat of this view: ase-player names the figure it spawns after it
+    double      figure_x = 0.0;      // spawn place of the figure, world metres east
+    double      figure_z = 0.0;      // spawn place of the figure, world metres north
+    std::string op_irrigate;        // submit operation that pours on one patch
     std::string op_prune;            // submit operation that cuts the branch an internode sits on (03.10 step 9)
     std::string op_level;            // submit operation that levels the ground of one patch (03.8 point 2)
     std::string op_flatten;          // submit operation that flattens a disc of the ground at a place (03.8)
@@ -231,7 +258,9 @@ struct VivariumGroundCellView {
 
 /**
  * One brook with water as the last read of the stream port showed it (usecase:100399 carry brook water): the
- * course of its bed and the water ase-hydro lets run in it. A bed without measured water has no record.
+ * course of its bed and the water ase-hydro lets run in it. A bed without measured water has no record. The
+ * groundwater beside the bed (B0286) is the one optional pair of the record: until ase-hydro publishes it the
+ * port carries neither key, both fields stay NaN, and the view lays no water beside the bed.
  */
 struct VivariumStreamView {
     uint32_t object_id = 0;       // the brook, as the plugin names it on its port
@@ -243,6 +272,8 @@ struct VivariumStreamView {
     double   depth_m = 0.0;       // water depth, metres
     double   velocity_m_s = 0.0;  // mean flow velocity, metres per second
     double   discharge_m3_s = 0.0;  // discharge, cubic metres per second
+    double   groundwater_level_m = 0.0;  // groundwater table beside the bed, world metres; NaN while the port carries none (N0484)
+    double   groundwater_reach_m = 0.0;  // distance from the bed's line over which that table holds, metres; NaN likewise
 };
 
 /**
@@ -322,6 +353,28 @@ struct VivariumOrganView {
 struct VivariumInstanceView {
     uint32_t object_id = 0;                    // the organ, as the plugin names it on its port
     float    rows[GODOT_INSTANCE_VALUES] = {};  // row 0 (east), row 1 (up), row 2 (north): x, y, z axis and origin
+};
+
+/**
+ * One vertex of the bark tube of an axis as the last read of the bark port showed it - a copy (register B0295
+ * point 4, usecase:101613 show the plant bark tubes). ase-render-data built the tube, one knot ring per seam that
+ * parent and child share, with frames carried by parallel transport; the view takes place, normal and texture
+ * coordinates into the mesh of the plant and closes the quad strip between two rings by the links alone.
+ */
+struct VivariumBarkVertexView {
+    uint32_t object_id = 0;   // the vertex row, as the plugin names it on its port
+    uint32_t body = 0;        // object id of the patch the plant stands on
+    double   x = 0.0;         // metres east of the stem base
+    double   y = 0.0;         // metres above the ground at the stem base
+    double   z = 0.0;         // metres north of the stem base
+    double   nx = 0.0;        // unit normal, east share
+    double   ny = 0.0;        // unit normal, upward share
+    double   nz = 0.0;        // unit normal, north share
+    double   u = 0.0;         // around the ring, 0..1 (the closing vertex 1)
+    double   v = 0.0;         // along the axis from its foot ring, metres
+    uint32_t next = 0;        // object id of the next vertex on the same ring, InvalidEntityId after the closing one
+    uint32_t below = 0;       // object id of the vertex at the same place on the ring below, InvalidEntityId on a foot ring
+    uint32_t organ = 0;       // object id of the internode whose knot ring the vertex belongs to
 };
 
 /** One unit as the bundle index names it. */
@@ -652,6 +705,74 @@ struct VivariumSeedView {
 };
 
 /**
+ * One figure as the last snapshot of the body port showed it - a copy (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE
+ * 07.8, ase-pl-avatar). ase-player moves the figure; the plugin lays its place with the height as its own
+ * axis, and the view takes the three axes in Godot's order (east, up, north) and computes none of them.
+ */
+struct VivariumFigureView {
+    uint32_t object_id = 0;   // the figure, as the plugin names it on its port
+    double   x = 0.0;         // world metres east
+    double   y = 0.0;         // world metres up, the height ase-player holds
+    double   z = 0.0;         // world metres north
+    double   course = 0.0;    // course of the figure in radians (HUB_PLR_MOTN_YAW)
+    double   vel_x = 0.0;     // horizontal velocity east, m/s
+    double   vel_z = 0.0;     // horizontal velocity north, m/s
+    double   gait = 0.0;      // gait value of the plugin (stand, walk, run) the clips blend by
+    double   soul = 0.0;      // soul value of the plugin: AI/PC or SS/PC, the button soul.mode shows it
+    double   camera = 0.0;    // camera value of the plugin: fixed view or the camera following this figure
+    double   lod_near = 0.0;  // frame height share from which level 0 of the body is drawn (RND_CONST_FIGURE_LOD_NEAR)
+    double   lod_mid = 0.0;   // frame height share from which level 1 is drawn (RND_CONST_FIGURE_LOD_MID)
+    double   lod_far = 0.0;   // frame height share from which level 2 is drawn, below it level 3 (RND_CONST_FIGURE_LOD_FAR)
+};
+
+/**
+ * The player camera as the last snapshot of the camera port showed it (07.5): eye and aim of the camera
+ * ase-camera computes obliquely above the figure it follows, in Godot's order. known is false while no
+ * camera follows a figure - the view then draws its fixed start view of Phase 06.
+ */
+struct VivariumFigureCameraView {
+    bool     known = false;   // true while the port carried the record of the active player camera
+    uint32_t figure = 0;      // the figure the camera follows
+    double   eye_x = 0.0;     // eye, world metres east
+    double   eye_y = 0.0;     // eye, world metres up
+    double   eye_z = 0.0;     // eye, world metres north
+    double   aim_x = 0.0;     // look-at, world metres east
+    double   aim_y = 0.0;     // look-at, world metres up
+    double   aim_z = 0.0;     // look-at, world metres north
+};
+
+/**
+ * One piece a figure carries as the last snapshot of the gear port showed it (07.10, usecase:101625 carry a
+ * tool in hand): a row of ase-equipment, its bearer, its slot and its kind as catalog ids
+ * (KernelEmbeddedHost::name_id). The view hangs the tool of the kind under the socket the slot names.
+ */
+struct VivariumFigureGearView {
+    uint32_t object_id = 0;  // the piece, as the plugin names it on its port
+    uint32_t bearer = 0;     // the figure that carries it, the object id of its body record
+    uint32_t slot = 0;       // the slot it sits in: name_id of the socket (socket_hand_r)
+    uint32_t kind = 0;       // what it is: name_id of the item key of Phase 06 (pa, enxada, faca)
+};
+
+/**
+ * The meaning of the coded values of the body record as the last snapshot of the code port showed it (07.4 and
+ * 07.6, usecase:101611 animate character motion): the gait points the clips blend at, the soul codes and the
+ * camera codes, all as ase-pl-avatar defines them (AvatarHostCodeExptSystem). read_figures reads the port anew
+ * with every snapshot, and the view compares gait, soul and camera of a figure against these values, never
+ * against constants of the adapter. known is false while no code record stood - the view then draws no gait and
+ * leads no figure.
+ */
+struct VivariumFigureCodeView {
+    bool   known = false;      // true while the port carried the one code record with all seven values
+    double gait_stand = 0.0;   // gait value of a standing figure, the lower end of the clip mix
+    double gait_walk = 0.0;    // gait value of a walking figure
+    double gait_run = 0.0;     // gait value of a running figure, the upper end of the clip mix
+    double soul_ai = 0.0;      // soul value while the AI leads the figure (AI/PC)
+    double soul_player = 0.0;  // soul value while its player leads the figure (SS/PC)
+    double cam_fixed = 0.0;    // camera value while the fixed view of Phase 06 is drawn
+    double cam_player = 0.0;   // camera value while the player camera follows the figure
+};
+
+/**
  * @brief External resource manager for the embedded ASE host of one Vivarium view (NOT ECS!)
  *
  * This class lives OUTSIDE every registry. Its owner is the VivariumView of one AseVivariumView
@@ -816,12 +937,61 @@ public:
      */
     ase::kernel::HostStatus shape(double height_scale_m, double base_height_m);
     /**
-     * Tell the engine where the view's camera stands, world metres east, up and north - a view request on
-     * the view port. ase-pl-flora files it for ase-camera, whose camera the level of detail of
-     * ase-render-data measures from (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 point 7). Which place is valid
-     * is the plugin's to check.
+     * Tell the engine where the view's camera stands (`x`, `y`, `z`) and the point it looks at (`aim_x`,
+     * `aim_y`, `aim_z`), world metres east, up and north - a view request on the view port. ase-pl-flora
+     * files it for ase-camera, whose camera the level of detail of ase-render-data measures from
+     * (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 point 7) and whose heading the stick of the figure steers
+     * along in the fixed view (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.4). Which points are valid is the
+     * plugin's to check.
      */
-    ase::kernel::HostStatus view(double x, double y, double z);
+    ase::kernel::HostStatus view(double x, double y, double z, double aim_x, double aim_y, double aim_z);
+    /**
+     * Ask for the figure of this view's seat (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.8): a spawn request on the
+     * spawn port, object id the seat, with the place `x` east and `z` north, metres. ase-pl-avatar files it as
+     * HUB_PLR_SPWN_REQ and ase-player spawns the figure there; boot() asks once for the configured seat.
+     * HostStatusNotFound while the host offers no figure port (ase-pl-avatar not in the unit set).
+     */
+    ase::kernel::HostStatus spawn_figure(uint32_t seat, double x, double z);
+    /**
+     * Lead the figure with the stick of the left half (07.4): a steer request on the stick port, object id the
+     * figure, with the forward and sideways axis and the levels of the sprint and jump wish. The course the
+     * stick points along is no value of the request: it is the course of the active camera, which ase-camera
+     * owns and ase-pl-avatar reads. Which values are valid is the plugin's to check.
+     */
+    ase::kernel::HostStatus steer_figure(uint32_t figure, double forward, double strafe, double sprint, double jump);
+    /** Turn the player camera of the figure by a drag of the right half (07.5): radians around and up. */
+    ase::kernel::HostStatus turn_figure_camera(uint32_t figure, double yaw_delta, double pitch_delta);
+    /**
+     * cam.zoom (07.4, 07.6): move the player camera of the figure along its zoom rail by `zoom_delta` metres,
+     * negative towards the figure. The same turn request on the orbit port as the drag, course unchanged;
+     * ase-camera clamps the distance to the rail HUB_CAM_ORBT_DIST_MIN..MAX, down to the face band.
+     */
+    ase::kernel::HostStatus zoom_figure_camera(uint32_t figure, double zoom_delta);
+    /** cam.mode (07.5): move the active mark between the fixed view and the camera following the figure. */
+    ase::kernel::HostStatus switch_figure_camera(uint32_t figure);
+    /** soul.mode (07.11) on a figure the player leads: the AI leads it on, the same figure keeps place and pose. */
+    ase::kernel::HostStatus release_figure(uint32_t figure);
+    /** soul.mode (07.11) on a figure the AI leads: its player takes it back. */
+    ase::kernel::HostStatus seize_figure(uint32_t figure);
+    /**
+     * The hand of Phase 06 took a thing (07.10): a hold request on the hold port, object id the figure, with the
+     * item as its catalog id (KernelEmbeddedHost::name_id of the item key). ase-pl-avatar files it as
+     * HUB_EQP_SLOT_REQ at socket_hand_r; which item is valid is the plugin's to check.
+     */
+    ase::kernel::HostStatus hold_figure(uint32_t figure, uint32_t item);
+    /** The hand of Phase 06 let its thing go (07.10): a drop request on the drop port, object id the figure. */
+    ase::kernel::HostStatus drop_figure(uint32_t figure);
+    /**
+     * Report the skeleton of a figure as the scene built it (07.6): a measure request on the rig port, object id
+     * the figure, with the eye height and the height of its body above the soles, metres. ase-pl-avatar files them
+     * for ase-camera, whose face landing lifts its aim to that eye height. Which values are valid is the plugin's.
+     */
+    ase::kernel::HostStatus measure_figure(uint32_t figure, double eye_height, double height);
+    /**
+     * fig.turn (07.7): turn the figure itself on the spot by `yaw_delta` radians, a turn request on the turn port.
+     * ase-pl-avatar lays it down as NET_INP_TURN; ase-player turns the figure and shows the gait of turning.
+     */
+    ase::kernel::HostStatus turn_figure(uint32_t figure, double yaw_delta);
     /** One line of the view itself (boot line, action, measurement) through the host's logger. */
     ase::kernel::HostStatus note(const char* text);
 
@@ -850,6 +1020,16 @@ public:
     [[nodiscard]] const std::vector<VivariumInstanceView>& get_instances(uint32_t organ_class) const;
     /** Grows by one every time the organ views were read anew; the view rebuilds its geometry then. */
     [[nodiscard]] uint64_t organ_generation() const;
+    /**
+     * The vertices of the bark tubes of every plant as the bark port showed them (register B0295 point 4).
+     * ase-pl-flora lays a new set page by page, one page per GODOT_BARK_SCHEDULE pass, and the host keeps the
+     * old set until the last page is filed; so after a GODOT_ORGAN_SCHEDULE run the port is read with every
+     * snapshot until the new set is in: until a read differs from the held set, or names exactly the held
+     * internodes once the passes since the run covered the organ reads and every page of the set.
+     */
+    [[nodiscard]] const std::vector<VivariumBarkVertexView>& get_bark() const;
+    /** Grows by one every time a read of the bark port differed from the held set; the view lays the tubes anew then. */
+    [[nodiscard]] uint64_t bark_generation() const;
     /**
      * The terrain samples of the ground as the terrain port showed them. Read like the organs: when a
      * GODOT_TERRAIN_SCHEDULE run passed since the last read, that frame and the next.
@@ -888,6 +1068,25 @@ public:
      * every kinetic step, and a seed that came down keeps its place. Empty while no fruit stand shattered.
      */
     [[nodiscard]] const std::vector<VivariumSeedView>& get_seeds() const;
+    /**
+     * The figures as the body port showed them, read with every snapshot: ase-player moves them in every
+     * frame. Empty while the host offers no body port or no figure stands.
+     */
+    [[nodiscard]] const std::vector<VivariumFigureView>& get_figures() const;
+    /** The player camera as the camera port showed it, read with every snapshot; known false in the fixed view. */
+    [[nodiscard]] const VivariumFigureCameraView& get_figure_camera() const;
+    /**
+     * The pieces the figures carry as the gear port showed them, read with every snapshot (07.10): the plugin
+     * closes the set every Production run, so a figure without a piece holds nothing. Empty without figures.
+     */
+    [[nodiscard]] const std::vector<VivariumFigureGearView>& get_figure_gear() const;
+    /**
+     * The codes of the body record as the code port showed them, read with every snapshot (usecase:101611): the
+     * plugin files the one code record every Production run. known false without figures.
+     */
+    [[nodiscard]] const VivariumFigureCodeView& get_figure_code() const;
+    /** true when the running host offers every figure port of the start configuration. */
+    [[nodiscard]] bool figure_offered() const;
 
     /**
      * LOG LINES - any thread in, the node's thread out
@@ -967,12 +1166,14 @@ private:
     ase::kernel::HostStatus load_set(ase::kernel::KernelEmbeddedHost& host);
     ase::kernel::HostStatus read_snapshot();
     ase::kernel::HostStatus read_organs();
+    ase::kernel::HostStatus read_bark();
     ase::kernel::HostStatus read_terrain();
     ase::kernel::HostStatus read_streams();
     ase::kernel::HostStatus read_templates();
     ase::kernel::HostStatus read_sky();
     ase::kernel::HostStatus read_stars();
     ase::kernel::HostStatus read_seeds();
+    ase::kernel::HostStatus read_figures();
     ase::kernel::HostStatus lay_patches();
     ase::kernel::HostStatus lay_ground();
     ase::kernel::HostStatus lay_brooks();
@@ -999,6 +1200,11 @@ private:
     uint64_t                                         organ_generation_ = 0;
     uint64_t                                         organ_runs_ = 0;  // GODOT_ORGAN_SCHEDULE runs at the last organ read
     uint32_t                                         organ_reads_due_ = 0;  // reads still owed for the last new run
+    std::vector<VivariumBarkVertexView>              bark_;     // the vertices of the bark tubes, last set read
+    uint64_t                                         bark_generation_ = 0;
+    uint64_t                                         bark_runs_ = 0;    // GODOT_ORGAN_SCHEDULE runs at the last new run the bark read followed
+    uint64_t                                         bark_passes_ = 0;  // GODOT_BARK_SCHEDULE passes at that run
+    bool                                             bark_owed_ = false;  // a run's new set is not read yet
     std::vector<VivariumTerrainView>                 terrain_;  // the samples of the ground, last read
     std::vector<VivariumGroundCellView>              ground_cells_;  // the cells of the ground, read with the samples
     uint64_t                                         terrain_generation_ = 0;
@@ -1012,6 +1218,10 @@ private:
     VivariumSkyView                                  sky_;      // the sky and the light of the scene, last read
     uint64_t                                         star_generation_ = 0;  // star sets read since the start, never reset
     std::vector<VivariumSeedView>                    seeds_;    // the seed bodies, last read
+    std::vector<VivariumFigureView>                  figures_;  // the figures of the body port, last read
+    VivariumFigureCameraView                         figure_camera_;  // the player camera of the camera port, last read
+    std::vector<VivariumFigureGearView>              figure_gear_;    // the pieces of the gear port, last read
+    VivariumFigureCodeView                           figure_code_;    // the codes of the code port, last read
     const char*                                      failure_step_;
     ase::kernel::HostStatus                          failure_status_;
     double                                           elapsed_in_s_ = 0.0;

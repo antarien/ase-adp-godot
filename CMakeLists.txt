@@ -15,11 +15,17 @@ ASE GODOT ADAPTER BUILD CONFIGURATION
              plugin header. The host part (GodotHostResourceManager) is a separate static library
              WITHOUT any Godot type, so its tests run without a Godot process.
 
+             The version of this adapter reaches the program through build.identity, staged by
+             scripts/stage_native.py (identity_text) and read with identity_value(identity_,
+             "adapter_version"); no source of the adapter reads a compile definition of it.
+
 @module      ase-adp-godot
 @layer       adapter (3rd-party isolation, consumed by L5 clients)
+@actor       Unit Lifecycle Conductor (UNITLIFCON)
+@usecase     usecase:100653 - publish the module catalog
 @design      DSGN_021
 @created     2026-10-05
-@modified    2026-11-10
+@modified    2026-11-14
 ]]
 
 #[[ VERBOTEN: no module or plugin header and no unit of the embedded set - the adapter binds
@@ -65,9 +71,12 @@ add_library(ase-adp-godot-host STATIC
     src/godot_view_layout.cpp
     src/godot_plant_geometry.cpp
     src/godot_plant_instances.cpp    # the instance buffers of the plants (usecase:101348 hand organ instances to app, 03.11)
+    src/godot_plant_tubes.cpp        # the bark tube of every axis per body (usecase:101613 show the plant bark tubes, B0295 point 4)
+    src/godot_plant_impostor.cpp     # from where a far body is drawn as its card, and the size of card and texture (usecase:101613, B0295 point 4)
     src/godot_plant_templates.cpp    # the organ templates from the template ports (usecase:101342 hand organ shapes to app, 03.11)
     src/godot_plant_ground.cpp       # the ground mesh and the marks of its shader (usecase:101339 show the ground around plant, 03.8)
-    src/godot_plant_water.cpp        # the ribbon of water in every bed (usecase:100399 carry brook water, 03.11)
+    src/godot_plant_water.cpp        # the water in every bed and its line for the brook's sign (usecase:100399 carry brook water, 03.11, B0285)
+    src/godot_plant_water_ribbon.cpp # the ribbon of water along a course, build_water (usecase:100399 carry brook water, B0285)
     src/godot_scene_exposure.cpp     # the exposure of the scene camera for the sky's light (usecase:101415 hand sky light to app, D1721)
     src/godot_order_budget.cpp
     src/godot_cycle_measure.cpp      # the measurement line of one cycle, also compiled into avt-headless (03.6)
@@ -87,6 +96,8 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/godot_view_layout.hpp
     include/ase/adp/godot/godot_plant_geometry.hpp
     include/ase/adp/godot/godot_plant_instances.hpp
+    include/ase/adp/godot/godot_plant_tubes.hpp
+    include/ase/adp/godot/godot_plant_impostor.hpp
     include/ase/adp/godot/godot_plant_templates.hpp
     include/ase/adp/godot/godot_plant_ground.hpp
     include/ase/adp/godot/godot_plant_water.hpp
@@ -152,13 +163,19 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_moonrise.cpp     # VivariumView: the debug jump to the next rise of a moon into the fixed view (usecase:100390)
     src/godot_vivarium_rewind.cpp       # VivariumView: the free date entry's jump behind the clock, a rewound host and the seek ahead (usecase:101120)
     src/godot_vivarium_draw.cpp        # VivariumView: placement on the visible surface and the canvas
+    src/godot_vivarium_start.cpp       # VivariumView: the start screen, its progress bar and the versions from build.identity (B0357, usecase:100387)
     src/godot_vivarium_scene.cpp        # VivariumView: what a frame fills of the 3D scene (03.1)
+    src/godot_vivarium_scene_counts.cpp # VivariumView: the scene's count line for the window acceptance (D1647)
+    src/godot_vivarium_figure.cpp       # VivariumView: the figure's configuration, its body in the scene, the player camera and the keys that lead it (usecase:101554 receive player input, 07.4 to 07.9)
+    src/godot_vivarium_figure_controls.cpp # VivariumView: the phone's stick, orbit drag and the figure's focus with cam.mode and soul.mode (usecase:101554 receive player input, 07.9, 07.11)
+    src/godot_vivarium_figure_input.cpp  # VivariumView::figure_input: the phone's fingers on stick, orbit half, arc, rail, pinch and taps through the ports of ase-pl-avatar (usecase:101554 receive player input, 07.6, 07.7, 07.9, 07.11)
     src/godot_vivarium_measure.cpp      # VivariumView: self-test and measurement modes (02.3)
     src/godot_vivarium_window.cpp       # VivariumView: the client window it opened in (usecase:101019 start the client window)
     src/godot_vivarium_hud.cpp          # VivariumView: the HUD's frame from the ports and its drawing (usecase:101440, 06.5)
     src/godot_vivarium_hud_config.cpp   # VivariumView: the HUD's configuration at load and the still mode of the platform (usecase:101440, 06.5, T09)
     src/godot_vivarium_hud_world.cpp    # VivariumView: the frames of the blocks placed in the world, the cut under the trunk among them (usecase:101440, 06.5)
     src/godot_vivarium_hud_bridge.cpp   # VivariumView: the mockup's values the bridge writes while a port is silent (usecase:101440, 06.5)
+    src/godot_vivarium_hud_bridge_clock.cpp  # VivariumView: the clock record and its pace while their ports are silent, N0460 N0459 (usecase:101440, 06.5)
     src/godot_vivarium_hud_signs.cpp    # VivariumView: the signs the mockup's signs() reports while no port reports a sign case (usecase:100370, 06.10)
     src/godot_vivarium_hud_hand.cpp     # VivariumHandBridge: the hand's readings by the mockup's rules while their ports are silent (usecase:100367, 06.4)
     src/godot_vivarium_hud_loose.cpp    # VivariumLooseBridge: the mockup's loosened soil point by point while flora.patch.v1 is silent, N0456 (usecase:5939, 06.4 N08)
@@ -166,6 +183,8 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_hud_trail.cpp    # VivariumTrailBridge: the mockup's S.log while flora.trail.v1 files no event (usecase:100390, 06.4)
     src/godot_vivarium_hud_carry.cpp    # VivariumCarryBridge: the mockup's carry rules and acts while flora.stow.v1 judges no move (usecase:101440, 06.7-06.9)
     src/godot_vivarium_hud_carry_frame.cpp  # VivariumCarryBridge: the mockup's inventory read from SHA into the HUD's frame (usecase:101440, 06.7-06.9)
+    src/godot_vivarium_hud_carry_plant.cpp  # VivariumCarryBridge: dig the planting hole, lay the seed in, cover it, sowTap (usecase:100388 sow a new seed, B0292)
+    src/godot_vivarium_hud_verb.cpp         # VivariumView::send_hud_verb: a terrain verb through its port, the planting hole of the spade (usecase:100388, B0292)
     src/godot_vivarium_hud_input.cpp   # VivariumView: the touches through the HUD, its clock and its requests over the ports (usecase:101440, 06.5)
     src/godot_vivarium_hud_place.cpp    # VivariumView: the places a tap reaches the HUD through, logged on change (usecase:101440, 06.5/06.11)
     src/godot_vivarium_return.cpp       # VivariumView: background, foreground and the return to the garden, the HUD opens on the trail (usecase:100390, 03.6/06.4 A08)
@@ -247,6 +266,10 @@ add_library(ase-adp-godot SHARED
     src/godot_hud_focus_ring.cpp        # FocusRing: the ring of the focus, ticks, arcs of soil water and growth, the stage glyph, bridge gap N0454 (usecase:100387 view the plant, 06.4)
     src/godot_hud_focus_cluster.cpp     # FocusCluster: head, spine rows and stage forecast around the chosen plant, bridge gap N0454, N0456, N0457 (usecase:100387 view the plant, 06.4)
     src/godot_hud_action_fan.cpp        # ActionFan: the fan of tools beside the focus ring, take into the hand or open the tool place (usecase:100387 view the plant, 06.4)
+    src/godot_hud_figure_focus.cpp      # FigureFocus: ring, fan with cam.mode and soul.mode, and soul line at the seat's figure (usecase:101554 receive player input, 07.9, 07.11)
+    src/godot_hud_figure_switch.cpp     # FigureSwitch: the cam.mode switch between the fixed view and the player camera (usecase:101554 receive player input, 07.9)
+    src/godot_hud_figure_turn.cpp       # FigureTurn: the fig.turn arc, a finger turns the led figure on the spot (usecase:101554 receive player input, 07.7)
+    src/godot_hud_figure_zoom.cpp       # FigureZoom: the zoom rail of the player camera, from the shoulder to the face (usecase:101554 receive player input, 07.6)
     src/godot_hud_sign_marker.cpp       # SignMarker: the glyph of each sign at its place, pulse, tap, bridge gap N0461, N0449 (usecase:100370 wilt from drought, 06.4)
     src/godot_hud_sign_reading.cpp      # SignReading: the open sign's leader, title, sentence, bar, reading, case and offer, bridge gap N0451 (usecase:100370 wilt from drought, 06.4)
     src/godot_hud_hand_slot.cpp         # HandSlot: the hand, the thing in it, its name, instruction, case, reading and stow button, bridge gap N0451 (usecase:100367 water a patch, 06.4)
@@ -262,7 +285,9 @@ add_library(ase-adp-godot SHARED
     src/godot_hud_debug_layer_lay.cpp   # DebugLayer::lay: where the tabs, the chips of TEMPO, SALTO, DATA, RELEVO and the date fields stand
     src/godot_asset_loader.cpp   # the one loader of bound asset files: GLTFDocument, template mesh, material (03.2)
     src/godot_asset_showcase_scene.cpp  # the asset showcase in Godot: sphere, plane, model (04.7)
-    src/godot_plant_scene.cpp    # the 3D scene of the care view: camera, sun, sky, ground, tubes, instances (03.1)
+    src/godot_plant_scene.cpp    # the 3D scene of the care view: camera, sun, sky, ground, bark, instances (03.1)
+    src/godot_plant_scene_mesh.cpp # the meshes of that scene: one surface, the instance buffers, the bark tube of a body (usecase:101613, B0295)
+    src/godot_plant_scene_impostor.cpp # the card of a far plant and the viewport that draws it once (usecase:101613, B0295 point 4)
     src/godot_plant_environment.cpp  # sky colour as a Sky shader, ambient light, fog and exposure of that scene (B0184)
     src/godot_plant_sky.cpp      # the moon light and the discs of sun and moon in that scene (usecase:101384 place sun and moon spatially, 03.11)
     src/godot_plant_sky_disc.cpp # the middle of the sky dome and the discs of the sky on it (usecase:101384, B0262)
@@ -277,11 +302,16 @@ add_library(ase-adp-godot SHARED
     src/godot_plant_haze.cpp     # the shimmer of hot air over that scene (usecase:101515 veil sight with weather, 03.11)
     src/godot_plant_brook.cpp    # the water of the brooks in that scene (usecase:100399 carry brook water, 03.11)
     src/godot_plant_look.cpp    # the materials and organ template files of that scene, bound once (03.2)
+    src/godot_figure_scene.cpp  # the figures of the body port in that scene and the player camera at its eye (usecase:101611 animate character motion, 07.9)
+    src/godot_figure_load.cpp   # the figure file parsed and packed by a task of the WorkerThreadPool (usecase:101611 animate character motion, 07.9)
+    src/godot_figure_rig.cpp    # the clip mix of the figure file and the eye height of its skeleton (usecase:101611 animate character motion, 07.6)
+    src/godot_figure_hand.cpp   # the tool a figure carries below its hand socket, from the gear port (usecase:101625 carry a tool in hand, 07.10)
     src/godot_plant_shader.cpp  # every shader of that scene, loaded from its file under shaders/ (usecase:100387 view the plant)
 
     include/ase/adp/godot/godot_registration.hpp
     include/ase/adp/godot/godot_vivarium_node.hpp
     include/ase/adp/godot/godot_vivarium_view_config.hpp  # VivariumLayout, VivariumModes, VivariumTexts, VivariumHudVerb (usecase:100387 view the plant)
+    include/ase/adp/godot/godot_vivarium_figure_controls.hpp  # VivariumFigureControls: stick, orbit, the figure's focus (usecase:101554 receive player input)
     include/ase/adp/godot/godot_vivarium_hud_carry.hpp  # VivariumCarryBridge (usecase:101440 grow the interface with skills)
     include/ase/adp/godot/godot_vivarium_hud_hand.hpp   # VivariumHandBridge (usecase:100367 water a patch)
     include/ase/adp/godot/godot_vivarium_hud_loose.hpp  # VivariumLooseBridge (usecase:5939 adapt area terrain)
@@ -290,6 +320,7 @@ add_library(ase-adp-godot SHARED
     include/ase/adp/godot/godot_vivarium_hud_trail.hpp  # VivariumTrailBridge (usecase:100390 return to the garden)
     include/ase/adp/godot/godot_vivarium_debug.hpp
     include/ase/adp/godot/godot_vivarium_watch.hpp  # VivariumMeasurement, VivariumGroundWatch (usecase:100387 view the plant)
+    include/ase/adp/godot/godot_vivarium_scene_counts.hpp  # scene_counts, the scene's count line (usecase:100387 view the plant)
     include/ase/adp/godot/godot_asset_loader.hpp
     include/ase/adp/godot/godot_asset_showcase_scene.hpp
     include/ase/adp/godot/godot_plant_scene.hpp
@@ -307,6 +338,10 @@ add_library(ase-adp-godot SHARED
     include/ase/adp/godot/godot_plant_brook.hpp
     include/ase/adp/godot/godot_plant_look.hpp
     include/ase/adp/godot/godot_plant_look_shader.hpp
+    include/ase/adp/godot/godot_figure_scene.hpp  # FigureSceneLook, fill_figures, aim_figure_camera (usecase:101611 animate character motion)
+    include/ase/adp/godot/godot_figure_load.hpp   # FigureSceneLoad, start_figure_load, take_figure_load (usecase:101611 animate character motion)
+    include/ase/adp/godot/godot_figure_rig.hpp    # add_figure_motion, drive_figure_motion, figure_eye_level (usecase:101611 animate character motion)
+    include/ase/adp/godot/godot_figure_hand.hpp   # hand_kind, carry_tool (usecase:101625 carry a tool in hand)
     include/ase/adp/godot/godot_plant_shader.hpp
     include/ase/adp/godot/godot_config_read.hpp
     include/ase/adp/godot/godot_view_support.hpp
@@ -384,6 +419,10 @@ add_library(ase-adp-godot SHARED
     include/ase/adp/godot/godot_hud_focus_ring.hpp
     include/ase/adp/godot/godot_hud_focus_cluster.hpp
     include/ase/adp/godot/godot_hud_action_fan.hpp
+    include/ase/adp/godot/godot_hud_figure_focus.hpp
+    include/ase/adp/godot/godot_hud_figure_switch.hpp
+    include/ase/adp/godot/godot_hud_figure_turn.hpp
+    include/ase/adp/godot/godot_hud_figure_zoom.hpp
     include/ase/adp/godot/godot_hud_sign_marker.hpp
     include/ase/adp/godot/godot_hud_sign_reading.hpp
     include/ase/adp/godot/godot_hud_hand_slot.hpp
@@ -401,10 +440,6 @@ add_library(ase::adp::godot ALIAS ase-adp-godot)
 
 set_target_properties(ase-adp-godot PROPERTIES OUTPUT_NAME ase_adp_godot)
 target_compile_features(ase-adp-godot PRIVATE cxx_std_20)
-target_compile_definitions(ase-adp-godot
-    PRIVATE
-        ASE_ADP_GODOT_VERSION="${PROJECT_VERSION}"
-)
 target_link_libraries(ase-adp-godot
     PRIVATE
         ase::adp::godot-host

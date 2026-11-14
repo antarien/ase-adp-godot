@@ -138,4 +138,38 @@ bool instance_view_of(const KernelHostRecord& record, VivariumInstanceView& out)
     return true;
 }
 
+/**
+ * usecase:101613 show the plant bark tubes (register B0295 point 4). The bark port writes all twelve keys of every
+ * vertex (FloraHostCylExptSystem), so a gap is a broken port - never a tube closed over a vertex nobody laid. The
+ * three links are object ids: whole numbers up to UINT32_MAX, where UINT32_MAX is InvalidEntityId.
+ */
+bool bark_vertex_view_of(const KernelHostRecord& record, VivariumBarkVertexView& out) {
+    out = VivariumBarkVertexView{};
+    out.object_id = record.object_id;
+    const double body = record_value(record, GODOT_KEY_BODY);
+    const double next = record_value(record, GODOT_KEY_NEXT);
+    const double below = record_value(record, GODOT_KEY_BELOW);
+    const double organ = record_value(record, GODOT_KEY_ORGAN);
+    out.x = record_value(record, GODOT_KEY_X);
+    out.y = record_value(record, GODOT_KEY_Y);
+    out.z = record_value(record, GODOT_KEY_Z);
+    out.nx = record_value(record, GODOT_KEY_NX);
+    out.ny = record_value(record, GODOT_KEY_NY);
+    out.nz = record_value(record, GODOT_KEY_NZ);
+    out.u = record_value(record, GODOT_KEY_U);
+    out.v = record_value(record, GODOT_KEY_V);
+    const double limit = static_cast<double>(UINT32_MAX);
+    if (!whole(body) || body > limit || !whole(next) || next > limit || !whole(below) || below > limit ||
+        !whole(organ) || organ > limit || !std::isfinite(out.x) || !std::isfinite(out.y) || !std::isfinite(out.z) ||
+        !std::isfinite(out.nx) || !std::isfinite(out.ny) || !std::isfinite(out.nz) || !std::isfinite(out.u) ||
+        !std::isfinite(out.v)) {
+        return false;
+    }
+    out.body = static_cast<uint32_t>(body);
+    out.next = static_cast<uint32_t>(next);
+    out.below = static_cast<uint32_t>(below);
+    out.organ = static_cast<uint32_t>(organ);
+    return true;
+}
+
 }  // namespace ase::adp::godot

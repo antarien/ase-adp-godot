@@ -174,18 +174,19 @@ void VivariumHud::set_mode(const std::string& name) {
     }
     if (changed) {
         // The rules move the mode inside resolve, after the view asked replay for this frame: the HUD plays again
-        // here and takes the mode and the sign into the key, so the next replay finds nothing new.
+        // here and takes the mode and the sign into the key, so the next replay finds nothing new. The mark stands on
+        // the wall clock the fades play on (replay).
         HudReplayKey key = replay_.key();
         key.mode = mode_;
         key.sign = open_sign_;
-        replay_.mark(key, clock_);
+        replay_.mark(key, wall_);
     }
     brushing_ = false;
     selected_.clear();
     press_.pouring = false;
 }
 
-double VivariumHud::replay(uint32_t level, uint8_t stage, bool dead, double clock) {
+double VivariumHud::replay(uint32_t level, uint8_t stage, bool dead) {
     HudReplayKey key;
     key.mode = mode_;
     key.sign = open_sign_;
@@ -195,7 +196,7 @@ double VivariumHud::replay(uint32_t level, uint8_t stage, bool dead, double cloc
     key.tab = debug_tab_;
     key.stage = stage;
     key.dead = dead;
-    return replay_.take(key, clock);
+    return wall_ - replay_.take(key, wall_);
 }
 
 bool VivariumHud::resolve(VivariumHudFrame& frame, std::string& failed) {
@@ -338,8 +339,8 @@ bool VivariumHud::lays(const char* name) const {
 }
 
 bool VivariumHud::toast(const std::string& key, const std::vector<HudPortValue>& values, const std::string& colour,
-                        double clock, std::string& failed) {
-    return toast_.post(key, values, colour, clock, failed);
+                        std::string& failed) {
+    return toast_.post(key, values, colour, wall_, failed);
 }
 
 void VivariumHud::put_away() {

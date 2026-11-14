@@ -22,8 +22,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-11
- * @modified    2026-11-13
- * @version     00.00.02.00001
+ * @modified    2026-11-14
+ * @version     00.00.02.00002
  */
 
 #include <cstdint>
@@ -36,11 +36,13 @@ namespace ase::adp::godot {
 // which ResourceLoader resolves when load_plant_shader loads the file. No unit splices shader code at run time.
 constexpr const char* GODOT_STAND_IN_SHADER_FILE = "res://shaders/plant_stand_in.gdshader";  // a role whose file is missing, in its stand-in colour, swinging by its includes
 constexpr const char* GODOT_ORGAN_SHADER_FILE = "res://shaders/plant_organ.gdshader";        // a bound organ template on a branch, swinging by its includes
-constexpr const char* GODOT_BARK_SHADER_FILE = "res://shaders/plant_bark.gdshader";          // the bark of the internodes, white and stem-base mixed, swinging by its includes
+constexpr const char* GODOT_BARK_SHADER_FILE = "res://shaders/plant_bark.gdshader";          // the continuous bark tube of every axis, white and stem-base mixed, swinging by its includes
+constexpr const char* GODOT_BARK_SHOWN_ORDERS = "shown_orders";  // uniform of the bark shader: a ring of a higher order closes onto its axis (OrderBudget::shown)
+constexpr const char* GODOT_BARK_COARSE = "coarse";              // uniform of the bark shader: true on the twig tube, where a ring up to the shown orders closes onto its axis instead
 constexpr const char* GODOT_GROUND_SHADER_FILE = "res://shaders/plant_ground.gdshader";      // the ground of one soil
 
 // The swing of a branch (usecase:101335 animate the branch sway): the two uniforms of sway_uniforms.gdshaderinc,
-// set on every swinging material by fill_instances (godot_plant_scene.cpp).
+// set on every swinging material by fill_instances and fill_tube (godot_plant_scene_mesh.cpp).
 constexpr const char* GODOT_SWAY_DATA = "sway_data";          // uniform of every swinging shader: the sway data texture of the instance node
 constexpr const char* GODOT_SWAY_ROW = "sway_row";            // uniform of every swinging shader: GODOT_SWAY_ROW_INSTANCES
 constexpr int32_t GODOT_ORGAN_SWAY_SURFACES = 1;              // surfaces of a bound template the organ shader can draw: the material is set for the whole mesh

@@ -83,6 +83,33 @@ public:
     bool sow(bool picked, const ::godot::Vector3& point, bool dead, const char*& toast, std::string& note);
 
     /**
+     * The spade's cavar at the stem place (operator 2026-11-13, usecase:100388, Q02): `picked` says the tap found the
+     * ground at `point`; within hud_bridge_hand_sow_reach_m of the stem place and over no closed seed it opens the
+     * planting hole there, which stands until cover() closes it. sow() lays a seed into an open hole without the
+     * dibber's closing (Q03). `hole` is the ground the spade digs: the stem place where the hole stands, so the
+     * ground act and the drawn hole meet (B0297). False with the reason in `note` when the tap opens no hole.
+     */
+    bool dig(bool picked, const ::godot::Vector3& point, ::godot::Vector3& hole, std::string& note);
+
+    /**
+     * The spade's amontoar over the planting hole (Q04): within the reach of the stem place an open hole with its seed
+     * is filled, the seed lies covered. `hole` is the ground the fill goes on, the same stem place dig() dug, never
+     * the tap beside it (B0297). False with the reason in `note` when there is no seeded hole to close.
+     */
+    bool cover(bool picked, const ::godot::Vector3& point, ::godot::Vector3& hole, std::string& note);
+
+    /** The register task of the planting hole's port flora.seed.v1 (place, hole_open, seeded, covered, at). */
+    static constexpr const char* GAP_PLANT = "N0485";
+
+    /**
+     * The register task of the bodies of the tool place and the things on the ground (N0487, carrier N0448): they
+     * are to be ase-physics bodies (HUB_PHYS_REG_BODY_ADD with mass and fall), falling by PhysicsGravSystem onto the
+     * dug ground and handed out on a port as HUB_PHYS_BODY_X/Y/Z. Until that port delivers, fill() sets their
+     * height to the ground under them each frame, a bridge default and no physics.
+     */
+    static constexpr const char* GAP_BODY = "N0487";
+
+    /**
      * brookTap (usecase:100399 carry brook water): `picked` says the tap found the ground at `point`, `laid` that a
      * brook runs from `from` to `to`. Only the can of the hand (hud_bridge_hand_can_item) within
      * hud_bridge_hand_brook_reach_m of that line acts, else `toast` stays nullptr and nothing happens; a full can
@@ -223,6 +250,9 @@ private:
     bool sown_ = false;             // S.hole was set
     double sown_at_ = 0.0;          // the view's clock of the sowing, seconds
     ::godot::Vector3 sown_place_;   // the stem place the seed went in (U0, Z0 on the ground)
+    bool dug_ = false;              // the spade opened the planting hole at the stem place (Q02); none at the start
+    bool seeded_ = false;         // a seed lies in the open planting hole (Q03); none at the start, nobody sowed
+    bool covered_ = false;          // the planting hole is closed over its seed (Q04); none at the start
     double belt_len_cm_ = 0.0;      // hud_bridge_belt_len_cm
     double fill_kg_per_l_ = 0.0;    // hud_bridge_fill_kg_per_l
     double sap_kg_per_l_ = 0.0;     // hud_bridge_sap_kg_per_l

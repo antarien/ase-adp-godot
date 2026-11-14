@@ -5,7 +5,7 @@
  *
  * @file        godot_vivarium_hud_loose.hpp
  * @brief       The loosened soil point by point the bridge keeps while flora.patch.v1 carries no loose soil
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD "Die Brücke", operator decision 2026-11-10: the HUD draws every
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD bridge section, operator decision 2026-11-10: the HUD draws every
  *              element from its frame and never asks whether a port delivered. The loosened soil (N0456,
  *              flora.patch.v1 loose) is the mockup's LO while that port is silent, every rule a
  *              hud_bridge_loose_* token of SHA (theme.css --ase-hud-bridge-loose-*).

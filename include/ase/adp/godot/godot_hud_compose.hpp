@@ -5,7 +5,7 @@
  *
  * @file        godot_hud_compose.hpp
  * @brief       VivariumHud: the composition of every HUD building block, its layers, its hits and its gestures
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.5, "VivariumHud, Aufruf aus VivariumView::draw und tap":
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.5, VivariumHud, called from VivariumView::draw and tap:
  *              the one class that owns every building block of the care view, binds them all from one UiTheme,
  *              asks the ContextResolver what the mode shows, draws the layers in the order hud.modes names them,
  *              finds what a touch hits from the topmost layer down, tells the eight gestures of the hand apart and
@@ -280,9 +280,10 @@ public:
     bool tick(double clock, double real, VivariumHudFrame& now, std::vector<VivariumHudRequest>& out,
               std::string& failed);
 
-    /** Posts texts.hud.`key` in `colour`, for a refusal the port answered with; false with the missing name. */
+    /** Posts texts.hud.`key` in `colour`, for a refusal the port answered with; false with the missing name. It stands
+     *  hud_toast_ms on the wall clock, as the mockup's until: performance.now() + 2400 (m.html 931) does. */
     bool toast(const std::string& key, const std::vector<HudPortValue>& values, const std::string& colour,
-               double clock, std::string& failed);
+               std::string& failed);
 
     /** putAway() after an act the view carried out (trunkTap, plugTap): the HUD returns to the focus mode. */
     void put_away();
@@ -311,12 +312,13 @@ public:
     const std::string& verb() const { return verb_; }
 
     /**
-     * The mockup's lastKey (m.html 903): the fades and the drawings play again from `clock` when the mode, the open
-     * sign, the perception `level`, the debug view, its drawer, its tab, the `stage` or the `dead` stand changed since
-     * the last call, and stand at their end otherwise. Answers the clock they play from; the view asks it before it
-     * fills a frame, and the HUD draws from the same clock.
+     * The mockup's lastKey (m.html 903): the fades and the drawings play again when the mode, the open sign, the
+     * perception `level`, the debug view, its drawer, its tab, the `stage` or the `dead` stand changed since the last
+     * call, and stand at their end otherwise. Answers the seconds they have played since. They are CSS animations in
+     * the mockup (m.html 523: class="draw", animation-delay) and run on the wall clock, never on tick's capped dt
+     * (m.html 1024): the seconds are wall_'s, so a stalled frame delays no fade (run 20261113-v11-sown6, sow_done).
      */
-    double replay(uint32_t level, uint8_t stage, bool dead, double clock);
+    double replay(uint32_t level, uint8_t stage, bool dead);
 
     /** The perception level the view starts at (hud.perception.start) while the skill port (GAP_SKILL) is open. */
     uint32_t level_start() const { return resolver_.spec().level_start; }

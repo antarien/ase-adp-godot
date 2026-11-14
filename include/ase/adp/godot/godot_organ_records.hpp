@@ -47,4 +47,7 @@ bool organ_sway_of(const ase::kernel::KernelHostRecord& record, VivariumOrganVie
 /** One instance record as a view; false for a record that misses one of the twelve rows. */
 bool instance_view_of(const ase::kernel::KernelHostRecord& record, VivariumInstanceView& out);
 
+/** One bark record as the view of one tube vertex; false for a gap, a value that is no finite number, or a link that is no object id. */
+bool bark_vertex_view_of(const ase::kernel::KernelHostRecord& record, VivariumBarkVertexView& out);
+
 }  // namespace ase::adp::godot

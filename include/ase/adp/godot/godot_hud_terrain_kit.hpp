@@ -5,7 +5,7 @@
  *
  * @file        godot_hud_terrain_kit.hpp
  * @brief       The ground mode over the ground: the lines of the mesh, the arrows of the brook, the root zone, the reticle
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.4, building block TerrainKit (Gelände-Werkzeugkasten,
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.4, building block TerrainKit (the ground tool kit,
  *              usecase:100389), as the mockup's drawGround in the mode terrain and its drawTerrainOverlay draw it.
  *              The kit draws only while a ground tool is in hand; it changes no ground - every tap is a request
  *              at the port of the module that owns the ground, sent by the view.

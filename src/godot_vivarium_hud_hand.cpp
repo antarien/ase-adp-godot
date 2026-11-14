@@ -3,7 +3,7 @@
  *
  * @file        godot_vivarium_hud_hand.cpp
  * @brief       VivariumHandBridge - the hand's readings from the frame and the mockup's rules, see the header
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.4 and "Die Brücke", see godot_vivarium_hud_hand.hpp.
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.4 and the bridge section, see godot_vivarium_hud_hand.hpp.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -266,6 +266,30 @@ void VivariumHandBridge::cut(HandSlotFrame& hand, std::vector<uint32_t>& cuttabl
         }
     }
     hand.prune_left = static_cast<uint32_t>(cuttable.size());
+
+    // The counts behind the reading, told on their flank (cut_changed): a side axis without an internode has no
+    // record here, so side=0 under a standing stem means the plant offers nothing to cut yet (run
+    // 20261113-c01-motion3: stage 2 with axes 8 but internodes 9, all on the stem).
+    size_t side = 0;
+    for (const auto& entry : record_of) {
+        if (entry.second->order == stem_order + 1.0) {
+            ++side;
+        }
+    }
+    cut_line_ = "hud prune body=" + std::to_string(body) +
+                " stem_order=" + std::to_string(static_cast<uint32_t>(stem_order)) +
+                " internodes=" + std::to_string(record_of.size()) + " side=" + std::to_string(side) +
+                " on_stem=" + std::to_string(roots.size()) + " chosen=" + std::to_string(chosen_.size()) +
+                " left=" + std::to_string(hand.prune_left);
+}
+
+bool VivariumHandBridge::cut_changed(std::string& line) {
+    if (cut_line_ == cut_told_) {
+        return false;
+    }
+    cut_told_ = cut_line_;
+    line = cut_line_;
+    return true;
 }
 
 double VivariumHandBridge::zone_m() const {

@@ -13,7 +13,7 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
  * @modified    2026-11-13
- * @version     00.00.01.00003
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
@@ -110,6 +110,14 @@ bool UiAnchor::horizon(double& y) const {
         return false;
     }
     y = static_cast<double>(out.y);
+    return true;
+}
+
+bool UiAnchor::eye(::godot::Vector3& out) const {
+    if (camera_ == nullptr) {
+        return false;
+    }
+    out = eye_origin_;
     return true;
 }
 

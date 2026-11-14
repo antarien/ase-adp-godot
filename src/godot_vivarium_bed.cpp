@@ -3,8 +3,8 @@
  *
  * @file        godot_vivarium_bed.cpp
  * @brief       VivariumView - Cauce: the bed mode, the ground under the finger and the bed the player lays
- * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8, operator order of 2026-10-25 ("wie er das Flussbett
- *              entsprechend formen kann"): the player shapes the ground with the mouse or the finger. In
+ * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8, operator order of 2026-10-25 (shape the stream bed
+ *              to fit): the player shapes the ground with the mouse or the finger. In
  *              the bed mode the first tap on the ground marks where a bed starts, the second where it
  *              ends, and the bed goes to the host as one more brook, the lay request the configured
  *              brooks take at the start: the width, depth, base flow and catchment of the first configured

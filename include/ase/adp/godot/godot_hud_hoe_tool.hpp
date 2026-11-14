@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_hoe_tool.hpp
  * @brief       The widget of the hoe: a ground tool that puts the hand in the mode terrain
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": HoeTool, the mockup's ToolItem of the enxada. It holds one ItemWidget and learns
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: HoeTool, the mockup's ToolItem of the enxada. It holds one ItemWidget and learns
  *              its item from hud.items, where the entry naming HoeTool gives the key, the mode terrain and the
  *              ground verbs (soltar, amontoar) that TerrainKit offers while it is in the hand. It draws the
  *              tool fitted into a box or unturned at a scale, and gives its reading. hud.items.enxada.case

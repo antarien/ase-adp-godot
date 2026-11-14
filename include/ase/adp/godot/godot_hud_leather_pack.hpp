@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_leather_pack.hpp
  * @brief       The widget of the leather pack: the container worn at the hip that every carried thing lies in
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": LeatherPack, the mockup's ContainerItem of the ranzen (worn). It holds one
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: LeatherPack, the mockup's ContainerItem of the ranzen (worn). It holds one
  *              ItemWidget and learns its item from hud.items, where the entry naming LeatherPack gives the key
  *              and the mode hold. BagIcon draws it closed at the hip, BagWindow open.
  *

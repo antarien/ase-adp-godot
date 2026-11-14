@@ -108,7 +108,7 @@ void VivariumView::follow_water() {
         const std::vector<HudPortValue> rise{HudPortValue{"mm", hud_decimals(patch->soil_mm - water_pending_from_, 0)}};
         const char* key = water_pending_empty_ ? VivariumHud::TOAST_WATERED_EMPTY : VivariumHud::TOAST_WATERED;
         water_pending_empty_ = false;
-        if (hud_live() && !hud_.toast(key, rise, VivariumHud::COLOUR_WATER, hud_clock_, failed)) {
+        if (hud_live() && !hud_.toast(key, rise, VivariumHud::COLOUR_WATER, failed)) {
             fail_hud(failed);
         }
         return;

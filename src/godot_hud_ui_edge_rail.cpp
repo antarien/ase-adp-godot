@@ -12,7 +12,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-12
+ * @modified    2026-11-13
  * @version     00.00.01.00001
  */
 
@@ -59,6 +59,7 @@ bool UiEdgeRail::bind(const UiTheme& theme, std::string& failed) {
     }
     if (!read_token(theme, "hud_rail_x", x_, failed) || !read_token(theme, "hud_rail_top", top_, failed) ||
         !read_token(theme, "hud_rail_bottom", bottom_, failed) ||
+        !read_token(theme, "hud_rail_label_x", label_x_, failed) ||
         !read_token(theme, "hud_rail_label_y", label_y_, failed) ||
         !read_token(theme, "hud_rail_label_size", label_size_, failed) ||
         !read_token(theme, "hud_rail_label_turn", label_turn_, failed) ||
@@ -104,9 +105,11 @@ void UiEdgeRail::draw(UiPen& canvas, const ::godot::Transform2D& frame, double e
     points.push_back(::godot::Vector2(static_cast<float>(x_), static_cast<float>(bottom_)));
     line_.draw(canvas, points, faint_, line_.width(), line_.drawn(elapsed, 0.0, still));
 
-    // T(x, label_y, word, {a: end, tr: rotate(turn x label_y), col: --hud2}).
+    // T(x, label_y, word, {a: end, tr: rotate(turn x label_y), col: --hud2}), on a column of its own
+    // (hud_rail_label_x): turned, the word's glyph height lies across x, so on the rail's x it stood over the
+    // rail and the alert bar (operator 2026-11-13: half a letter to the left, a clear gap to the line)
     UiTextPlace word;
-    word.at = ::godot::Vector2(static_cast<float>(x_), static_cast<float>(label_y_));
+    word.at = ::godot::Vector2(static_cast<float>(label_x_), static_cast<float>(label_y_));
     word.size = label_size_;
     word.anchor = GODOT_TEXT_ANCHOR_END;
     word.color = soft_;

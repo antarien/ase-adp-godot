@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_linen_pouch.hpp
  * @brief       The widget of the linen pouch: the container of the seed, carried in the leather pack and opened apart
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": LinenPouch, the mockup's ContainerItem of the bolsa. It holds one ItemWidget and
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: LinenPouch, the mockup's ContainerItem of the bolsa. It holds one ItemWidget and
  *              learns its item from hud.items, where the entry naming LinenPouch gives the key and the mode hold.
  *
  *              A CONTAINER, NOT A TOOL. Its weight is its own and that of everything in it (the mockup's wt, which

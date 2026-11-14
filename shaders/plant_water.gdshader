@@ -3,8 +3,9 @@
  *
  * @file        plant_water.gdshader
  * @brief       The water ribbon of a brook, with the sky it reflects and the strokes of its current
- * @description The water of the care view (usecase:101339 - show the ground around plant): one plane at
- *              GODOT_WATER_TABLE_M over every ground cell below it (build_water_table, godot_plant_water.hpp). The vertex
+ * @description The water of the care view (usecase:101339 - show the ground around plant): the plane in the bed
+ *              of every brook at its bed plus the depth ase-hydro gives the brook, and no water where no bed lies
+ *              (build_water_table, godot_plant_water.hpp; B0281). The vertex
  *              colour carries the water in the range a colour holds: red the velocity of the stream whose bed holds the
  *              vertex over `velocity_full` (GODOT_WATER_VELOCITY_FULL_M_S), green the depth of the table over
  *              GODOT_WATER_DEPTH_FULL_M, blue and alpha the course of that stream. The velocity moves the ripples along

@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_peg_stack.hpp
  * @brief       The widget of the birch pegs: a stack that puts the hand in the mode plug to close a tap hole
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": PegStack, the mockup's StackItem of the cavilha. It holds one ItemWidget and learns
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: PegStack, the mockup's StackItem of the cavilha. It holds one ItemWidget and learns
  *              its item from hud.items, where the entry naming PegStack gives the key and the mode plug. As a
  *              stack it draws its count at the lower right of its box (`stack_count`, the mockup's ×n at
  *              `(x+w+1, y+h+2)`) while it holds more than one, and its reading names the count. The count is the

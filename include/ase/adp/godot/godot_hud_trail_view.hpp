@@ -6,7 +6,7 @@
  * @file        godot_hud_trail_view.hpp
  * @brief       The trail on arrival: how long the keeper was away and the last events, down to the play chip
  * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.4, building block TrailView (the mockup's arrive()),
- *              drawn in the mode arrive, which the view sets itself when it starts (Rückkehr in den Garten,
+ *              drawn in the mode arrive, which the view sets itself when it starts (return to the garden,
  *              usecase:100390).
  *
  *              THE DIM. The world dims from hud_arrive_dim_y, hud_arrive_dim_h high, stretched to the surface the

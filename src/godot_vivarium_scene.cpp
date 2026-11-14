@@ -7,19 +7,25 @@
  *              (build_plant_scene, godot_plant_scene.hpp) and follow_scene fills it frame by frame from
  *              what the ports carry. The ground is rebuilt when the terrain port changed; the plant when
  *              the organ ports or the template ports changed (usecase:101011 tessellate the organ templates), the
- *              frame time moved the line between fine and coarse cylinder (03.6, V8) or a patch record
- *              moved its stem base; the light and the seeds every frame. Nothing grows here, no matrix
- *              and no template is computed and no height is looked up: the instance ports carry the
- *              matrices, the template ports the meshes, the patch records the stem bases.
+ *              frame time moved the line between fine and coarse cylinder (03.6, V8) or the stem base moved;
+ *              the light and the seeds every frame. Nothing grows here, no matrix and no template is computed:
+ *              the instance ports carry the matrices, the template ports the meshes, the patch records the place
+ *              of the stem base. Its height is the ground's (B0304): the terrain port's height at the stem base,
+ *              read on the lattice of the start square (UiGround), so a hole dug under a plant takes the plant
+ *              down with the ground. A seed stands at the stem base plus the place the seed port carries, all three
+ *              axes as ase-physics holds them; its height is the physics' ground contact, never a ground height
+ *              read here (D2312); that contact measures a hole dug into the levelled disc too (D2315). The line that counts
+ *              what the scene draws stands in godot_vivarium_scene_counts.cpp.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @category    ecs/module
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
+ * @register    N0487 (the stem base as a body its owner reports through its port), carrier N0448
  * @created     2026-10-18
  * @modified    2026-11-13
- * @version     00.00.02.00019
+ * @version     00.00.02.00022
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -31,18 +37,11 @@
 #include <ase/adp/godot/godot_plant_ground_season.hpp>
 #include <ase/adp/godot/godot_plant_horizon_ridge.hpp>
 #include <ase/adp/godot/godot_plant_leaf_season.hpp>
-#include <ase/adp/godot/godot_scene_exposure.hpp>
+#include <ase/adp/godot/godot_vivarium_scene_counts.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
 
-#include <godot_cpp/classes/camera3d.hpp>
-#include <godot_cpp/classes/multi_mesh.hpp>
-#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/time.hpp>
-#include <godot_cpp/variant/basis.hpp>
-#include <godot_cpp/variant/node_path.hpp>
-#include <godot_cpp/variant/quaternion.hpp>
-#include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
 #include <cmath>
@@ -74,157 +73,6 @@ bool same_origins(const std::unordered_map<uint32_t, PlantOrigin>& now,
     return true;
 }
 
-/**
- * What the scene draws, in one line: the ground samples and cells, the internodes and leaves, and the
- * light of the sky port. The window acceptance reads it (register D1647) - a black window and a drawn one
- * show apart only here, not in the patch values.
- */
-::godot::String scene_counts(const GodotHostResourceManager& resources, ::godot::Node3D* scene) {
-    const VivariumSkyView& sky = resources.get_sky();
-    // what of the sky the camera frames: a star or moon direction stands at GODOT_SKY_DISC_DISTANCE from the
-    // middle of the sky dome (sky_dome_centre, godot_plant_sky_disc.hpp), where light_plant_stars and
-    // stand_sky_disc put it, and counts when that point lies in the frustum. The middle is read from the
-    // starfield node, which light_plant_stars stands on it every frame; before the first sky it is the eye.
-    // The night pictures of run frames-20261106-181311 showed no star while the port carried 64: the
-    // records, the framed ones and the drawn instances side by side say which link of the chain drops them.
-    // A star record holds its place on the celestial sphere; the turn record of the sky port turns it into the
-    // world as the starfield node does, so the world direction here is the same the picture draws
-    const ::godot::Camera3D* eye =
-        ::godot::Object::cast_to<::godot::Camera3D>(scene->get_node_or_null(::godot::NodePath(GODOT_PLANT_CAMERA)));
-    const ::godot::Node3D* dome_node =
-        ::godot::Object::cast_to<::godot::Node3D>(scene->get_node_or_null(::godot::NodePath(GODOT_PLANT_STARS)));
-    const ::godot::Vector3 dome = dome_node != nullptr ? dome_node->get_position()
-                                                       : (eye != nullptr ? eye->get_position() : ::godot::Vector3());
-    const ::godot::Basis turn = sky.turn_known
-        ? ::godot::Basis(::godot::Quaternion(static_cast<float>(sky.turn_x), static_cast<float>(sky.turn_y),
-                                             static_cast<float>(sky.turn_z), static_cast<float>(sky.turn_w)).normalized())
-        : ::godot::Basis();
-    uint32_t stars_framed = 0u;
-    uint32_t moons_framed = 0u;
-    double star_low = 0.0;
-    double star_high = 0.0;
-    const uint32_t held = static_cast<uint32_t>(sky.star.size());
-    const uint32_t stars = held < GODOT_SKY_STARS_MAX ? held : GODOT_SKY_STARS_MAX;
-    ::godot::Vector3 first_world(0.0f, 0.0f, 0.0f);
-    for (uint32_t i = 0u; i < stars; ++i) {
-        const VivariumStarView& star = sky.star[i];
-        const ::godot::Vector3 world =
-            turn.xform(::godot::Vector3(static_cast<float>(star.x), static_cast<float>(star.y), static_cast<float>(star.z)));
-        first_world = i == 0u ? world : first_world;
-        star_low = i == 0u || world.y < star_low ? world.y : star_low;
-        star_high = i == 0u || world.y > star_high ? world.y : star_high;
-        if (eye != nullptr && sky.turn_known &&
-            eye->is_position_in_frustum(dome + world * GODOT_SKY_DISC_DISTANCE)) {
-            ++stars_framed;
-        }
-    }
-    // every moon's azimuth and altitude in degrees, so the picture and the line say together where each moon
-    // stands against the fixed camera, so the probe shows whether the simulation brings it through the frame.
-    // The azimuth reads the sky encoding of ase-ephemeris (ephemeris_hrzn_math.hpp: x = cos(az) * across,
-    // z = sin(az) * across); while EPH_CONST_GRID_BEARING_DEG puts +z to the east it is the compass azimuth,
-    // clockwise from north, east at 90
-    ::godot::String moon_dirs;
-    const uint32_t moons = sky.moons < GODOT_SKY_MOONS_MAX ? sky.moons : GODOT_SKY_MOONS_MAX;
-    for (uint32_t i = 0u; i < moons; ++i) {
-        const VivariumMoonView& moon = sky.moon[i];
-        const float moon_up = static_cast<float>(moon.y) < -1.0f ? -1.0f : (static_cast<float>(moon.y) > 1.0f ? 1.0f : static_cast<float>(moon.y));
-        float moon_az = ase::math::atan2(static_cast<float>(moon.z), static_cast<float>(moon.x)) * ase::math::RAD_TO_DEG;
-        moon_az = moon_az < 0.0f ? moon_az + 360.0f : moon_az;
-        moon_dirs += (i == 0u ? "" : ",") + ::godot::String::num(moon_az, 0) + "/" +
-                     ::godot::String::num(ase::math::asin(moon_up) * ase::math::RAD_TO_DEG, 0);
-        if (eye != nullptr &&
-            eye->is_position_in_frustum(dome +
-                                        ::godot::Vector3(static_cast<float>(moon.x), static_cast<float>(moon.y),
-                                                         static_cast<float>(moon.z)) * GODOT_SKY_DISC_DISTANCE)) {
-            ++moons_framed;
-        }
-    }
-    // the sun as the moons: its azimuth and altitude in the same encoding and whether its disc point lies in the
-    // frustum, so a picture without the sun (row N03, the halo) says whether the sky or the camera hides it
-    const float sun_up = static_cast<float>(sky.sun_y) < -1.0f ? -1.0f : (static_cast<float>(sky.sun_y) > 1.0f ? 1.0f : static_cast<float>(sky.sun_y));
-    float sun_az = ase::math::atan2(static_cast<float>(sky.sun_z), static_cast<float>(sky.sun_x)) * ase::math::RAD_TO_DEG;
-    sun_az = sun_az < 0.0f ? sun_az + 360.0f : sun_az;
-    const uint32_t sun_framed =
-        eye != nullptr && sky.sun_y > 0.0 &&
-                eye->is_position_in_frustum(dome +
-                                            ::godot::Vector3(static_cast<float>(sky.sun_x), static_cast<float>(sky.sun_y),
-                                                             static_cast<float>(sky.sun_z)) * GODOT_SKY_DISC_DISTANCE)
-            ? 1u
-            : 0u;
-    // the starfield as it stands: its visible instances and the width of the first one in metres; a width of
-    // 0 is a starfield that draws nothing although its count says otherwise
-    int64_t drawn = 0;
-    double first_width = 0.0;
-    const ::godot::MultiMeshInstance3D* field =
-        ::godot::Object::cast_to<::godot::MultiMeshInstance3D>(scene->get_node_or_null(::godot::NodePath(GODOT_PLANT_STARS)));
-    if (field != nullptr && field->get_multimesh().is_valid()) {
-        drawn = field->get_multimesh()->get_visible_instance_count();
-        if (drawn > 0) {
-            first_width = field->get_multimesh()->get_instance_transform(0).basis.get_scale().x;
-        }
-    }
-    // the world direction of the first star record, east and north share: between two lines of a night it
-    // moves when the sky turns and stands when it does not
-    const double first_x = static_cast<double>(first_world.x);
-    const double first_z = static_cast<double>(first_world.z);
-    const ::godot::String sky_frame =
-        " stars_framed=" + ::godot::String::num_uint64(stars_framed) +
-        " stars_drawn=" + ::godot::String::num_int64(drawn) +
-        " star_width_m=" + ::godot::String::num(first_width, GODOT_LOG_DECIMALS) +
-        " star_up=" + ::godot::String::num(star_low, GODOT_LOG_DECIMALS) + ".." +
-        ::godot::String::num(star_high, GODOT_LOG_DECIMALS) +
-        " star0=" + ::godot::String::num(first_x, GODOT_LOG_DECIMALS) + "/" + ::godot::String::num(first_z, GODOT_LOG_DECIMALS) +
-        " moons=" + ::godot::String::num_uint64(sky.moons) +
-        " moons_framed=" + ::godot::String::num_uint64(moons_framed) +
-        " moon_az_alt=" + (moon_dirs.is_empty() ? ::godot::String("-") : moon_dirs) +
-        " sun_framed=" + ::godot::String::num_uint64(sun_framed) +
-        " sun_az_alt=" + ::godot::String::num(sun_az, 0) + "/" +
-        ::godot::String::num(ase::math::asin(sun_up) * ase::math::RAD_TO_DEG, 0);
-    // the relief the ground is drawn from: lowest and highest sample and the steepest normal; a flat
-    // field (every height equal, every normal straight up) shows here before it shows in the picture
-    double low = 0.0;
-    double high = 0.0;
-    double flattest = 1.0;
-    bool first = true;
-    for (const VivariumTerrainView& sample : resources.get_terrain()) {
-        low = first || sample.height < low ? sample.height : low;
-        high = first || sample.height > high ? sample.height : high;
-        flattest = sample.ny < flattest ? sample.ny : flattest;
-        first = false;
-    }
-    return "ground_samples=" + ::godot::String::num_uint64(resources.get_terrain().size()) +
-           " ground_low=" + ::godot::String::num(low, GODOT_LOG_DECIMALS) +
-           " ground_high=" + ::godot::String::num(high, GODOT_LOG_DECIMALS) +
-           " ground_min_ny=" + ::godot::String::num(flattest, GODOT_LOG_DECIMALS) +
-           " ground_cells=" + ::godot::String::num_uint64(resources.get_ground_cells().size()) +
-           " segments=" + ::godot::String::num_uint64(resources.get_organs(GODOT_ORGAN_SEGMENT).size()) +
-           " leaves=" + ::godot::String::num_uint64(resources.get_organs(GODOT_ORGAN_LEAF).size()) +
-           " sky_known=" + (sky.known ? "1" : "0") +
-           " sun_intensity=" + ::godot::String::num(sky.sun_intensity, GODOT_LOG_DECIMALS) +
-           " ambient_intensity=" + ::godot::String::num(sky.ambient_intensity, GODOT_LOG_DECIMALS) +
-           // the start picture stood red and dim at game hour 15 (run 20261028-phase03-v52, grey 36.2):
-           // elevation and colours of the sky port say whether the port or the picture carries it
-           " sun_up=" + ::godot::String::num(sky.sun_y, GODOT_LOG_DECIMALS) +
-           " sun_rgb=" + ::godot::String::num(sky.sun_r, GODOT_LOG_DECIMALS) + "/" +
-           ::godot::String::num(sky.sun_g, GODOT_LOG_DECIMALS) + "/" + ::godot::String::num(sky.sun_b, GODOT_LOG_DECIMALS) +
-           " sky_rgb=" + ::godot::String::num(sky.background_r, GODOT_LOG_DECIMALS) + "/" +
-           ::godot::String::num(sky.background_g, GODOT_LOG_DECIMALS) + "/" +
-           ::godot::String::num(sky.background_b, GODOT_LOG_DECIMALS) +
-           // the heat shimmer of the fog record: above 0 the haze quad reads the drawn frame and writes it back
-           // over the whole picture, the sky included (veil_plant_scene) - a sky darker than sky_rgb says by this
-           // field whether the veil stood over it (register B0184)
-           " shimmer=" + ::godot::String::num(sky.fog_shimmer, GODOT_LOG_DECIMALS) +
-           // the exposure lift the camera and the background take this frame (scene_exposure): a sky pixel is
-           // the background colour times this lift, so the field says in which colour space it reached the
-           // screen - sRGB-encoded, or linear without the encoding (register B0184)
-           " lift=" + ::godot::String::num(scene_exposure(sky), GODOT_LOG_DECIMALS) +
-           // the star set of the stars port, the instances of the starfield (light_plant_stars): a night
-           // picture without stars says by this count whether the port carried none or the picture hid them
-           " stars=" + ::godot::String::num_uint64(sky.star.size()) +
-           " star_set=" + ::godot::String::num_uint64(sky.star_generation) +
-           " sidereal=" + ::godot::String::num(sky.set_sidereal, GODOT_LOG_DECIMALS) + sky_frame;
-}
-
 }  // namespace
 
 void VivariumView::follow_scene(double elapsed_s) {
@@ -246,11 +94,25 @@ void VivariumView::follow_scene(double elapsed_s) {
         note("scene ground " + scene_counts(resources_, scene_) + " fill_usec=" + ::godot::String::num_uint64(fill_usec) +
              " " + measure(GODOT_NO_PLACE));
     }
-    // the water table at NN0 (usecase:100399 carry brook water): laid anew when ase-hydro changed a stream or
-    // the ground under the table moved, never once per frame
+    // the water of the brooks (usecase:100399 carry brook water): in every bed at its bed plus the depth ase-hydro
+    // gives it, and beside it at the groundwater level ase-hydro gives that brook (build_water_table); laid anew
+    // when ase-hydro changed a stream or the ground under the water moved, never once per frame
     const uint64_t streams = resources_.stream_generation();
     if (ground_moved || streams != scene_streams_) {
         scene_streams_ = streams;
+        // the edge of the bridge for the groundwater beside a brook (N0484): the stream port carries no level
+        // until ase-hydro publishes one; logged once on its edge, the water stays in the beds meanwhile
+        constexpr const char* GAP_GROUNDWATER = "N0484";
+        constexpr const char* GROUNDWATER_FIELD = "flora.brook.v1.groundwater_level_m";
+        bool groundwater = false;
+        for (const VivariumStreamView& stream : resources_.get_streams()) {
+            groundwater = groundwater || std::isfinite(stream.groundwater_level_m);
+        }
+        if (groundwater) {
+            close_gap(GAP_GROUNDWATER, GROUNDWATER_FIELD);
+        } else if (!resources_.get_streams().empty()) {
+            open_gap(GAP_GROUNDWATER, GROUNDWATER_FIELD);
+        }
         const uint64_t water_start_usec = ticks->get_ticks_usec();
         // the ground as fill_ground just left it: the table reads its vertices, never the ports by object id
         const uint32_t wet = fill_plant_water(scene_, resources_.get_streams(), ground_surface_.arrays);
@@ -268,19 +130,47 @@ void VivariumView::follow_scene(double elapsed_s) {
         }
     }
     std::unordered_map<uint32_t, PlantOrigin> origins = plant_origins(patches);
+    // BRIDGE GAP (register N0487, carrier N0448): the view sets the stem base onto the terrain height at the stem (B0304), so a
+    // hole dug under the birch takes it down. That is the plant's own place computed here, which the owner of the
+    // plant has to report through its port as the body ase-physics holds; the seed port already does so (D2312).
+    // Until the patch port carries that height, the terrain at the stem stands in on the lattice and the record's
+    // level off it. This is a bridge, never evidence that the plant stands on the ground; its edge is logged once
+    hud_ground_.follow(resources_.get_terrain(), start_.ground, resources_.terrain_generation());
+    if (!origins.empty()) {
+        open_gap(VivariumCarryBridge::GAP_BODY, "flora.patch.v1.base_y");  // stem base as the owner's body (N0487)
+    }
+    for (auto& origin : origins) {
+        double ground = 0.0;
+        if (hud_ground_.height(origin.second.x, origin.second.z, ground)) {
+            origin.second.y = static_cast<float>(ground);
+        }
+    }
     const bool stood_moved = !same_origins(origins, scene_origins_);
     const uint64_t organs = resources_.organ_generation();
     // the templates arrive with the plugin's first Production run and stay; their generation changes then
     // and with every new host (usecase:101011 tessellate the organ templates)
     const uint64_t templates = resources_.template_generation();
-    if (organs != scene_organs_ || templates != scene_templates_ || orders_moved || stood_moved) {
+    // the bark tubes are laid anew only when the bark port carried a new set, which ase-render-data builds only
+    // when a body ticked (register B0295 point 4, usecase:101613)
+    const uint64_t bark = resources_.bark_generation();
+    if (organs != scene_organs_ || templates != scene_templates_ || bark != scene_bark_ || orders_moved ||
+        stood_moved) {
         // the organ views are read anew with every Dissemination run, so only the first fill after a
         // boot gets a line; later counts stand in the next `scene ground` line
         if (scene_organs_ == 0u) {
             note("scene organs " + scene_counts(resources_, scene_) + " " + measure(GODOT_NO_PLACE));
         }
+        // the edge of the grounded stem base (B0304): the plant moved because the ground under it moved, told
+        // once with its new height, so a picture of a dug hole names the level the birch stands on
+        if (stood_moved && !scene_origins_.empty()) {
+            for (const auto& [body, origin] : origins) {
+                note("scene stem base body=" + ::godot::String::num_uint64(body) +
+                     " ground_y=" + ::godot::String::num(origin.y, GODOT_LOG_DECIMALS));
+            }
+        }
         scene_organs_ = organs;
         scene_templates_ = templates;
+        scene_bark_ = bark;
         scene_origins_ = std::move(origins);
         fill_plant_organs(scene_, resources_, scene_origins_, order_budget_.shown, scene_look_);
         scene_focus_ = GODOT_NO_PLACE;  // the stem bases may have moved: aim again
@@ -294,12 +184,16 @@ void VivariumView::follow_scene(double elapsed_s) {
         if (origin != scene_origins_.end()) {
             const PlantSceneCamera zoomed = patch_focus_zoomed(scene_camera_, zoom_);
             aim_plant_camera(scene_, zoomed, origin->second);
-            // the engine learns where the camera stands (03.11 point 7): the level of detail of
-            // ase-render-data measures from it; aiming happens on a new focus or zoom only
+            // the engine learns where the camera stands and where it looks (03.11 point 7, 07.4): the level
+            // of detail of ase-render-data measures from the eye, the stick of the figure steers along the
+            // heading from eye to target; aiming happens on a new focus or zoom only
             const PatchFocusAim aim = patch_focus_aim(zoomed, origin->second);
-            const ase::kernel::HostStatus viewed = resources_.view(aim.eye_x, aim.eye_y, aim.eye_z);
+            const ase::kernel::HostStatus viewed =
+                resources_.view(aim.eye_x, aim.eye_y, aim.eye_z, aim.target_x, aim.target_y, aim.target_z);
             note("view eye " + ::godot::String::num(aim.eye_x, 2) + " " + ::godot::String::num(aim.eye_y, 2) + " " +
-                 ::godot::String::num(aim.eye_z, 2) + " status " + ::godot::String::num_int64(viewed));
+                 ::godot::String::num(aim.eye_z, 2) + " target " + ::godot::String::num(aim.target_x, 2) + " " +
+                 ::godot::String::num(aim.target_y, 2) + " " + ::godot::String::num(aim.target_z, 2) + " status " +
+                 ::godot::String::num_int64(viewed));
             fill_ground();
             scene_focus_ = focus;
         }
@@ -425,7 +319,10 @@ void VivariumView::follow_scene(double elapsed_s) {
         note("scene sky " + scene_counts(resources_, scene_) + " " + measure(GODOT_NO_PLACE));
     }
     // the seeds every frame (register N0173): ase-physics moves a flying seed in every kinetic step, the seed
-    // port carries where it is, and the view places it at the stem base of its plant without moving it
+    // port carries where it is in the frame of the stem foot, and the view places it at the stem base of its
+    // plant plus that place without moving it. Its height is the one ase-physics holds (D2312): the body's ground
+    // contact measures the terrain sample, over the levelled disc too, so a dug hole takes it down (D2315), and the
+    // view never reads a ground height of its own for it
     fill_plant_seeds(scene_, resources_, scene_origins_, scene_look_);
 }
 

@@ -6,7 +6,7 @@
  * @file        godot_hud_ground_reticle.hpp
  * @brief       The ring of the brush on the ground in the breadth of the tool, and the first point of a bed
  * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.4, building block GroundReticle of TerrainKit, as the
- *              mockup's drawTerrainOverlay draws it under a ground tool (Gelände-Werkzeugkasten, usecase:100389).
+ *              mockup's drawTerrainOverlay draws it under a ground tool (the ground tool kit, usecase:100389).
  *
  *              THE VERB DECIDES THE RING. The verb in hand names its op (hud_verb_<v>_op). A brush verb
  *              (lower, raise, loosen, flatten) works under a ring of hud_verb_<v>_brush_m metres around the

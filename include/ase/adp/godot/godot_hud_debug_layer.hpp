@@ -102,7 +102,7 @@ struct DebugLayerFrame {
     uint8_t stage = GODOT_STAGE_NONE;           // the stage of the chosen patch; NONE: no patch chosen
     double factor = 0.0;                        // the factor the clock runs at, the one the hourglass fills
     double height_scale_m = 0.0;                // the relief amplitude that stands, metres
-    std::string adapter;                       // the adapter's version (ASE_ADP_GODOT_VERSION)
+    std::string adapter;                       // the adapter's version (build.identity adapter_version)
     std::string client;                         // the client commit of the identity
     uint64_t units = 0;                         // units of the bundle
     double day = 0.0;                           // the day of the year of the bridged clock record, from 1

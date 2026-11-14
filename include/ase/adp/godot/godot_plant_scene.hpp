@@ -24,11 +24,17 @@
  *              port carried them - the plant-local 3x4 of ase-render-data becomes a world place through
  *              the node, never through a number changed here.
  *
- *              THE LINE BETWEEN FINE AND COARSE is the order budget's (godot_order_budget.hpp): every
- *              internode is a cylinder instance, those up to the shown order on the fine template
- *              (GODOT_TMPL_FINE), the finer ones on the coarse one (GODOT_TMPL_CORS); leaves, catkins and
- *              fruit stands are instances of their templates. The root lies in the ground and is not
- *              drawn (03.1 point 4).
+ *              THE BARK IS ONE TUBE PER AXIS (register B0295 point 4, usecase:101613): the rings
+ *              ase-render-data built whenever a body ticked, laid out by tubes_by_body into the bark node of a
+ *              body (GODOT_PLANT_BARK, godot_plant_scene_mesh.cpp) with two meshes of the same vertices: the fine
+ *              tube GODOT_PLANT_TUBES on every corner of the knot ring and the coarse tube of the twigs
+ *              GODOT_PLANT_TWIGS on evenly spaced corners (register B0317). The order budget
+ *              (godot_order_budget.hpp) reaches the bark shader as its shown orders: the fine tube closes a ring
+ *              of a higher order onto its axis, the coarse tube a ring up to them, and both a ring thinner than
+ *              a pixel. Leaves, catkins and fruit stands are instances of their templates. The
+ *              root lies in the ground and is not drawn (03.1 point 4). A FAR BODY IS AN IMPOSTOR: beyond the
+ *              distance at which its widest ring is thinner than a pixel (impostor_of, godot_plant_impostor.hpp)
+ *              one card stands for the plant, drawn once by a viewport of its own (godot_plant_scene_impostor.cpp).
  *
  *              THE SUN is the light every scene of this adapter takes from the host
  *              (light_asset_showcase, godot_asset_showcase_scene.hpp), here with shadows - one way from
@@ -42,20 +48,25 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-11-13
- * @version     00.00.10.00000
+ * @modified    2026-11-14
+ * @version     00.00.11.00000
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/godot_plant_geometry.hpp>
 #include <ase/adp/godot/godot_plant_ground.hpp>
+#include <ase/adp/godot/godot_plant_impostor.hpp>
 #include <ase/adp/godot/godot_plant_environment.hpp>  // SkyOvercastShade, the shade of an overcast sky
 #include <ase/adp/godot/godot_plant_look.hpp>
+#include <ase/adp/godot/godot_plant_tubes.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/material.hpp>
+#include <godot_cpp/classes/mesh.hpp>
+#include <godot_cpp/classes/mesh_instance3d.hpp>
+#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 
@@ -101,12 +112,53 @@ void hold_ground_surface(const ::godot::Ref<::godot::ArrayMesh>& mesh, PlantGrou
 void send_ground_patch(const ::godot::Ref<::godot::ArrayMesh>& mesh, const PlantGroundSurface& surface);
 
 /**
- * Replaces the plants: one node per body of `origins` at its stem base, under it the instance records of
- * the five drawn classes put into MultiMesh buffers as the ports carried them - the internodes up to
- * `shown_orders` on the fine cylinder of the template ports (GODOT_TMPL_FINE), those above on the coarse
- * one (GODOT_TMPL_CORS), leaves, catkins and fruit stands on their templates. While the template ports
- * carry no set yet the cylinders and the stand-ins are empty meshes and draw nothing. A plant whose body
- * lost its origin leaves the scene.
+ * The arrays of one surface as an ArrayMesh, normals included as they stand (godot_plant_scene_mesh.cpp); an
+ * empty surface is no mesh.
+ */
+::godot::Ref<::godot::ArrayMesh> mesh_of(const PlantMeshArrays& arrays);
+
+/**
+ * Puts the 3x4 records of `rows` - twelve values each, as the instance port carried them - on the MultiMesh of
+ * `node`, each drawing `shape`; `material` overrides its surfaces, an empty one leaves the template's own. With
+ * `custom`, every instance carries its GODOT_INSTANCE_CUSTOM_VALUES after its twelve values. With `sway`, the
+ * node gets a material of its own, made from `material`, that carries the sway of its instances as a data
+ * texture (usecase:101335 animate the branch sway). No node, nothing.
+ */
+void fill_instances(::godot::MultiMeshInstance3D* node, const ::godot::Ref<::godot::Mesh>& shape,
+                    const std::vector<float>& rows, const std::vector<float>* custom,
+                    const ::godot::Ref<::godot::Material>& material, const std::vector<float>* sway);
+
+/**
+ * Puts the bark tube of one body on `node` (usecase:101613 show the plant bark tubes): one mesh with CUSTOM0 and
+ * CUSTOM1 beside every vertex as tubes_by_body laid them, closed by `indices` - the fine tube (arrays.indices) or
+ * the coarse tube of the twigs (twig_indices, register B0317) - and a material of its own, made from `material`,
+ * with the sway data texture of its internodes, `shown_orders` (GODOT_BARK_SHOWN_ORDERS) and `coarse`
+ * (GODOT_BARK_COARSE). A tube without vertices or indices draws nothing. No node, nothing.
+ */
+void fill_tube(::godot::MeshInstance3D* node, const PlantBodyTube& tube, const std::vector<int32_t>& indices,
+               const ::godot::Ref<::godot::Material>& material, uint32_t shown_orders, bool coarse);
+
+/**
+ * Puts the impostor nodes under `plant` (register B0295 point 4, usecase:101613): the card GODOT_PLANT_IMPOSTOR,
+ * hidden, and the viewport GODOT_PLANT_IMPOSTOR_VIEW of its own world with an orthographic camera and one drawing
+ * node per drawing node of the plant, drawing nothing yet. No plant, nothing.
+ */
+void make_impostor(::godot::Node3D* plant);
+
+/**
+ * Stands the card in for `plant` from `frame.reach` on: the drawing nodes of the plant end their visibility range
+ * there, the drawing nodes of the viewport take the resources the plant nodes were just filled with, the viewport
+ * draws the texture once at the pixels of the frame, and the card begins at the reach in the size of the body. A
+ * frame with reach 0 hides the card and lets the plant draw at every distance. No plant, nothing.
+ */
+void fill_impostor(::godot::Node3D* plant, const PlantImpostorFrame& frame);
+
+/**
+ * Replaces the plants: one node per body of `origins` at its stem base, under it the bark tube of the body
+ * (fill_tube over the bark port, the shown orders `shown_orders`) and the instance records of leaves, catkins
+ * and fruit stands put into MultiMesh buffers as the ports carried them, on their templates. While the template
+ * ports carry no set yet the stand-ins are empty meshes and draw nothing. A plant whose body lost its origin
+ * leaves the scene.
  */
 void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& resources,
                        const std::unordered_map<uint32_t, PlantOrigin>& origins, uint32_t shown_orders,

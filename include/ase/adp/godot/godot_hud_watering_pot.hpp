@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_watering_pot.hpp
  * @brief       The widget of the clay watering pot: a vessel that puts the hand in the mode water and shows its water
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": WateringPot, the mockup's VesselItem of the regador. It holds one ItemWidget and
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: WateringPot, the mockup's VesselItem of the regador. It holds one ItemWidget and
  *              learns its item from hud.items, where the entry naming WateringPot gives the key and the mode
  *              water. As a vessel it draws its water line (item_art.json level, kind line) at the share it
  *              holds, the mockup's `y = 29 - fill / cap * 17`: the level of the place is held_l over capacity_l

@@ -13,8 +13,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-12
- * @version     00.00.04.00018 [seed]
+ * @modified    2026-11-14
+ * @version     00.00.04.00021 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -177,6 +177,157 @@ constexpr const char* kOrganWords[GODOT_ORGAN_COUNT] = {
  */
 constexpr const char* kDayKeyYearDay = "year_day";
 
+/**
+ * THE KEYS OF THE FIGURE PORTS (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE, ase-pl-avatar types.hpp AVATAR_HOST_KEY_*): the
+ * body record carries place, course, horizontal velocity, gait, soul and camera value; the camera record eye and
+ * aim; the stick, orbit and spawn requests their values. Only this unit reads and writes them, so they stand here
+ * and not in types.hpp. The plugin lays the height as its third axis (z) and the second horizontal axis as y; the
+ * view reads them into Godot's order (east, up, north) and computes nothing on them.
+ */
+constexpr const char* kFigureKeyCourse = "yaw";
+constexpr const char* kFigureKeyVelX = "vel_x";
+constexpr const char* kFigureKeyVelY = "vel_y";
+constexpr const char* kFigureKeyGait = "gait";
+constexpr const char* kFigureKeySoul = "soul";
+constexpr const char* kFigureKeyCamera = "camera";
+constexpr const char* kFigureKeyLodNear = "lod_near";
+constexpr const char* kFigureKeyLodMid = "lod_mid";
+constexpr const char* kFigureKeyLodFar = "lod_far";
+constexpr const char* kFigureKeyEyeX = "eye_x";
+constexpr const char* kFigureKeyEyeY = "eye_y";
+constexpr const char* kFigureKeyEyeZ = "eye_z";
+constexpr const char* kFigureKeyAimX = "aim_x";
+constexpr const char* kFigureKeyAimY = "aim_y";
+constexpr const char* kFigureKeyAimZ = "aim_z";
+constexpr const char* kFigureKeyForward = "forward";
+constexpr const char* kFigureKeyStrafe = "strafe";
+constexpr const char* kFigureKeySprint = "sprint";
+constexpr const char* kFigureKeyJump = "jump";
+constexpr const char* kFigureKeyYawDelta = "yaw_delta";
+constexpr const char* kFigureKeyPitchDelta = "pitch_delta";
+constexpr const char* kFigureKeyZoomDelta = "zoom_delta";  // turn request: change of the orbit distance, m (AVATAR_HOST_KEY_ZOOM_DELTA)
+constexpr const char* kFigureKeyItem = "item";      // hold request: catalog id of the thing (AVATAR_HOST_KEY_ITEM)
+constexpr const char* kFigureKeyBearer = "bearer";  // gear record: the figure that carries the piece (AVATAR_HOST_KEY_BEARER)
+constexpr const char* kFigureKeyEyeHeight = "eye_height";  // rig report: eyes above the soles, m (AVATAR_HOST_KEY_EYE_HEIGHT)
+constexpr const char* kFigureKeyHeight = "height";         // rig report: body above the soles, m (AVATAR_HOST_KEY_HEIGHT)
+constexpr const char* kFigureKeySlot = "slot";      // gear record: name_id of the socket (AVATAR_HOST_KEY_SLOT)
+constexpr const char* kFigureKeyKind = "kind";      // gear record: catalog id of the thing (AVATAR_HOST_KEY_KIND)
+constexpr const char* kFigureKeyGaitStnd = "gait_stnd";    // code record: gait of a standing figure (AVATAR_HOST_KEY_GAIT_STND)
+constexpr const char* kFigureKeyGaitWalk = "gait_walk";    // code record: gait of a walking figure (AVATAR_HOST_KEY_GAIT_WALK)
+constexpr const char* kFigureKeyGaitRun = "gait_run";      // code record: gait of a running figure (AVATAR_HOST_KEY_GAIT_RUN)
+constexpr const char* kFigureKeySoulAipc = "soul_aipc";    // code record: soul while the AI leads (AVATAR_HOST_KEY_SOUL_AIPC)
+constexpr const char* kFigureKeySoulSspc = "soul_sspc";    // code record: soul while its player leads (AVATAR_HOST_KEY_SOUL_SSPC)
+constexpr const char* kFigureKeyCamFixed = "cam_fixed";    // code record: camera in the fixed view (AVATAR_HOST_KEY_CAM_FIXED)
+constexpr const char* kFigureKeyCamPlayer = "cam_player";  // code record: camera following the figure (AVATAR_HOST_KEY_CAM_PLAYER)
+constexpr uint32_t kFigureCodeObject = 0u;  // object id of the one code record; the codes belong to no figure (AVATAR_HOST_CODE_OBJECT)
+constexpr double kFigureIdMax = 4294967295.0;       // the largest id a uint32_t holds
+
+/**
+ * A record value as a whole id of 32 bits; false for a value that is missing, negative, broken or too large.
+ * whole() of godot_host_record.cpp compares in float and cannot tell two hash ids above 2^24 apart.
+ */
+bool figure_id_of(double value, uint32_t& out) {
+    if (!std::isfinite(value) || value < 0.0 || value > kFigureIdMax ||
+        static_cast<double>(static_cast<uint32_t>(value)) != value) {
+        return false;
+    }
+    out = static_cast<uint32_t>(value);
+    return true;
+}
+
+/**
+ * One gear record as a piece view (07.10). false for a record that misses one of its three values or carries one
+ * that is no whole id: the gear port writes bearer, slot and kind of every piece (AvatarHostGearExptSystem).
+ */
+bool figure_gear_of(const KernelHostRecord& record, VivariumFigureGearView& out) {
+    out = VivariumFigureGearView{};
+    out.object_id = record.object_id;
+    return figure_id_of(record_value(record, kFigureKeyBearer), out.bearer) &&
+           figure_id_of(record_value(record, kFigureKeySlot), out.slot) &&
+           figure_id_of(record_value(record, kFigureKeyKind), out.kind);
+}
+
+/**
+ * The one code record as the code view (usecase:101611). false for a record that misses one of its seven values or
+ * carries one that is not finite: the code port writes all seven every pass (AvatarHostCodeExptSystem).
+ */
+bool figure_code_of(const KernelHostRecord& record, VivariumFigureCodeView& out) {
+    out = VivariumFigureCodeView{};
+    const double values[] = {record_value(record, kFigureKeyGaitStnd), record_value(record, kFigureKeyGaitWalk),
+                             record_value(record, kFigureKeyGaitRun),  record_value(record, kFigureKeySoulAipc),
+                             record_value(record, kFigureKeySoulSspc), record_value(record, kFigureKeyCamFixed),
+                             record_value(record, kFigureKeyCamPlayer)};
+    for (const double value : values) {
+        if (!std::isfinite(value)) {
+            return false;
+        }
+    }
+    out.gait_stand = values[0];
+    out.gait_walk = values[1];
+    out.gait_run = values[2];
+    out.soul_ai = values[3];
+    out.soul_player = values[4];
+    out.cam_fixed = values[5];
+    out.cam_player = values[6];
+    out.known = true;
+    return true;
+}
+
+/**
+ * One body record as a figure view. false for a record that misses a value or carries one that is not finite:
+ * the body port writes all twelve values of every figure (AvatarHostBodyExptSystem), the three detail bands last.
+ */
+bool figure_view_of(const KernelHostRecord& record, VivariumFigureView& out) {
+    out = VivariumFigureView{};
+    out.object_id = record.object_id;
+    const double values[] = {record_value(record, GODOT_KEY_X),        record_value(record, GODOT_KEY_Z),
+                             record_value(record, GODOT_KEY_Y),        record_value(record, kFigureKeyCourse),
+                             record_value(record, kFigureKeyVelX),     record_value(record, kFigureKeyVelY),
+                             record_value(record, kFigureKeyGait),     record_value(record, kFigureKeySoul),
+                             record_value(record, kFigureKeyCamera),   record_value(record, kFigureKeyLodNear),
+                             record_value(record, kFigureKeyLodMid),   record_value(record, kFigureKeyLodFar)};
+    for (const double value : values) {
+        if (!std::isfinite(value)) {
+            return false;
+        }
+    }
+    out.x = values[0];
+    out.y = values[1];  // the plugin's height axis
+    out.z = values[2];  // the plugin's second horizontal axis
+    out.course = values[3];
+    out.vel_x = values[4];
+    out.vel_z = values[5];
+    out.gait = values[6];
+    out.soul = values[7];
+    out.camera = values[8];
+    out.lod_near = values[9];
+    out.lod_mid = values[10];
+    out.lod_far = values[11];
+    return true;
+}
+
+/** One camera record as the player camera view; false for a record that misses a value or carries one not finite. */
+bool figure_camera_of(const KernelHostRecord& record, VivariumFigureCameraView& out) {
+    out = VivariumFigureCameraView{};
+    out.figure = record.object_id;
+    const double values[] = {record_value(record, kFigureKeyEyeX), record_value(record, kFigureKeyEyeZ),
+                             record_value(record, kFigureKeyEyeY), record_value(record, kFigureKeyAimX),
+                             record_value(record, kFigureKeyAimZ), record_value(record, kFigureKeyAimY)};
+    for (const double value : values) {
+        if (!std::isfinite(value)) {
+            return false;
+        }
+    }
+    out.eye_x = values[0];
+    out.eye_y = values[1];  // the plugin's eye height
+    out.eye_z = values[2];
+    out.aim_x = values[3];
+    out.aim_y = values[4];  // the plugin's aim height
+    out.aim_z = values[5];
+    out.known = true;
+    return true;
+}
+
 /** The organ class a word names; GODOT_ORGAN_COUNT for a word that names none. */
 uint32_t organ_class_of(const std::string& word) {
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
@@ -212,10 +363,14 @@ bool ground_cell_view_of(const KernelHostRecord& record, VivariumGroundCellView&
 }
 
 /**
- * One stream record as a view. false for a record that misses a key: the stream port writes all eight for
- * every brook it names (ase-pl-flora, FloraHostStrmExptSystem).
+ * One stream record as a view. false for a record that misses one of the eight keys the stream port writes for
+ * every brook it names (ase-pl-flora, FloraHostStrmExptSystem). The groundwater beside the bed (B0286) is read
+ * from its own two keys and fails no record: until ase-hydro publishes it (N0484) record_value gives NaN, the
+ * fields keep it, and the view's bridge logs the gap on its edge (VivariumView::follow_scene).
  */
 bool stream_view_of(const KernelHostRecord& record, VivariumStreamView& out) {
+    constexpr const char* KEY_GROUNDWATER_LEVEL = "groundwater_level_m";  // HYD_STREAM_GNDW_LEVEL, world metres
+    constexpr const char* KEY_GROUNDWATER_REACH = "groundwater_reach_m";  // HYD_STREAM_GNDW_REACH, metres
     out = VivariumStreamView{};
     out.object_id = record.object_id;
     out.x = record_value(record, GODOT_KEY_X);
@@ -226,21 +381,31 @@ bool stream_view_of(const KernelHostRecord& record, VivariumStreamView& out) {
     out.depth_m = record_value(record, GODOT_KEY_WATER_DEPTH);
     out.velocity_m_s = record_value(record, GODOT_KEY_VELOCITY);
     out.discharge_m3_s = record_value(record, GODOT_KEY_DISCHARGE);
+    out.groundwater_level_m = record_value(record, KEY_GROUNDWATER_LEVEL);
+    out.groundwater_reach_m = record_value(record, KEY_GROUNDWATER_REACH);
     return std::isfinite(out.x) && std::isfinite(out.z) && std::isfinite(out.end_x) && std::isfinite(out.end_z) &&
            std::isfinite(out.half_m) && std::isfinite(out.depth_m) && std::isfinite(out.velocity_m_s) &&
            std::isfinite(out.discharge_m3_s);
 }
 
-/** Whether two reads of the stream port carry the same water, brook for brook in port order. */
+/**
+ * Whether two reads of the stream port carry the same water, brook for brook in port order. The groundwater pair
+ * is NaN while the port carries none, and NaN equals nothing, so two reads without it count as the same there;
+ * otherwise every read would be a change and the water table would be laid again each frame.
+ */
 bool same_streams(const std::vector<VivariumStreamView>& read, const std::vector<VivariumStreamView>& held) {
     if (read.size() != held.size()) {
         return false;
     }
     for (std::size_t i = 0u; i < read.size(); ++i) {
+        const bool level_same = read[i].groundwater_level_m == held[i].groundwater_level_m ||
+                                (std::isnan(read[i].groundwater_level_m) && std::isnan(held[i].groundwater_level_m));
+        const bool reach_same = read[i].groundwater_reach_m == held[i].groundwater_reach_m ||
+                                (std::isnan(read[i].groundwater_reach_m) && std::isnan(held[i].groundwater_reach_m));
         if (read[i].object_id != held[i].object_id || read[i].x != held[i].x || read[i].z != held[i].z ||
             read[i].end_x != held[i].end_x || read[i].end_z != held[i].end_z || read[i].half_m != held[i].half_m ||
             read[i].depth_m != held[i].depth_m || read[i].velocity_m_s != held[i].velocity_m_s ||
-            read[i].discharge_m3_s != held[i].discharge_m3_s) {
+            read[i].discharge_m3_s != held[i].discharge_m3_s || !level_same || !reach_same) {
             return false;
         }
     }
@@ -272,6 +437,53 @@ bool same_ground(const std::vector<VivariumTerrainView>& samples, const std::vec
         const VivariumGroundCellView& b = held_cells[i];
         if (a.object_id != b.object_id || a.body != b.body || a.sw != b.sw || a.se != b.se || a.ne != b.ne ||
             a.nw != b.nw) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Whether two reads of the bark port carry the same tubes, vertex for vertex in port order: only a set that
+ * differs moves bark_generation, so the view lays the tubes anew once per new set and not once per read.
+ */
+bool same_bark(const std::vector<VivariumBarkVertexView>& read, const std::vector<VivariumBarkVertexView>& held) {
+    if (read.size() != held.size()) {
+        return false;
+    }
+    for (std::size_t i = 0u; i < read.size(); ++i) {
+        const VivariumBarkVertexView& a = read[i];
+        const VivariumBarkVertexView& b = held[i];
+        if (a.object_id != b.object_id || a.body != b.body || a.x != b.x || a.y != b.y || a.z != b.z ||
+            a.nx != b.nx || a.ny != b.ny || a.nz != b.nz || a.u != b.u || a.v != b.v || a.next != b.next ||
+            a.below != b.below || a.organ != b.organ) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Whether the vertices name exactly the internodes the segment port showed: every vertex an internode of the
+ * set, every internode of the set on at least one ring. ase-render-data gives every internode its tip ring, so
+ * a set that names other internodes is an old set the host still holds while the new one is filed page by page.
+ */
+bool names_the_internodes(const std::vector<VivariumBarkVertexView>& vertices,
+                          const std::vector<VivariumOrganView>& internodes) {
+    std::unordered_map<uint32_t, bool> ringed;
+    ringed.reserve(internodes.size());
+    for (const VivariumOrganView& internode : internodes) {
+        ringed.emplace(internode.object_id, false);
+    }
+    for (const VivariumBarkVertexView& vertex : vertices) {
+        const auto found = ringed.find(vertex.organ);
+        if (found == ringed.end()) {
+            return false;
+        }
+        found->second = true;
+    }
+    for (const auto& entry : ringed) {
+        if (!entry.second) {
             return false;
         }
     }
@@ -799,7 +1011,8 @@ bool ports_named(const VivariumStartConfig& config) {
                  !config.ground_port.empty() && !config.brook_port.empty() && !config.terrain_port.empty() &&
                  !config.ground_cell_port.empty() && !config.sky_port.empty() && !config.stars_port.empty() &&
                  !config.seed_port.empty() &&
-                 !config.tile_port.empty() && !config.sway_port.empty() && !config.stream_port.empty() &&
+                 !config.tile_port.empty() && !config.sway_port.empty() && !config.bark_port.empty() &&
+                 !config.stream_port.empty() &&
                  !config.level_port.empty() &&
                  !config.flatten_port.empty() && !config.lower_port.empty() && !config.raise_port.empty() &&
                  !config.op_lower.empty() && !config.op_raise.empty() &&
@@ -1338,18 +1551,28 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         const double at_x = (*view)[GODOT_SELFTEST_KEY_X].value_or(std::nan(""));
         const double at_y = (*view)[GODOT_SELFTEST_KEY_Y].value_or(std::nan(""));
         const double at_z = (*view)[GODOT_SELFTEST_KEY_Z].value_or(std::nan(""));
+        const double aim_x = (*view)[GODOT_SELFTEST_KEY_AIM_X].value_or(std::nan(""));
+        const double aim_y = (*view)[GODOT_SELFTEST_KEY_AIM_Y].value_or(std::nan(""));
+        const double aim_z = (*view)[GODOT_SELFTEST_KEY_AIM_Z].value_or(std::nan(""));
         const std::string expected = (*view)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
-        if (!std::isfinite(at_x) || !std::isfinite(at_y) || !std::isfinite(at_z) || expected.empty()) {
-            report_broken(label, GODOT_SELFTEST_KEY_VIEW, "needs a finite x, y, z and status", result, report);
+        if (!std::isfinite(at_x) || !std::isfinite(at_y) || !std::isfinite(at_z) || !std::isfinite(aim_x) ||
+            !std::isfinite(aim_y) || !std::isfinite(aim_z) || expected.empty()) {
+            report_broken(label, GODOT_SELFTEST_KEY_VIEW, "needs a finite x, y, z, aim_x, aim_y, aim_z and status",
+                          result, report);
             return false;
         }
         KernelHostInput input{};
         (void)put_value(input, GODOT_KEY_X, at_x);
         (void)put_value(input, GODOT_KEY_Y, at_y);
         (void)put_value(input, GODOT_KEY_Z, at_z);
+        (void)put_value(input, GODOT_KEY_AIM_X, aim_x);
+        (void)put_value(input, GODOT_KEY_AIM_Y, aim_y);
+        (void)put_value(input, GODOT_KEY_AIM_Z, aim_z);
         const std::string actual = GodotHostResourceManager::status_name(
             host.submit(config.view_port.c_str(), config.op_view.c_str(), &input));
-        report_check(check, "action=view x=" + decimal(at_x) + " y=" + decimal(at_y) + " z=" + decimal(at_z),
+        report_check(check,
+                     "action=view x=" + decimal(at_x) + " y=" + decimal(at_y) + " z=" + decimal(at_z) +
+                         " aim_x=" + decimal(aim_x) + " aim_y=" + decimal(aim_y) + " aim_z=" + decimal(aim_z),
                      actual, expected, actual == expected, result, report);
         return true;
     }
@@ -1488,7 +1711,8 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.ground_cell_port.c_str()) && host_->has_port(config_.sky_port.c_str()) &&
                    host_->has_port(config_.stars_port.c_str()) &&
                    host_->has_port(config_.seed_port.c_str()) && host_->has_port(config_.tile_port.c_str()) &&
-                   host_->has_port(config_.sway_port.c_str()) && host_->has_port(config_.stream_port.c_str()) &&
+                   host_->has_port(config_.sway_port.c_str()) && host_->has_port(config_.bark_port.c_str()) &&
+                   host_->has_port(config_.stream_port.c_str()) &&
                    host_->has_port(config_.level_port.c_str()) && host_->has_port(config_.flatten_port.c_str()) &&
                    host_->has_port(config_.lower_port.c_str()) && host_->has_port(config_.raise_port.c_str()) &&
                    host_->has_port(config_.elevation_port.c_str()) &&
@@ -1532,6 +1756,17 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     status = lay_brooks();
     if (status != ase::kernel::HostStatusOk) {
         return fail(GODOT_STEP_BROOK, status);
+    }
+    // THE FIGURE OF THIS SEAT (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.8): one spawn request on the spawn port of
+    // ase-pl-avatar, ase-player spawns the figure at the configured place. A host whose unit set carries no
+    // ase-pl-avatar offers no figure port: the view then draws its scene without a figure and names the gap.
+    if (figure_offered()) {
+        status = spawn_figure(config_.figure_seat, config_.figure_x, config_.figure_z);
+        if (status != ase::kernel::HostStatusOk) {
+            return fail(GODOT_STEP_LAY, status);
+        }
+    } else {
+        (void)host_->note(GODOT_LOG_SOURCE, "figure ports not offered: ase-pl-avatar is not in the unit set, no figure");
     }
 
     records_.assign(ase::kernel::HostRecordsMax, KernelHostRecord{});
@@ -1582,6 +1817,9 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
         instances_[c].clear();
     }
     organ_generation_ += 1u;
+    bark_.clear();
+    bark_owed_ = false;
+    bark_generation_ += 1u;
     terrain_.clear();
     ground_cells_.clear();
     terrain_generation_ += 1u;
@@ -1592,6 +1830,10 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     template_generation_ += 1u;
     sky_ = VivariumSkyView{};
     seeds_.clear();
+    figures_.clear();
+    figure_camera_ = VivariumFigureCameraView{};
+    figure_gear_.clear();
+    figure_code_ = VivariumFigureCodeView{};
     if (!host_) {
         return status;  // no host, no logger: the node shows and prints the failure itself
     }
@@ -2171,6 +2413,10 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     if (organs != ase::kernel::HostStatusOk) {
         return organs;
     }
+    const HostStatus bark = read_bark();
+    if (bark != ase::kernel::HostStatusOk) {
+        return bark;
+    }
     const HostStatus terrain = read_terrain();
     if (terrain != ase::kernel::HostStatusOk) {
         return terrain;
@@ -2191,7 +2437,11 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     if (stars != ase::kernel::HostStatusOk) {
         return stars;
     }
-    return read_seeds();
+    const HostStatus seeds = read_seeds();
+    if (seeds != ase::kernel::HostStatusOk) {
+        return seeds;
+    }
+    return read_figures();
 }
 
 HostStatus GodotHostResourceManager::read_organs() {
@@ -2306,6 +2556,63 @@ HostStatus GodotHostResourceManager::read_organs() {
         }
     }
     organ_generation_ += 1u;
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_bark() {
+    // THE BARK SET COMES PAGE BY PAGE (register B0295 point 4). ase-render-data rebuilds the tubes of a body that
+    // ticked in GODOT_ORGAN_SCHEDULE; ase-pl-flora files the changed set at GODOT_BARK_VERTS_PER_PASS vertices per
+    // GODOT_BARK_SCHEDULE pass, and the host keeps the old set until the pass that files the last page. A read
+    // after a new run therefore may still see the old set: the port is read with every snapshot until the new
+    // set is in - a read that differs from the held set, or a read that names exactly the internodes the segment
+    // port showed once the passes since the run covered the organ reads and every page of that set. A run that
+    // changed no tube files nothing, and its first read already ends the reads.
+    uint64_t runs = 0u;
+    const HostStatus counted = host_->schedule_runs(GODOT_ORGAN_SCHEDULE, &runs);
+    if (counted != ase::kernel::HostStatusOk) {
+        return counted;
+    }
+    uint64_t passes = 0u;
+    const HostStatus passed = host_->schedule_runs(GODOT_BARK_SCHEDULE, &passes);
+    if (passed != ase::kernel::HostStatusOk) {
+        return passed;
+    }
+    if (runs != bark_runs_ || bark_generation_ == 0u) {
+        bark_runs_ = runs;
+        bark_passes_ = passes;
+        bark_owed_ = true;
+    }
+    if (!bark_owed_) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.bark_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumBarkVertexView> vertices;
+    vertices.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumBarkVertexView view;
+        if (!bark_vertex_view_of(organ_records_[i], view)) {
+            bark_.clear();
+            return refuse_record(*host_, config_.bark_port, organ_records_[i].object_id,
+                                 "bark vertex incomplete or out of range");
+        }
+        vertices.push_back(view);
+    }
+    const uint64_t pages = (static_cast<uint64_t>(written) + GODOT_BARK_VERTS_PER_PASS - 1u) / GODOT_BARK_VERTS_PER_PASS;
+    const bool covered = passes - bark_passes_ > GODOT_ORGAN_READS_PER_RUN + pages;
+    const bool changed = !same_bark(vertices, bark_);
+    if (changed) {
+        bark_ = std::move(vertices);
+        bark_generation_ += 1u;
+        bark_owed_ = false;
+        return ase::kernel::HostStatusOk;
+    }
+    if (covered && names_the_internodes(bark_, organs_[GODOT_ORGAN_SEGMENT])) {
+        bark_owed_ = false;
+    }
     return ase::kernel::HostStatusOk;
 }
 
@@ -2568,6 +2875,248 @@ HostStatus GodotHostResourceManager::read_seeds() {
     return ase::kernel::HostStatusOk;
 }
 
+HostStatus GodotHostResourceManager::read_figures() {
+    // THE FIGURES ARE READ EVERY SNAPSHOT (07.8): ase-player moves a figure in every frame and ase-pl-avatar lays the
+    // body port anew in every Production run (AvatarHostBodyExptSystem), the camera port after it
+    // (AvatarHostCamExptSystem). A host without the plugin offers neither port: no figure, nothing broken.
+    figures_.clear();
+    figure_camera_ = VivariumFigureCameraView{};
+    figure_gear_.clear();
+    figure_code_ = VivariumFigureCodeView{};
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    HostStatus status = snapshot_all(*host_, config_.figure_body_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    figures_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumFigureView view;
+        if (!figure_view_of(organ_records_[i], view)) {
+            figures_.clear();
+            return refuse_record(*host_, config_.figure_body_port, organ_records_[i].object_id,
+                                 "figure body incomplete or not finite");
+        }
+        figures_.push_back(view);
+    }
+    // one active camera at most: the camera port carries a record only while that camera follows a figure
+    status = snapshot_all(*host_, config_.figure_camera_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written > 1u) {
+        return refuse_record(*host_, config_.figure_camera_port, organ_records_[0].object_id,
+                             "more than one active player camera");
+    }
+    if (written == 1u && !figure_camera_of(organ_records_[0], figure_camera_)) {
+        figure_camera_ = VivariumFigureCameraView{};
+        return refuse_record(*host_, config_.figure_camera_port, organ_records_[0].object_id,
+                             "player camera without eye or aim");
+    }
+    // what the figures carry (07.10): the plugin closes the gear set every Production run after the camera
+    // (AvatarHostGearExptSystem), so a figure without a record holds nothing this frame
+    status = snapshot_all(*host_, config_.figure_gear_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    figure_gear_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumFigureGearView piece;
+        if (!figure_gear_of(organ_records_[i], piece)) {
+            figure_gear_.clear();
+            return refuse_record(*host_, config_.figure_gear_port, organ_records_[i].object_id,
+                                 "gear piece without bearer, slot or kind as whole id");
+        }
+        figure_gear_.push_back(piece);
+    }
+    // what gait, soul and camera of the body record mean (usecase:101611): the plugin files one code record every
+    // Production run (AvatarHostCodeExptSystem), so standing figures without it are a broken plugin, never a view
+    // that guesses the codes
+    status = snapshot_all(*host_, config_.figure_code_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written > 1u) {
+        return refuse_record(*host_, config_.figure_code_port, organ_records_[0].object_id,
+                             "more than one code record");
+    }
+    if (written == 0u) {
+        return figures_.empty() ? ase::kernel::HostStatusOk
+                                : refuse_record(*host_, config_.figure_code_port, kFigureCodeObject,
+                                                "figures without their codes");
+    }
+    if (!figure_code_of(organ_records_[0], figure_code_)) {
+        figure_code_ = VivariumFigureCodeView{};
+        return refuse_record(*host_, config_.figure_code_port, organ_records_[0].object_id,
+                             "code record incomplete or not finite");
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::spawn_figure(uint32_t seat, double x, double z) {
+    // The request names the seat and a place: the figure is ase-player's, the place on the ground the plugin's to
+    // check. The plugin's second horizontal axis is Godot's north.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = seat;
+    (void)put_value(input, GODOT_KEY_X, x);
+    (void)put_value(input, GODOT_KEY_Y, z);
+    return host_->submit(config_.figure_spawn_port.c_str(), config_.op_spawn.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::steer_figure(uint32_t figure, double forward, double strafe, double sprint,
+                                                  double jump) {
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kFigureKeyForward, forward);
+    (void)put_value(input, kFigureKeyStrafe, strafe);
+    (void)put_value(input, kFigureKeySprint, sprint);
+    (void)put_value(input, kFigureKeyJump, jump);
+    return host_->submit(config_.figure_stick_port.c_str(), config_.op_steer.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::turn_figure_camera(uint32_t figure, double yaw_delta, double pitch_delta) {
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    // AvatarHostOrbtSystem turns a camera only on a whole request: yaw, pitch AND zoom; a drag leaves the distance.
+    (void)put_value(input, kFigureKeyYawDelta, yaw_delta);
+    (void)put_value(input, kFigureKeyPitchDelta, pitch_delta);
+    (void)put_value(input, kFigureKeyZoomDelta, 0.0);
+    return host_->submit(config_.figure_orbit_port.c_str(), config_.op_turn.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::zoom_figure_camera(uint32_t figure, double zoom_delta) {
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    // The same whole turn request as the drag, with the course left alone: only the orbit distance moves.
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kFigureKeyYawDelta, 0.0);
+    (void)put_value(input, kFigureKeyPitchDelta, 0.0);
+    (void)put_value(input, kFigureKeyZoomDelta, zoom_delta);
+    return host_->submit(config_.figure_orbit_port.c_str(), config_.op_turn.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::switch_figure_camera(uint32_t figure) {
+    // The switch carries no value: which camera is active is ase-camera's, the view only asks for the other one.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    return host_->submit(config_.figure_switch_port.c_str(), config_.op_switch.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::release_figure(uint32_t figure) {
+    // soul.mode on a figure the player leads (07.11): the AI leads it on; no value, the port names the direction.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    return host_->submit(config_.figure_release_port.c_str(), config_.op_release.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::seize_figure(uint32_t figure) {
+    // soul.mode on a figure the AI leads (07.11): the player takes it back; no value, the port names the direction.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    return host_->submit(config_.figure_seize_port.c_str(), config_.op_seize.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::hold_figure(uint32_t figure, uint32_t item) {
+    // The hand of Phase 06 took a thing (07.10): the item travels as its catalog id; what the thing is and
+    // whether the figure may carry it are ase-pl-avatar's and ase-equipment's to check.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kFigureKeyItem, static_cast<double>(item));
+    return host_->submit(config_.figure_hold_port.c_str(), config_.op_hold.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::drop_figure(uint32_t figure) {
+    // The hand of Phase 06 let its thing go (07.10): no value, the port names the slot it empties.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    return host_->submit(config_.figure_drop_port.c_str(), config_.op_drop.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::measure_figure(uint32_t figure, double eye_height, double height) {
+    // The scene measured the skeleton it built (07.6): eye height and height go to the plugin as they are;
+    // their range is ase-pl-avatar's to check, the face landing of ase-camera reads the eye height from there.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kFigureKeyEyeHeight, eye_height);
+    (void)put_value(input, kFigureKeyHeight, height);
+    return host_->submit(config_.figure_rig_port.c_str(), config_.op_measure.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::turn_figure(uint32_t figure, double yaw_delta) {
+    // fig.turn (07.7): the same operation as the orbit, on the figure's own turn port; the plugin bounds the delta.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kFigureKeyYawDelta, yaw_delta);
+    return host_->submit(config_.figure_turn_port.c_str(), config_.op_turn.c_str(), &input);
+}
+
 HostStatus GodotHostResourceManager::irrigate(uint32_t object_id, double amount_mm) {
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
@@ -2703,7 +3252,8 @@ HostStatus GodotHostResourceManager::shape(double height_scale_m, double base_he
     return host_->submit(config_.elevation_port.c_str(), config_.op_shape.c_str(), &input);
 }
 
-HostStatus GodotHostResourceManager::view(double x, double y, double z) {
+HostStatus GodotHostResourceManager::view(double x, double y, double z, double aim_x, double aim_y,
+                                          double aim_z) {
     // The request names no object: the camera is the one camera of this view.
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
@@ -2712,6 +3262,9 @@ HostStatus GodotHostResourceManager::view(double x, double y, double z) {
     (void)put_value(input, GODOT_KEY_X, x);
     (void)put_value(input, GODOT_KEY_Y, y);
     (void)put_value(input, GODOT_KEY_Z, z);
+    (void)put_value(input, GODOT_KEY_AIM_X, aim_x);
+    (void)put_value(input, GODOT_KEY_AIM_Y, aim_y);
+    (void)put_value(input, GODOT_KEY_AIM_Z, aim_z);
     return host_->submit(config_.view_port.c_str(), config_.op_view.c_str(), &input);
 }
 
@@ -2759,6 +3312,14 @@ uint64_t GodotHostResourceManager::organ_generation() const {
     return organ_generation_;
 }
 
+const std::vector<VivariumBarkVertexView>& GodotHostResourceManager::get_bark() const {
+    return bark_;
+}
+
+uint64_t GodotHostResourceManager::bark_generation() const {
+    return bark_generation_;
+}
+
 const std::vector<VivariumTerrainView>& GodotHostResourceManager::get_terrain() const {
     return terrain_;
 }
@@ -2797,6 +3358,34 @@ const VivariumSkyView& GodotHostResourceManager::get_sky() const {
 
 const std::vector<VivariumSeedView>& GodotHostResourceManager::get_seeds() const {
     return seeds_;
+}
+
+const std::vector<VivariumFigureView>& GodotHostResourceManager::get_figures() const {
+    return figures_;
+}
+
+const VivariumFigureCameraView& GodotHostResourceManager::get_figure_camera() const {
+    return figure_camera_;
+}
+
+const std::vector<VivariumFigureGearView>& GodotHostResourceManager::get_figure_gear() const {
+    return figure_gear_;
+}
+
+const VivariumFigureCodeView& GodotHostResourceManager::get_figure_code() const {
+    return figure_code_;
+}
+
+bool GodotHostResourceManager::figure_offered() const {
+    // every figure port of the configuration, or none: a half offered plugin is no figure
+    return host_ && !config_.figure_body_port.empty() && host_->has_port(config_.figure_body_port.c_str()) &&
+           host_->has_port(config_.figure_camera_port.c_str()) && host_->has_port(config_.figure_spawn_port.c_str()) &&
+           host_->has_port(config_.figure_stick_port.c_str()) && host_->has_port(config_.figure_orbit_port.c_str()) &&
+           host_->has_port(config_.figure_switch_port.c_str()) && host_->has_port(config_.figure_release_port.c_str()) &&
+           host_->has_port(config_.figure_seize_port.c_str()) && host_->has_port(config_.figure_hold_port.c_str()) &&
+           host_->has_port(config_.figure_drop_port.c_str()) && host_->has_port(config_.figure_gear_port.c_str()) &&
+           host_->has_port(config_.figure_rig_port.c_str()) && host_->has_port(config_.figure_turn_port.c_str()) &&
+           host_->has_port(config_.figure_code_port.c_str());
 }
 
 // LOG LINES
@@ -2966,6 +3555,11 @@ void GodotHostResourceManager::clear_all() {
     organ_runs_ = 0u;
     organ_reads_due_ = 0u;
     organ_generation_ += 1u;  // the view drops the geometry of the old host
+    bark_.clear();
+    bark_runs_ = 0u;
+    bark_passes_ = 0u;
+    bark_owed_ = false;
+    bark_generation_ += 1u;   // and its bark tubes
     terrain_.clear();
     ground_cells_.clear();
     terrain_runs_ = 0u;
@@ -2978,6 +3572,10 @@ void GodotHostResourceManager::clear_all() {
     template_generation_ += 1u;  // and its templates
     sky_ = VivariumSkyView{};   // and its light
     seeds_.clear();             // and its seeds
+    figures_.clear();           // and its figures
+    figure_camera_ = VivariumFigureCameraView{};  // and the camera following one
+    figure_gear_.clear();       // and what the figures carry
+    figure_code_ = VivariumFigureCodeView{};  // and what their codes mean
     bundle_ = VivariumBundleInfo{};
     manifests_.clear();
 }

@@ -5,7 +5,7 @@
  *
  * @file        godot_vivarium_hud_hand.hpp
  * @brief       The readings of the hand the bridge writes into the HUD's frame while their ports are silent
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.4 and "Die Brücke", operator decision 2026-11-10: the HUD
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.4 and the bridge section, operator decision 2026-11-10: the HUD
  *              draws every element from its frame and never asks whether a port delivered. The hand's readings
  *              stand on what this frame carries and on the mockup's render() and frame() where a port reports
  *              nothing yet, every rule a hud_bridge_hand_* token of SHA (theme.css --ase-hud-bridge-hand-*).
@@ -106,6 +106,13 @@ public:
     void cut(HandSlotFrame& hand, std::vector<uint32_t>& cuttable, uint32_t body,
              const std::vector<VivariumOrganView>& organs, const std::vector<VivariumInstanceView>& segments);
 
+    /**
+     * The flank of the cut's reading: true once when the counts behind hand.prune_left changed since the last
+     * call, with the line naming them in `line` (body, stem order, internodes, side internodes, side shoots on the
+     * stem, chosen, left). A plant whose side axes carry no internode yet reads 0 here: nothing stands to be cut.
+     */
+    bool cut_changed(std::string& line);
+
     /** The radius of the root zone, metres: the mockup's RROOT while flora.root.v1 reports none (N0463). */
     [[nodiscard]] double zone_m() const;
 
@@ -143,6 +150,8 @@ private:
     uint32_t cut_most_ = 0;      // hud_bridge_hand_cut_most: TREE.cand's slice(0, 5)
     uint32_t cut_body_ = 0;      // the patch object the choice was made on
     std::vector<uint32_t> chosen_;  // the side shoots chosen on it, lowest first
+    std::string cut_line_;          // the counts behind prune_left of the last cut
+    std::string cut_told_;          // the counts last told on the flank
     uint32_t root_seed_ = 0;          // hud_bridge_root_seed: drawRootCut's rng(3)
     double root_length_ = 0.0;        // hud_bridge_root_length: the 16 of 16 + SCALE[S.stage] * 16
     double root_length_grown_ = 0.0;  // hud_bridge_root_length_grown: the SCALE's 16

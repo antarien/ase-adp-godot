@@ -16,10 +16,24 @@
  *              one sample per lattice point of it. follow indexes the samples by their lattice point, column
  *              (x - (centre x - half edge)) / step and row likewise north, rounded, once per new terrain read
  *              (terrain_generation). A lattice point the port carried no sample for stays
- *              GODOT_HUD_GROUND_NO_SAMPLE. height interpolates the four samples around a place, linear in
- *              both directions - the height the drawn mesh shows there; it computes no height the module
+ *              GODOT_HUD_GROUND_NO_SAMPLE. height interpolates on the triangle of the drawn mesh the place
+ *              lies on: build_ground draws each cell as (sw, se, ne) and (sw, ne, nw), so a place east of the
+ *              diagonal from sw to ne stands on the plane of the first and one north of it on the plane of the
+ *              second - the height the drawn mesh shows there. A height linear in both directions over the four
+ *              corners leaves that surface by up to a quarter of the cell's twist, centimetres on a carved bank.
+ *              It was not what hid the water of the brook: on the triangles the same 1716 of 1716 water points
+ *              stay hidden (B0285, run 20261113-d2309-tri), because the water stands 0.43 m under the lip of a
+ *              bed carved 0.6 m deep, and the eye 1.9 m high and 9.5 m off looks over that lip onto the far
+ *              wall; the picture holds no water colour below the horizon. It computes no height the module
  *              does not carry and answers false off the square or with a corner missing. On the far edge of
  *              the square the last cell carries the place, so the edge itself has a height.
+ *
+ *              WHAT THE EYE SEES OVER THE GROUND. sees walks the line from the camera to a world point at half
+ *              a lattice step, the finest the drawn mesh bends at, and answers false where the ground stands
+ *              above it. The camera looks flat over the bank of a carved bed (B0285, run 20261113-1951-m05-rain):
+ *              the lip hides the near water, and a mark laid on that hidden water lands on the brown bank under
+ *              the strip the eye sees. Where the lip hides all of it, the strip the eye sees is the carved bed
+ *              itself, and the mark follows that (build_bed_line).
  *
  *              A PLACE BY ITS SHARE. across names the world place a share of the square's edge east and a
  *              share north of its south-west corner, at the height height gives there. The lines of the
@@ -38,7 +52,7 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
  * @modified    2026-11-13
- * @version     00.00.01.00001
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -68,6 +82,14 @@ public:
 
     /** The ground height under `x`, `z`, metres; false off the square or with a corner sample missing. */
     bool height(double x, double z, double& out) const;
+
+    /**
+     * Whether `eye` sees `point` over the ground: false where the ground rises above the line between them at
+     * one of the places half a lattice step apart along it. A place off the square tells nothing; the point's
+     * own place is not asked, so water standing over its ground is seen where its banks let the eye through.
+     * `over` takes the first place whose ground stands above the line, its y that ground; kept where it is seen.
+     */
+    [[nodiscard]] bool sees(const ::godot::Vector3& eye, const ::godot::Vector3& point, ::godot::Vector3& over) const;
 
     /** The world place `share_x` across and `share_z` along the square (0 to 1 each) at its ground height. */
     bool across(double share_x, double share_z, ::godot::Vector3& out) const;

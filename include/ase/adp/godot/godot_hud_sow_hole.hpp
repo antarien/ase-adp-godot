@@ -48,6 +48,9 @@ struct SowHoleFrame {
     bool sown = false;                 // a seed went in (S.hole was set)
     ::godot::Vector3 place;            // where it went in, world units (U0, Z0 on the ground)
     double age = 0.0;                  // seconds since it went in
+    bool open = false;                 // the spade dug the planting hole and nothing closed it yet (Q02), drawn while open
+    bool seeded = false;             // a seed lies in the open planting hole (Q03)
+    bool covered = false;              // the planting hole is closed over its seed (Q04); the dibber's sowing closes it
 };
 
 /** The hole the dibber made. */

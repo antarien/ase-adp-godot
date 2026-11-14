@@ -65,7 +65,12 @@ void VivariumView::unhandled_input(const ::godot::Ref<::godot::InputEvent>& even
         return;
     }
     // THE CARE VIEW'S HUD TAKES THE TOUCHES: press, drag and release go through it (godot_vivarium_hud_input.cpp);
-    // the old buttons answer only on the error panel, where Reiniciar stands.
+    // the old buttons answer only on the error panel, where Reiniciar stands. The figure's stick, orbit drag and
+    // cam.mode take their touches first (godot_vivarium_figure_controls.cpp, 07.9).
+    if (figure_input(local)) {
+        node_->get_viewport()->set_input_as_handled();
+        return;
+    }
     if (hud_live()) {
         hud_input(local);
         return;

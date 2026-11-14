@@ -92,14 +92,17 @@ bool VivariumHud::draw_layer(UiPen& canvas, const ::godot::Transform2D& frame, c
                              VivariumHudFrame& now, std::string& failed) {
     if (layer == LAYER_TAP_PULSE) {
         // render lays the pulse at the hole first in sap and plug (m.html 909), over the world's brightness.
-        tap_.draw_pulse(canvas, frame, now.tap, now.clock - replay_.since(), now.still);
+        tap_.draw_pulse(canvas, frame, now.tap, wall_ - replay_.since(), now.still);
         return true;
     }
     if (layer == LAYER_BAND) {
         return band_.draw(canvas, head_frame(frame), now.band, failed);
     }
     if (layer == LAYER_RAIL) {
-        rail_.draw(canvas, frame, now.clock - replay_.since(), now.still);
+        // THE MARK STANDS ON THE WALL CLOCK (replay, godot_hud_compose.cpp): the elapsed time of a fade is taken on
+        // that same clock. On the capped HUD clock it ran negative, the rail's line drew a share of 0 and stood
+        // nowhere while its dots and its word showed (run 20261113-230745 debug_stage_3.png)
+        rail_.draw(canvas, frame, wall_ - replay_.since(), now.still);
         return true;
     }
     if (layer == LAYER_MARKERS) {
@@ -140,7 +143,7 @@ bool VivariumHud::draw_layer(UiPen& canvas, const ::godot::Transform2D& frame, c
     if (layer == LAYER_SYSTEM) {
         SystemRingFrame ring;
         ring.held = press_.system ? now.clock - press_.clock : 0.0;
-        ring.elapsed = now.clock - replay_.since();
+        ring.elapsed = wall_ - replay_.since();
         ring.still = now.still;
         ring.cover = now.cover;
         return system_.draw(canvas, frame, ring, failed);
@@ -172,7 +175,7 @@ bool VivariumHud::draw_inventory(UiPen& canvas, const ::godot::Transform2D& fram
     // the toast (m.html 749), so it lies over the bag icon and under the windows.
     const ::godot::Transform2D hand = hand_frame(frame);
     ToastFrame toast;
-    toast.now = now.clock;
+    toast.now = wall_;  // the toast's until is a performance.now() in the mockup (m.html 931): the wall clock
     toast.busy = mode_ == GODOT_HUD_MODE_TERRAIN || hand_thing(now) != nullptr;
     // THE PARTS OF THE LAYER (P0695): the layer cost 77.6 ms in the first frame after an act and about 5 ms in each
     // frame after it (run 20261113-p0692-split); each part writes its own share, the layer's share names their sum.
@@ -252,7 +255,7 @@ bool VivariumHud::draw_select(UiPen& canvas, const ::godot::Transform2D& frame, 
     label.held = same(chosen->from, GODOT_HUD_PLACE_HAND);
     label.box = box;
     label.level = shown_.level;
-    label.elapsed = now.clock - replay_.since();  // S.sel is no part of lastKey: the leader plays with the frame
+    label.elapsed = wall_ - replay_.since();  // S.sel is no part of lastKey: the leader plays with the frame
     label.still = now.still;
     return select_.draw(canvas, frame, label, failed);
 }

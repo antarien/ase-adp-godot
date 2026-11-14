@@ -37,8 +37,8 @@
  * @actor       Hänge-Birke (Betula pendula)
  * @register    N0461 (the state fields of each sign case), N0449 (the weather signatures), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-11
- * @version     00.00.01.00002
+ * @modified    2026-11-13
+ * @version     00.00.01.00003
  */
 
 #include <ase/adp/godot/godot_hud_context_resolver.hpp>
@@ -48,6 +48,9 @@
 #include <ase/adp/godot/godot_hud_ui_ring.hpp>
 #include <ase/adp/godot/godot_hud_ui_text_block.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
+#include <ase/adp/godot/godot_hud_ui_anchor.hpp>
+#include <ase/adp/godot/godot_hud_ui_ground.hpp>
+#include <ase/adp/godot/godot_plant_geometry.hpp>
 
 #include <ase/adp/godot/godot_hud_ui_pen.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -114,6 +117,27 @@ public:
 
     /** The square round each marker drawn last, hud_sign_hit_radius from its centre: where hit() answers a sign. */
     void places(std::vector<SignMarkerPlace>& out) const;
+
+    /**
+     * Lays the brook's line into `out` as SignMarkerFrame::brook carries it (B0285): `seen` holds the points of
+     * the brook's water in mockup units from its start to its end; the line is cut to its part over the drawn
+     * surface from `left` to `right` (the whole line where all of it or none of it lies there), then laid again
+     * at as many points as `seen` holds, at equal steps of its length, so the share a sign names is the share of
+     * the drawn line. Fewer than two points lay nothing.
+     */
+    static void lay_brook(const std::vector<::godot::Vector2>& seen, float left, float right,
+                          ::godot::PackedVector2Array& out);
+
+    /**
+     * Lays the line of `stream`'s water as the camera sees it into `out` through lay_brook (B0285): the stations
+     * of build_water_line over `ground`, only the water `land` lets the eye of `anchor` see over the bank,
+     * placed through `anchor` in mockup units. Where the bank hides all of the water, the line is that of the
+     * bed the eye sees (build_bed_line), which is then what the picture shows of the brook. `flank` is the
+     * line's account (stations, points seen, the columns, the points), for the caller to tell when it changes.
+     */
+    static void follow_brook(const VivariumStreamView& stream, const PlantMeshArrays& ground, const UiAnchor& anchor,
+                             const UiGround& land, float left, float right, ::godot::PackedVector2Array& out,
+                             std::string& flank);
 
 private:
     /** One sign as SHA places and marks it. */

@@ -3,7 +3,7 @@
  *
  * @file        godot_vivarium_hud_loose.cpp
  * @brief       VivariumLooseBridge - the mockup's LO on the ground square, see the header
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD "Die Brücke", see godot_vivarium_hud_loose.hpp.
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD bridge section, see godot_vivarium_hud_loose.hpp.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)

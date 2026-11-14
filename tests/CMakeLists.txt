@@ -20,6 +20,13 @@ The same form as plugins/ase-pl-vegetation/tests.
   ase-adp-godot-scene-test    The scene ports of a game host of its own (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS
                               03.11): the organ templates of ase-render-data, the sky, the ground and
                               the stem bases.
+  ase-adp-godot-tree-test     A birch the clock jumped to MADURA, its stem on the bark port (B0295 point 4,
+                              usecase:101613 show the plant bark tubes): the rings meet along each internode,
+                              one wave on the whole axis, a share that never falls up the stem.
+  ase-adp-godot-figure-test   The figure ports of ase-pl-avatar on a game host of its own
+                              (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.8, 07.10, usecase:101625 carry a tool
+                              in hand): the figure of the seat at its spawn place, hold and drop filed as
+                              put-on and put-down requests, every gear piece at the right hand of a figure.
   ase-adp-godot-layout-test   place_view, band_offset and in_one_band on the surfaces of the Android
                               market (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3): logical size, a 9:20
                               handset, camera and gesture bar insets, a 3:4 tablet, a safe area too
@@ -28,6 +35,10 @@ The same form as plugins/ase-pl-vegetation/tests.
   ase-adp-godot-plant-test    The stem base and the order budget by frame time (03.1, 03.6). Pure computation.
   ase-adp-godot-instances-test rows_by_body: the instance records to body and order split (03.11). Pure.
   ase-adp-godot-bark-test     The bark share and tiling as custom data of each instance (03.11). Pure.
+  ase-adp-godot-tubes-test    tubes_by_body: the bark port laid out into one mesh per body, the knot rings
+                              shared, the ring radius and axis order beside every vertex (B0295). Pure.
+  ase-adp-godot-impostor-test impostor_of: from where the card of a far body takes over, by the one-pixel
+                              rule of the bark shader, and the size of card and texture (B0295). Pure.
   ase-adp-godot-templates-test build_template from the template ports (03.11). Pure computation.
   ase-adp-godot-stand-test    Soil water and condition of a patch for its materials (03.2). Pure.
   ase-adp-godot-binding-test  bind_assets against a test manifest, stand-in colours (03.2). Pure.
@@ -63,11 +74,11 @@ if(NOT doctest_FOUND)
     FetchContent_MakeAvailable(doctest)
 endif()
 
-# The three targets against the real bundle. A file is named after its target, never after the
+# The targets against the real bundle. A file is named after its target, never after the
 # manager it drives: a .cpp whose name carries resource_manager is a resource manager implementation
 # (file_types.json, resource_mgr_impl). Each target writes its own log file - ABSOLUTE, like the
 # user:// path the node hands over - so no run rotates the file of another.
-foreach(_adp_godot_bundle_test host refusal scene)
+foreach(_adp_godot_bundle_test host refusal scene tree figure)
     if(_adp_godot_bundle_test STREQUAL "host")
         set(_adp_godot_bundle_source test_godot_host.cpp)
     else()
@@ -98,7 +109,7 @@ foreach(_adp_godot_bundle_test host refusal scene)
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant instances bark templates stand binding ground water keeper focus seed exposure window context signs chips showcase)
+foreach(_adp_godot_pure_test layout plant instances bark tubes impostor templates stand binding ground water keeper focus seed exposure window context signs chips showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
@@ -107,6 +118,10 @@ foreach(_adp_godot_pure_test layout plant instances bark templates stand binding
         set(_adp_godot_pure_source test_godot_plant_instances.cpp)
     elseif(_adp_godot_pure_test STREQUAL "bark")
         set(_adp_godot_pure_source test_godot_plant_bark.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "tubes")
+        set(_adp_godot_pure_source test_godot_plant_tubes.cpp)  # usecase:101613 show the plant bark tubes
+    elseif(_adp_godot_pure_test STREQUAL "impostor")
+        set(_adp_godot_pure_source test_godot_plant_impostor.cpp)  # usecase:101613, the card of a far body
     elseif(_adp_godot_pure_test STREQUAL "templates")
         set(_adp_godot_pure_source test_godot_plant_templates.cpp)
     elseif(_adp_godot_pure_test STREQUAL "stand")

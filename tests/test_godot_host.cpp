@@ -180,16 +180,20 @@ TEST_CASE("the view request is taken by the view port, and a place outside the w
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
     GodotHostResourceManager& resources = env.resources;
     const VivariumPatchView patch = patch_at(resources, 0u);
-    CHECK(resources.view(patch.x, patch.y + 3.0, patch.z + 6.0) == ase::kernel::HostStatusOk);
+    CHECK(resources.view(patch.x, patch.y + 3.0, patch.z + 6.0, patch.x, patch.y, patch.z) ==
+          ase::kernel::HostStatusOk);
     advance_frames(resources, 4u);
     // A non-finite eye never reaches the plugin: the host port refuses every record with a value that is
     // no number (kernel_host_port_registry.cpp, the record check of submit).
-    CHECK(resources.view(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0) ==
+    CHECK(resources.view(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0, 0.0, 0.0, 0.0) ==
           ase::kernel::HostStatusInvalidArgument);
+    // A non-finite look-at point is refused the same way.
+    CHECK(resources.view(patch.x, patch.y + 3.0, patch.z + 6.0, std::numeric_limits<double>::quiet_NaN(), 0.0,
+                         0.0) == ase::kernel::HostStatusInvalidArgument);
     // A finite place beyond the world is taken by the port and refused by the plugin, which keeps the
     // camera where it stood: twice FLORA_WORLD_SPAN_M (ase-pl-flora, 1000 km) on the first axis.
     constexpr double kBeyondWorldM = 2.0e6;
-    CHECK(resources.view(kBeyondWorldM, 0.0, 0.0) == ase::kernel::HostStatusOk);
+    CHECK(resources.view(kBeyondWorldM, 0.0, 0.0, 0.0, 0.0, 0.0) == ase::kernel::HostStatusOk);
     advance_frames(resources, 4u);
     CHECK(resources.patch_count() == 4u);
 }

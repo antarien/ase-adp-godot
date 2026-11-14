@@ -10,8 +10,8 @@
  *                line     a vertical line at hud_rail_x from hud_rail_top to hud_rail_bottom in
  *                         OVERLAY_INK_FAINT (--hud3), at the line width hud_line
  *                label    the rail's word (class t, hud_rail_label_size) end-anchored at
- *                         (hud_rail_x, hud_rail_label_y) and turned by hud_rail_label_turn degrees about that
- *                         same point, in OVERLAY_INK_SOFT (--hud2)
+ *                         (hud_rail_label_x, hud_rail_label_y), a column of its own left of the line, and turned
+ *                         by hud_rail_label_turn degrees about that same point, in OVERLAY_INK_SOFT (--hud2)
  *                alert    while at least one sign is alerting: a bar at (hud_rail_alert_x, hud_rail_alert_y),
  *                         hud_rail_alert_w wide and hud_rail_alert_base + alerts * hud_rail_alert_step high, in
  *                         DOMAIN_ALERT (--alert)
@@ -38,7 +38,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-12
+ * @modified    2026-11-13
  * @version     00.00.01.00001
  */
 
@@ -103,6 +103,7 @@ private:
     double x_ = 0.0;                // hud_rail_x
     double top_ = 0.0;              // hud_rail_top
     double bottom_ = 0.0;           // hud_rail_bottom
+    double label_x_ = 0.0;          // hud_rail_label_x: the word's own column, apart from the rail's
     double label_y_ = 0.0;          // hud_rail_label_y
     double label_size_ = 0.0;       // hud_rail_label_size
     double label_turn_ = 0.0;       // hud_rail_label_turn

@@ -75,10 +75,15 @@ void TreeShade::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Tre
         return;  // the birch stands off the screen, or no patch record names its stage
     }
     if (now.stage == GODOT_STAGE_SEED) {
-        // The sown soil: the mound at the foot and the seed a little above its middle.
-        oval(canvas, frame, now.trunk, mound_rx_, mound_ry_, mound_);
-        oval(canvas, frame, now.trunk - ::godot::Vector2(0.0f, static_cast<float>(seed_dy_)), seed_rx_, seed_ry_,
-             seed_);
+        // THE SEED SHOWS ONLY IN THE OPEN HOLE (operator 2026-11-13, before the mockup's m.html 488, which draws the
+        // mound and the seed on the soil at stage 0): a seed the keeper laid in the hole lies there visible, a
+        // covered hole leaves the mound alone, and a stand nobody sowed leaves the soil bare.
+        if (now.covered) {
+            oval(canvas, frame, now.trunk, mound_rx_, mound_ry_, mound_);
+        } else if (now.seeded) {
+            oval(canvas, frame, now.trunk - ::godot::Vector2(0.0f, static_cast<float>(seed_dy_)), seed_rx_, seed_ry_,
+                 seed_);
+        }
         canvas.draw_set_transform_matrix(::godot::Transform2D());
         return;
     }

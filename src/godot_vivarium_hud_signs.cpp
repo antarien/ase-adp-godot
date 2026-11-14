@@ -142,7 +142,11 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     if (soil_rel < hud_bridge_soil_full_) {
         game.marks.emplace_back("soil_not_full");
     }
-    if (hud_bridge_branch_uncut_) {
+    // Prune is TOOLS.prune.ok's TREE.cand.some(c=>!S.cuts.has(c)): the crown's own candidates still uncut, as
+    // VivariumHandBridge::cut counts them on the organ port (hand.prune_left, the frame before), never the bridge
+    // value alone - with it the fan offered PODÃO over a crown of three shoots on the stem that marks none
+    // (run 20261114-c01-motion5: on_stem=3 chosen=0 left=0, then hud mode=prune).
+    if (hud_bridge_branch_uncut_ && hand.prune_left > 0u) {
         game.marks.emplace_back("branch_uncut");
     }
     if (season == GODOT_HUD_SEASON_SALTATRIX) {
@@ -162,6 +166,8 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
         open_gap(GODOT_HUD_GAP_CLOCK, "flora.day.v1.season");
         named = static_cast<uint32_t>(ase::math::floor(static_cast<float>(hud_bridge_clock_.season)));
         season_word(hud_.theme(), named, word);
+    } else {
+        close_gap(GODOT_HUD_GAP_CLOCK, "flora.day.v1.season");
     }
     const std::vector<double>& light = named < clock.season_light_h.size() ? clock.season_light_h
                                                                             : hud_bridge_clock_.season_light_h;

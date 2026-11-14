@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_billhook_tool.hpp
  * @brief       The widget of the billhook: the tool that puts the hand in the mode prune
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": BillhookTool, the mockup's ToolItem of the podao. It holds one ItemWidget and
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: BillhookTool, the mockup's ToolItem of the podao. It holds one ItemWidget and
  *              learns its item from hud.items, where the entry naming BillhookTool gives the key and the mode
  *              prune; the cut marks are PruneMarks'. It draws the tool fitted into a box or unturned at a
  *              scale, and gives its reading.

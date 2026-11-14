@@ -16,9 +16,11 @@
  *              mockup draws no shade but the mound of the sown soil: an ellipse plant_seed_mound_rx by _ry in
  *              PLANT_SEED_MOUND at the foot, and the seed plant_seed_rx by _ry in PLANT_SEED, plant_seed_dy above it.
  *
- *              FULL FROM THE FRAME. The foot of the trunk and the stage come from the frame the view fills (the
- *              stand of ase-flora on its patch record); TreeShade draws whatever the frame carries and asks no port.
- *              A birch off the screen or a patch without a stage draws nothing.
+ *              FULL FROM THE FRAME. The stem place and the stage come from the frame the view fills (the stand of
+ *              ase-flora on its patch record); TreeShade draws whatever the frame carries and asks no port. The view
+ *              sets the stem place on the ground at the stem's x and z as the terrain lies now (UiGround::surface),
+ *              so the seed lies on the floor of the planting hole, however deep it was dug. A birch off the screen,
+ *              a stem place without ground samples or a patch without a stage draws nothing.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -47,8 +49,10 @@ namespace ase::adp::godot {
 /** What the shade under the birch shows this frame. */
 struct TreeShadeFrame {
     bool placed = false;          // the birch stands on the screen
-    ::godot::Vector2 trunk;       // the foot of the trunk in mockup units (TX, TY())
+    ::godot::Vector2 trunk;       // the stem place on the ground as it lies now, mockup units (TX, TY())
     uint8_t stage = UINT8_MAX;    // the stage of the stand (GODOT_STAGE_*), UINT8_MAX without a patch record
+    bool seeded = false;          // a seed lies in the open planting hole (SowHoleFrame::seeded, Q03)
+    bool covered = false;         // the planting hole is closed over its seed (SowHoleFrame::covered, Q04)
 };
 
 /** The shade under the birch and the seed mound. */

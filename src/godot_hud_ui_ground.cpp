@@ -13,7 +13,7 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
  * @modified    2026-11-13
- * @version     00.00.01.00001
+ * @version     00.00.01.00002
  */
 
 #include <ase/adp/godot/godot_hud_ui_ground.hpp>
@@ -90,9 +90,34 @@ bool UiGround::height(double x, double z, double& out) const {
     }
     const double ax = fx - static_cast<double>(column);
     const double az = fz - static_cast<double>(row);
-    const double south = sw->height + (se->height - sw->height) * ax;
-    const double north = nw->height + (ne->height - nw->height) * ax;
-    out = south + (north - south) * az;
+    // build_ground draws the cell as the triangles (sw, se, ne) and (sw, ne, nw): the place lies on the first
+    // east of the diagonal from sw to ne, on the second north of it, and each is a plane through its corners.
+    if (ax >= az) {
+        out = sw->height + (se->height - sw->height) * ax + (ne->height - se->height) * az;
+    } else {
+        out = sw->height + (ne->height - nw->height) * ax + (nw->height - sw->height) * az;
+    }
+    return true;
+}
+
+bool UiGround::sees(const ::godot::Vector3& eye, const ::godot::Vector3& point, ::godot::Vector3& over) const {
+    if (side_ < 2) {
+        return true;
+    }
+    // Half a lattice step between two places asked: the drawn mesh bends at no finer distance.
+    const double run = ::godot::Vector2(point.x - eye.x, point.z - eye.z).length();
+    const auto places = static_cast<int64_t>(::godot::Math::ceil(run / (step_ * GODOT_HALF)));
+    for (int64_t place = 1; place < places; ++place) {
+        const double share = static_cast<double>(place) / static_cast<double>(places);
+        const double x = eye.x + (point.x - eye.x) * share;
+        const double z = eye.z + (point.z - eye.z) * share;
+        const double line = eye.y + (point.y - eye.y) * share;
+        double ground = 0.0;
+        if (height(x, z, ground) && ground > line) {
+            over = ::godot::Vector3(static_cast<float>(x), static_cast<float>(ground), static_cast<float>(z));
+            return false;
+        }
+    }
     return true;
 }
 

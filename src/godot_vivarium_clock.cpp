@@ -37,8 +37,8 @@
  * @usecase     usecase:101120 - clock the growth cycle
  * @actor       Plant Keeper (PLNTKEEPER), Growth Clock Controller (GROWCLOCON)
  * @created     2026-11-06
- * @modified    2026-11-11
- * @version     00.00.04.00007
+ * @modified    2026-11-14
+ * @version     00.00.04.00008
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -115,13 +115,18 @@ uint32_t VivariumView::scene_parts_built() const {
 
 double VivariumView::initialisation_progress() const {
     // The share of the initialisation the start screen shows, one equal step each: the patches announced,
-    // the brooks carried, the parts of the scene built, the quiet frames rendered. It is read from the same
-    // state follow_initialisation lifts the start screen on, so the bar stands full in the frame it lifts.
-    // After a jump the fourth step is the same quiet frames as on a start: the jump holds the screen only
+    // the brooks carried, the parts of the scene built, the sky and the clock known, the figure file loaded,
+    // the quiet frames rendered. It is read from the same state follow_initialisation lifts the start screen
+    // on, so every hold of the screen stands in the bar and the bar stands full in the frame it lifts (B0357).
+    // The figure file counts its blocks read and then its parse, scene and pack (figure_load_share).
+    // After a jump the last step is the same quiet frames as on a start: the jump holds the screen only
     // until ase-time's verdict on its request number (follow_debug), and the quiet frames stay at 0 until then.
     if (initialised_) {
         return 1.0;
     }
+    const double sky_and_clock = ((resources_.get_sky().known ? 1.0 : 0.0) +
+                                  (resources_.get_clock().known ? 1.0 : 0.0)) / 2.0;
+    const double figure = figure_load_share(figure_look_.load);
     const double brooks = start_.brooks.empty()
                               ? 1.0
                               : static_cast<double>(resources_.get_streams().size()) /
@@ -132,7 +137,8 @@ double VivariumView::initialisation_progress() const {
     const double last = jump.running ? jump_share(jump, resources_.get_clock(), resources_.stage_seconds(),
                                                   debug_.settle_s)
                                      : ase::math::min(frames, 1.0);
-    const double sum = (patches_announced_ ? 1.0 : 0.0) + ase::math::min(brooks, 1.0) + parts + last;
+    const double sum = (patches_announced_ ? 1.0 : 0.0) + ase::math::min(brooks, 1.0) + parts + sky_and_clock +
+                       figure + last;
     return sum / GODOT_INIT_STEPS;
 }
 
@@ -171,7 +177,11 @@ void VivariumView::follow_initialisation() {
     // not moved yet. On the verdict follow_debug ends the jump, and from there the screen lifts on exactly the
     // criteria of a start; the settle of the landing note holds no frame (D2281).
     const bool jumping = debug_.jump.running;
-    if (!patches_announced_ || !brooks_carried || !scene_built || !sky_and_clock || compiled || jumping) {
+    // the figure file loads in a task of the WorkerThreadPool (godot_figure_load.hpp); its figures and its
+    // pipelines belong to the first visible frame, so the screen holds until follow_figure took the pack
+    const bool figure_loading = figure_load_running(figure_look_.load);
+    if (!patches_announced_ || !brooks_carried || !scene_built || !sky_and_clock || compiled || jumping ||
+        figure_loading) {
         init_render_frames_ = 0u;
         return;
     }
@@ -180,6 +190,8 @@ void VivariumView::follow_initialisation() {
         return;
     }
     initialised_ = true;
+    // the figure file compiled its pipelines behind the screen (warm_figure); its warming instance leaves now
+    end_figure_warmth(scene_);
     note("start_screen lifted brooks=" + ::godot::String::num_uint64(resources_.get_streams().size()) +
          " frames=" + ::godot::String::num_uint64(init_render_frames_) +
          " pipelines=" + ::godot::String::num_uint64(pipelines) + " " + measure(selected_place_));

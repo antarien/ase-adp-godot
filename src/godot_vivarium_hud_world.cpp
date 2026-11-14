@@ -22,10 +22,11 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0451 (flora.carry.v1), N0454 (flora.patch.v1 preview), N0462 (flora.scene.v1 cuttable), N0463
- *              (flora.root.v1 zone and segments), N0465 (the things as asset rows), carrier N0448
+ *              (flora.root.v1 zone and segments), N0465 (the things as asset rows), N0487 (physics.body.v1 bodies
+ *              of the tool place and the ground things), carrier N0448
  * @created     2026-11-11
  * @modified    2026-11-13
- * @version     00.00.01.00006
+ * @version     00.00.01.00007
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -64,6 +65,10 @@ void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOri
     open_gap(GODOT_HUD_GAP_PRUNE, "flora.scene.v1.cuttable");
     hud_hand_.cut(hud_now_.hand, prune.cuttable, patch != nullptr ? patch->object_id : GODOT_NO_OBJECT,
                   resources_.get_organs(GODOT_ORGAN_SEGMENT), hud_segments_);
+    std::string cut_counts;
+    if (hud_hand_.cut_changed(cut_counts)) {
+        note(::godot::String(cut_counts.c_str()));
+    }
 
     // The ground kit: the ground, its brooks, the brush under the finger and the patch the level verb levels.
     TerrainKitFrame& terrain = hud_now_.terrain;
@@ -155,6 +160,7 @@ void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOri
         ahead = ahead.normalized();
     }
     hud_carry_.fill(hud_now_, world.patch, right, ahead, hud_ground_);
+    open_gap(VivariumCarryBridge::GAP_BODY, "physics.body.v1.body_y");  // tool place and ground things (N0487)
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.after_rel");  // the preview after the pour (N0454)
     open_gap(GODOT_HUD_GAP_ROOT, "flora.root.v1.zone_m");       // the root zone under the brush (N0463)
     hud_hand_.frame(hand, patch, reticle, hud_bridge_sap_l_, hud_.pouring());  // the hold as the HUD keeps it, before compose
@@ -191,6 +197,9 @@ void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOri
     // accepted the sowing, wrote its place and age into the frame above (VivariumCarryBridge::fill).
     open_gap(GODOT_HUD_GAP_CARRY, "flora.seed.v1(place,at)");
     hud_now_.sow.anchor = &hud_anchor_;
+    // The mound or the seed under the birch follow the planting steps of the carry bridge (TreeShade, Q01).
+    hud_now_.shade.seeded = hud_now_.sow.seeded;
+    hud_now_.shade.covered = hud_now_.sow.covered;
 
     // The drag: where the finger meets the ground.
     DragLayerFrame& drag = hud_now_.drag;

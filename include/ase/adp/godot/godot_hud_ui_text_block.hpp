@@ -11,6 +11,9 @@
  *                tb  the display face in its semibold weight, letter spacing hud_tracking_title, upper case
  *                d   the data face (Fira Code, the Nerd Font that also carries every icon), no spacing, as written
  *                sh  paint-order stroke: an outline of OVERLAY_SHADOW at hud_text_shadow_width under the fill
+ *              One text of the HUD is written past T, a bare <text class="d"> without sh: the stack count of
+ *              itemsIn (m.html 756), dark ink on the pouch's linen. UiTextPlace::bare draws it without the outline;
+ *              with it the count was a black smudge (run 20261113-box80-bag, likeness_bag_pouch).
  *              font-size o.z (hud_text_size when the caller gives none - the caller reads it through size()),
  *              text-anchor o.a (start, middle, end), the fill o.col (OVERLAY_INK when it gives none), the
  *              opacity o.op, the fade-in (.fade, hud_anim_fade_ms and hud_anim_fade_ease) after the delay o.d,
@@ -43,7 +46,7 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
  * @modified    2026-11-13
- * @version     00.00.01.00003
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_hud_ui_icon.hpp>
@@ -76,6 +79,7 @@ struct UiTextPlace {
     double delay = 0.0;            // o.d: the seconds before the fade starts
     double elapsed = 0.0;          // the seconds since the text appeared
     bool still = false;            // .still and reduced motion: every animation at its end
+    bool bare = false;             // a <text> written past T, without the class sh: no outline (m.html 756)
     double rotate_deg = 0.0;       // o.tr rotate(a px py): the angle, clockwise in degrees
     ::godot::Vector2 pivot;        // o.tr rotate(a px py): the point it turns about
 };

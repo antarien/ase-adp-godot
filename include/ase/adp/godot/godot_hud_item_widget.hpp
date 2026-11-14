@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_item_widget.hpp
  * @brief       The part every item widget class holds: its item, drawing, tone, words, reading and stack count
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the item widgets of the table "je Gerät eine eigene
- *              Widget-Klasse über UiItemSprite" (DibberTool, SpadeTool, WateringPot, ...). Each class holds one
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the item widgets of the table of one widget
+ *              class per device over UiItemSprite (DibberTool, SpadeTool, WateringPot, ...). Each class holds one
  *              ItemWidget by composition and adds what its kind does: a vessel its level, a stack its count, a
  *              container its load, a ground tool its verbs.
  *

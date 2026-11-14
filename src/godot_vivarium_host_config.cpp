@@ -119,6 +119,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.sway");
     }
     start_.sway_port = utf8_of(text);
+    // The bark tube of every axis (register B0295 point 4, usecase:101613 show the plant bark tubes): ase-render-data
+    // built it with frames carried by parallel transport, the view draws its vertices and computes no geometry.
+    if (!read_text(ports, "bark", text)) {
+        return fail_config("ports.bark");
+    }
+    start_.bark_port = utf8_of(text);
     // The water of the brooks (usecase:100399 carry brook water): ase-hydro computed it, the view lays it into the
     // bed and computes none of its values.
     if (!read_text(ports, "stream", text)) {
@@ -279,6 +285,9 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
     if (!load_brooks(root)) {
         return false;
     }
+    if (!load_figure_config(root)) {
+        return false;  // the figure's ports, operations and place (godot_vivarium_figure.cpp)
+    }
 
     if (!read_number(root, "irrigate_amount_mm", start_.irrigate_amount_mm) ||
         !(start_.irrigate_amount_mm > 0.0)) {
@@ -288,7 +297,7 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
 }
 
 bool VivariumView::load_patches(const ::godot::Dictionary& root) {
-    // THE PATCHES OF THE START CONFIGURATION (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS, "Fläche und Art"):
+    // THE PATCHES OF THE START CONFIGURATION (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS, section on patch and species):
     // number, ground and species are data here; the game host lays each through the scene port. That
     // every place stands once and every ground is known, the resource manager checks again at boot.
     // Place and seed are whole numbers up to UINT32_MAX - beyond a float - so they are checked by

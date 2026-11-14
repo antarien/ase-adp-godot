@@ -31,17 +31,20 @@
  * @usecase     usecase:6451 - load flora blueprints
  * @actor       Flora Blueprint Keeper (FLORBLUKEE)
  * @created     2026-10-11
- * @modified    2026-10-22
- * @version     00.00.02.00002
+ * @modified    2026-11-14
+ * @version     00.00.02.00003
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
 
+#include <godot_cpp/classes/gltf_document.hpp>
+#include <godot_cpp/classes/gltf_state.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
 #include <string>
@@ -50,6 +53,14 @@ namespace ase::adp::godot {
 
 /** The scene GLTFDocument generates from a bound file below `asset_root` at run time; nullptr when it does not load. */
 ::godot::Node* load_asset(const ::godot::String& asset_root, const std::string& file);
+
+/**
+ * Parses `bytes` - the content of the bound file `file` below `asset_root`, read by the caller - into `state`
+ * the way load_asset parses the file itself, texture packs beside the file included; the scene is generated
+ * by the caller with `document`. False when the bytes do not parse.
+ */
+bool parse_asset_bytes(const ::godot::Ref<::godot::GLTFDocument>& document, const ::godot::Ref<::godot::GLTFState>& state,
+                       const ::godot::String& asset_root, const std::string& file, const ::godot::PackedByteArray& bytes);
 
 /** The first MeshInstance3D below `node`, depth first; nullptr without one. */
 ::godot::MeshInstance3D* first_mesh(::godot::Node* node);
@@ -69,5 +80,16 @@ namespace ase::adp::godot {
  */
 ::godot::Ref<::godot::Mesh> bound_template(const VivariumAssetBinding& binding, const ::godot::String& asset_root,
                                            const std::string& name);
+
+/**
+ * Registers the class AseGltfImageSkip and hands one object of it to GLTFDocument as a document extension:
+ * every image of a file whose state discards its own images (a file with packs) is answered with a stand-in
+ * of one pixel, so GLTFDocument does not decode a PNG it throws away. Called by the initializer of the library
+ * at MODULE_INITIALIZATION_LEVEL_SCENE.
+ */
+void register_image_skip();
+
+/** Takes the extension back from GLTFDocument, frees it and removes its class; called by the terminator. */
+void unregister_image_skip();
 
 }  // namespace ase::adp::godot

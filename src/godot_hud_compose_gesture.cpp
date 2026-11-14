@@ -81,7 +81,7 @@ bool VivariumHud::press(const ::godot::Vector2& point, const VivariumHudFrame& n
         // An empty can holds nothing to pour (m.html 1001): REGADOR VAZIO · ENCHA NO RIACHO, and the press holds
         // no can, so neither a measure nor a release follows.
         if (now.hand.thing == nullptr || !(now.hand.thing->fill_l > 0.0)) {
-            return toast_.post(TOAST_POT_EMPTY, {}, COLOUR_WATER, clock_, failed);
+            return toast_.post(TOAST_POT_EMPTY, {}, COLOUR_WATER, wall_, failed);
         }
         press_.pouring = true;
         press_.poured_at = clock;
@@ -296,7 +296,7 @@ bool VivariumHud::use_tool(uint32_t index, const ::godot::Vector2& point, const 
                    failed)) {
         return false;
     }
-    return toast_.post("missing", {HudPortValue{"item", name}}, GODOT_HUD_COLOUR_REFUSED, clock_, failed);
+    return toast_.post("missing", {HudPortValue{"item", name}}, GODOT_HUD_COLOUR_REFUSED, wall_, failed);
 }
 
 bool VivariumHud::act(const VivariumHudHit& hit, const ::godot::Vector2& point, const VivariumHudFrame& now,

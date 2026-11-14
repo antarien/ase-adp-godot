@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_spade_tool.hpp
  * @brief       The widget of the spade: a ground tool that puts the hand in the mode terrain
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": SpadeTool, the mockup's ToolItem of the pa. It holds one ItemWidget and learns its
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: SpadeTool, the mockup's ToolItem of the pa. It holds one ItemWidget and learns its
  *              item from hud.items, where the entry naming SpadeTool gives the key, the mode terrain and the
  *              ground verbs (cavar, amontoar, leito) that TerrainKit offers while it is in the hand. It draws
  *              the tool fitted into a box or unturned at a scale, and gives its reading. The case is the one

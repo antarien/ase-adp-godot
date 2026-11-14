@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_seed_stack.hpp
  * @brief       The widget of the birch seeds: a stack of winged nutlets in the linen pouch, spent one by one in sowing
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": SeedStack, the mockup's StackItem of the sementes. It holds one ItemWidget and learns
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: SeedStack, the mockup's StackItem of the sementes. It holds one ItemWidget and learns
  *              its item from hud.items, where the entry naming SeedStack gives the key and the mode hold. As a
  *              stack it draws its count at the lower right of its box (`stack_count`, the mockup's ×n) while it
  *              holds more than one, and its reading names the count and the weight of all of them (the mockup's

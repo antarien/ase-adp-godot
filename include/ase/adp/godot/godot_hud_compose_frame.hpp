@@ -5,7 +5,7 @@
  *
  * @file        godot_hud_compose_frame.hpp
  * @brief       The contract between the care view and VivariumHud: the frame it hands over, the hit, the request
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.5, "VivariumHud, Aufruf aus VivariumView::draw und tap":
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.5, VivariumHud, called from VivariumView::draw and tap:
  *              what crosses between the view and the composition each frame, apart from the composition itself.
  *
  *              THE FRAME. VivariumHudFrame is what the view hands the HUD for one frame: the ports' state (the

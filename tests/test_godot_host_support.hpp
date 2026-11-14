@@ -32,8 +32,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-11-12
- * @version     00.00.02.00007
+ * @modified    2026-11-14
+ * @version     00.00.02.00008
  */
 
 #include <doctest/doctest.h>
@@ -110,6 +110,8 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.tile_port = "flora.tile.v1";
     // The sway of the internodes (usecase:101335): boot() asks the set for this port as well.
     config.sway_port = "flora.sway.v1";
+    // The bark tube of every axis (usecase:101613): boot() asks the set for this port as well.
+    config.bark_port = "flora.mesh.bark.v1";
     // The water of the brooks (usecase:100399): boot() asks the set for this port as well.
     config.stream_port = "flora.stream.v1";
     // The level requests of the player (03.8 point 2): boot() asks the set for this port as well.
@@ -240,7 +242,11 @@ inline AdapterEnvironment& environment_storage() {
 }
 
 // The one boot of the run.
-inline AdapterEnvironment& environment() {
+// The ports a target names beyond the shared configuration (the figure ports of ase-pl-avatar); only the
+// first call of environment() boots, so a target passes its extension on every call or on none.
+using ConfigExtension = void (*)(VivariumStartConfig&);
+
+inline AdapterEnvironment& environment(ConfigExtension extend = nullptr) {
     AdapterEnvironment& env = environment_storage();
     if (env.attempted) {
         return env;
@@ -250,6 +256,9 @@ inline AdapterEnvironment& environment() {
     const std::string path = ASE_ADP_GODOT_TEST_LOG;
     (void)ase::utils::fs::remove(path);
     VivariumStartConfig config = vivarium_config(env.bundle);
+    if (extend != nullptr) {
+        extend(config);
+    }
     config.log_file = path;
     env.booted = env.resources.boot(config);
     (void)env.resources.remove_log_lines(env.boot_lines);

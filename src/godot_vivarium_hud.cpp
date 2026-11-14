@@ -32,7 +32,7 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
  * @modified    2026-11-13
- * @version     00.00.01.00021
+ * @version     00.00.01.00022
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -185,9 +185,9 @@ bool VivariumView::fill_hud(std::string& failed) {
     }
     // The mockup's lastKey (m.html 903): the fades and drawings of every frame below play again from this clock when
     // the mode, the open sign, the level, the debug view, its drawer or tab, the stage or the death changed (T05).
-    const double opened =
-        hud_clock_ - hud_.replay(game.level, patch != nullptr ? patch->stage : GODOT_STAGE_NONE,
-                                 patch != nullptr && patch->condition == GODOT_COND_DEAD, hud_clock_);
+    // The seconds count on the wall clock as the mockup's CSS animations do, never on the capped hud_clock_.
+    const double opened = hud_.replay(game.level, patch != nullptr ? patch->stage : GODOT_STAGE_NONE,
+                                      patch != nullptr && patch->condition == GODOT_COND_DEAD);
 
     // The birch on the screen: the foot of its trunk and the height up to its highest internode.
     if (origin != nullptr) {
@@ -197,10 +197,18 @@ bool VivariumView::fill_hud(std::string& failed) {
             hud_now_.tree_height = static_cast<double>(hud_now_.trunk.y - crown.y);
         }
     }
-    // The shade under the birch, or the seed mound: the foot of the trunk and the stage of the stand (N19).
-    hud_now_.shade.placed = hud_now_.tree_placed;
-    hud_now_.shade.trunk = hud_now_.trunk;
+    // The shade under the birch, or the seed mound: the stem place and the stage of the stand (N19). The shade is
+    // drawn onto the ground as the terrain lies now, never at the stem base the patch record carried.
+    // BRIDGE GAP (register D2314, carrier N0487): for the seed mound the view sets a thing onto the terrain height
+    // itself, so a planting hole lowers it and a filled one raises it again. The height of the sown seed belongs to
+    // its owner, reported through its port as the body ase-physics holds (the seed port does so for flying seeds,
+    // D2312). Until the patch port carries it, the terrain at the stem stands in; a bridge, never evidence
+    hud_now_.shade.placed = origin != nullptr && hud_ground_.surface(hud_anchor_, origin->x, origin->z, 0.0,
+                                                                      hud_now_.shade.trunk);
     hud_now_.shade.stage = patch != nullptr ? patch->stage : GODOT_STAGE_NONE;
+    if (hud_now_.shade.placed) {
+        open_gap(VivariumCarryBridge::GAP_BODY, "flora.patch.v1.mound_y");  // seed mound on the terrain (D2314)
+    }
 
     // The clock record: the SURA date, the hour and the phase of the band and of the calendar sheet.
     // The port's record of the last sample first; every group it leaves empty is the mockup's, written by the bridge
@@ -278,35 +286,15 @@ bool VivariumView::fill_hud(std::string& failed) {
     signs.height = hud_now_.tree_height;
     const std::vector<VivariumStreamView>& streams = resources_.get_streams();
     if (!streams.empty()) {
-        // The sign lies on the water ase-hydro reckons for the brook: the ground sample at the bed is its floor
-        // (the bed is cut into the terrain), the stream port's depth is the water over it, never a view level
-        const VivariumStreamView& brook = streams.front();
-        ::godot::Vector2 from;
-        ::godot::Vector2 to;
-        if (hud_ground_.surface(hud_anchor_, brook.x, brook.z, brook.depth_m, from) &&
-            hud_ground_.surface(hud_anchor_, brook.end_x, brook.end_z, brook.depth_m, to)) {
-            // The mockup lays its brook over the ground's width at the brook's row (m.html 361 zb, 638 sx(0.12)),
-            // so the share of a sign falls at the screen's edge and its reading runs into the picture; the world's
-            // brook runs far past both edges (start 28, end 4 in the ground's metres). The share is taken along the
-            // part of the line over the drawn surface, the whole line when none of it lies there.
-            const float left = hud_now_.cover.surface.position.x;
-            const float right = left + hud_now_.cover.surface.size.x;
-            const float low = from.x < to.x ? from.x : to.x;
-            const float high = from.x < to.x ? to.x : from.x;
-            if (high >= left && low <= right && (low < left || high > right)) {
-                // low < high here, so the line is not upright and dx is no zero
-                const float dx = to.x - from.x;
-                const float at_left = (left - from.x) / dx;
-                const float at_right = (right - from.x) / dx;
-                const float enter = at_left < at_right ? at_left : at_right;
-                const float leave = at_left < at_right ? at_right : at_left;
-                const ::godot::Vector2 span = to - from;
-                const ::godot::Vector2 head = from + span * (enter > 0.0f ? enter : 0.0f);
-                to = from + span * (leave < 1.0f ? leave : 1.0f);
-                from = head;
-            }
-            signs.brook.push_back(from);  // UiAnchor places in mockup units already
-            signs.brook.push_back(to);
+        // The brook's line on the water the camera sees (SignMarker::follow_brook, B0285); its flank is told once
+        // when it changes, so a sign beside the water names what put it there.
+        const float left = hud_now_.cover.surface.position.x;
+        std::string brook_line;
+        SignMarker::follow_brook(streams.front(), ground_surface_.arrays, hud_anchor_, hud_ground_, left,
+                                 left + hud_now_.cover.surface.size.x, signs.brook, brook_line);
+        if (brook_line != hud_brook_told_) {
+            hud_brook_told_ = brook_line;
+            note(::godot::String(brook_line.c_str()));
         }
     }
     signs.elapsed = hud_clock_;
@@ -335,7 +323,7 @@ bool VivariumView::fill_hud(std::string& failed) {
             }
             const std::vector<HudPortValue> reached{HudPortValue{"stage", stage_word}};
             note(::godot::String(("hud stage reached " + std::to_string(patch->stage)).c_str()));
-            if (!hud_.toast(HUD_TOAST_NEW_STAGE, reached, VivariumCarryBridge::COLOUR_LIFE, hud_clock_, failed)) {
+            if (!hud_.toast(HUD_TOAST_NEW_STAGE, reached, VivariumCarryBridge::COLOUR_LIFE, failed)) {
                 return false;
             }
         }
@@ -383,7 +371,12 @@ void VivariumView::fill_hud_debug(const VivariumPatchView* patch) {
     // (N0459). The RELEVO chip of the relief that stands: the boot's or the one granted last (ask_shape).
     debug.factor = hud_now_.sheet.glass.factor;
     debug.height_scale_m = debug_.height_scale_m;
-    debug.adapter = ASE_ADP_GODOT_VERSION;
+    // The adapter's version as the stage wrote it into build.identity (stage_native.py identity_text): a version
+    // passed as a compile define would stand on the command line of every unit of the adapter.
+    ::godot::String adapter;
+    if (read_text(identity_, "adapter_version", adapter)) {
+        debug.adapter = adapter.utf8().get_data();
+    }
     ::godot::String client;
     if (read_text(identity_, "client_commit", client)) {
         debug.client = client.utf8().get_data();
@@ -428,6 +421,7 @@ void VivariumView::draw_hud() {
         fail_hud(failed);
         return;
     }
+    draw_figure_hud(pen);  // the phone's stick and cam.mode over the HUD (07.9)
     const uint64_t cpu_drawn = thread_cpu_usec();
     // THE EDGE OF THE CARRY BRIDGE FOR THE CONTAINERS (N0451): BagWindow::take took this frame's container records
     // from VivariumCarryBridge in every mode. A container left without one (ContainerDef::backend_open) is a fault of

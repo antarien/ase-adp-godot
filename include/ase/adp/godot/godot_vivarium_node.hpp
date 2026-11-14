@@ -89,11 +89,12 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-13
- * @version     00.00.06.00030
+ * @modified    2026-11-14
+ * @version     00.00.06.00031
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
+#include <ase/adp/godot/godot_figure_scene.hpp>
 #include <ase/adp/godot/godot_garden_return.hpp>
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
 #include <ase/adp/godot/godot_hud_compose.hpp>
@@ -104,6 +105,7 @@
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
 #include <ase/adp/godot/godot_hud_ui_ground.hpp>
 #include <ase/adp/godot/godot_hud_ui_refresh.hpp>
+#include <ase/adp/godot/godot_vivarium_figure_controls.hpp>
 #include <ase/adp/godot/godot_order_budget.hpp>
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_view_layout.hpp>
@@ -173,6 +175,7 @@ private:
     bool load_patches(const ::godot::Dictionary& root);
     bool load_ground(const ::godot::Dictionary& root);
     bool load_brooks(const ::godot::Dictionary& root);
+    bool load_figure_config(const ::godot::Dictionary& root);  // the figure's ports, operations, seat and place (godot_vivarium_figure.cpp)
     bool load_layout(const ::godot::Dictionary& root);
     bool load_places(const ::godot::Dictionary& root);
     bool load_bands(const ::godot::Dictionary& layout);
@@ -216,8 +219,8 @@ private:
     bool bed(const ::godot::Vector2& at);    // in the bed mode: the first tap marks where the bed starts, the second lays it; true once laid
     void toggle_flattening();             // the button Aplanar: the flatten mode on or off (03.8)
     bool flatten(const ::godot::Vector2& at, float radius_m);  // level a disc of radius_m of the ground under the tap (the flatten mode, a HUD verb); true when the port took it
-    bool lower(const ::godot::Vector2& at, float radius_m, float depth_m);  // dig a disc of radius_m depth_m down under the tap (the verb cavar); true when the port took it
-    bool raise(const ::godot::Vector2& at, float radius_m, float height_m);  // heap a disc of radius_m height_m up under the tap (the verb amontoar); true when the port took it
+    bool lower(float x, float z, float radius_m, float depth_m);  // dig a disc of radius_m depth_m down at the ground point x, z (the verb cavar); true when the port took it
+    bool raise(float x, float z, float radius_m, float height_m);  // heap a disc of radius_m height_m up at the ground point x, z (the verb amontoar); true when the port took it
     [[nodiscard]] bool debug_tap(const ::godot::Vector2& at);  // a tap on a debug button, answered; false: none was hit
     void ask_pace(const VivariumDebugButton& button);  // the time lapse of the button: the factor of the base pace
     void ask_jump(const VivariumDebugJump& jump, uint32_t index);  // the jump of the button to a stage or an hour
@@ -245,6 +248,10 @@ private:
     void follow_stages();
     void follow_water();
     void follow_scene(double elapsed_s);
+    void follow_figure(double elapsed_s);  // the figures in the scene, the player camera and the keys that lead the seat's figure (07.4 to 07.9)
+    bool load_figure_hud(const UiTheme& theme);  // the hud_figure_* measures, colours and words of the phone's controls (07.9)
+    [[nodiscard]] bool figure_input(const ::godot::Ref<::godot::InputEvent>& local);  // the stick, the orbit drag and cam.mode; true: taken
+    void draw_figure_hud(UiPen& pen);      // the stick and cam.mode over the HUD (07.9)
     void follow_catch_up(double elapsed_s, double now_s);  // the return to the garden (godot_garden_return.hpp)
     void drain_log();
     void note(const ::godot::String& line);
@@ -340,9 +347,19 @@ private:
     PlantSceneCamera         scene_camera_;        // the near view (view.camera_*)
     float                    zoom_ = GODOT_ZOOM_START;  // the near view's zoom, moved by the mouse wheel or a pinch
     PlantSceneLook           scene_look_;         // materials and organ templates of the scene, bound once at the start (03.2)
-    OrderBudget              order_budget_;        // the line between fine and coarse cylinder by frame time (view, 03.6 V8)
+    FigureSceneLook          figure_look_;        // the figure file of the stage or its stand-in material, bound once at the start (07.9)
+    bool                     figure_view_shown_ = false;   // the scene's camera stood at the player camera's eye last frame (07.6)
+    bool                     figure_switch_held_ = false;  // the key of cam.mode was held last frame: one switch per press
+    bool                     figure_steered_ = false;      // the stick was off its rest last frame: a released stick is sent once at rest
+    bool                     figure_zoomed_ = false;       // a zoom key was held last frame: the eye the rail settled at is noted once on release (07.6)
+    bool                     figure_hand_sent_ = false;    // a hold or drop for the figure's hand went out since its figure was led (07.10)
+    uint32_t                 figure_hand_figure_ = 0;      // the figure the last hold or drop named
+    uint32_t                 figure_hand_item_ = 0;        // the item the last hold named, 0 after a drop: one request per change of the hand
+    VivariumFigureControls   figure_controls_;             // the phone's stick, orbit drag and cam.mode (07.9)
+    OrderBudget              order_budget_;        // the axis orders the bark shader shows, by frame time (view, 03.6 V8, B0295)
     std::unordered_map<uint32_t, PlantOrigin> scene_origins_;  // stem base per patch object, last placed
     uint64_t                 scene_organs_ = 0;    // organ generation the plant was last filled from
+    uint64_t                 scene_bark_ = 0;      // bark generation the tubes were last laid from: only a body that ticked moves it (usecase:101613)
     uint64_t                 scene_terrain_ = 0;   // terrain generation the ground was last built from
     PlantGroundSurface       ground_surface_;      // the ground as last handed to Godot, the input of its patch (P0690)
     uint64_t                 scene_streams_ = 0;   // stream generation the brook water was last laid from (usecase:100399 carry brook water)
@@ -401,6 +418,7 @@ private:
     std::vector<VivariumInstanceView> hud_segments_;  // the internodes of the plant in focus this frame
     std::unordered_map<std::string, VivariumHudVerb> hud_verbs_;  // hud.verbs: what each ground tool does
     uint8_t                  hud_stage_seen_ = GODOT_STAGE_NONE;  // the patch stage of the last frame: a rise is NOVO ESTÁGIO (m.html 1033)
+    std::string              hud_brook_told_;   // the brook's line last told on the flank (hud brook line, B0285)
     std::string              hud_verb_seen_;    // the HUD's verb of the last frame: a change drops the bed's start (S.bedA=null, m.html 947)
     std::string              hud_mode_seen_;    // the HUD's mode of the last frame: setMode drops the bed's start too (m.html 933)
     ::godot::Transform2D     hud_frame_;        // mockup units onto the canvas: the middle band, logical over mockup width

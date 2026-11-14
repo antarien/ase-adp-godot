@@ -39,7 +39,7 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
  * @modified    2026-11-13
- * @version     00.00.01.00003
+ * @version     00.00.01.00004
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -90,6 +90,12 @@ public:
      * far end of its view (Camera3D::get_far). False without a camera or while it looks straight up or down.
      */
     bool horizon(double& y) const;
+
+    /**
+     * The eye: the world place the camera of this frame looks from (Camera3D::get_global_transform, read by
+     * follow). A mark that may lie behind the ground asks UiGround::sees with it. False without a camera.
+     */
+    bool eye(::godot::Vector3& out) const;
 
     /** The trunk: the stem base the scene placed the plant at. */
     bool trunk(const PlantOrigin& origin, ::godot::Vector2& out) const;

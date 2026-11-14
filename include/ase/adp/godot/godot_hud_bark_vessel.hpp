@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_bark_vessel.hpp
  * @brief       The widget of the birch-bark vessel: the vessel that catches the sap of a tap and shows its fill
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": BarkVessel, the mockup's VesselItem of the cocho. It holds one ItemWidget and
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: BarkVessel, the mockup's VesselItem of the cocho. It holds one ItemWidget and
  *              learns its item from hud.items, where the entry naming BarkVessel gives the key and the mode hold.
  *              As a vessel it draws its sap body (item_art.json level, kind body, fill SAP_HELD) at the share it
  *              holds, the mockup's `y = 22 - 17 * min(1, sap / 1.5)`: the level of the place is held_l over

@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_auger_tool.hpp
  * @brief       The widget of the spoon auger: the tool that puts the hand in the mode sap
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": AugerTool, the mockup's ToolItem of the trado. It holds one ItemWidget and learns
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: AugerTool, the mockup's ToolItem of the trado. It holds one ItemWidget and learns
  *              its item from hud.items, where the entry naming AugerTool gives the key and the mode sap: the
  *              keeper bores the birch at the trunk to tap its sap (usecase:101609, laid for N0468). What the
  *              mode sap shows at the trunk, the open tap and the fill of the bark vessel, is HandMode's and

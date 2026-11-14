@@ -19,10 +19,11 @@
  * @category    ecs/module
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
- * @register    N0451 (flora.carry.v1), N0452 (flora.stow.v1), carrier N0448
+ * @register    N0451 (flora.carry.v1), N0452 (flora.stow.v1), N0487 (physics.body.v1 bodies of the tool place and
+ *              the ground things), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
- * @version     00.00.01.00006
+ * @modified    2026-11-13
+ * @version     00.00.01.00007
  */
 
 #include <ase/adp/godot/godot_vivarium_hud_carry.hpp>
@@ -262,10 +263,14 @@ void VivariumCarryBridge::fill(VivariumHudFrame& now, const ::godot::Vector3& pa
         rack_right_ = right;
         rack_view_ = ahead;
         rack_place_ = patch + right * static_cast<float>(rack_across_) + ahead * static_cast<float>(rack_ahead_);
-        double height = 0.0;
-        if (ground.height(rack_place_.x, rack_place_.z, height)) {
-            rack_place_.y = static_cast<float>(height);
-        }
+    }
+    // NOT BOUND (GAP_BODY, N0487): the tool place is to be an ase-physics body whose height the port hands out as
+    // HUB_PHYS_BODY_Y after gravity and ground contact. Until it delivers, the bridge sets the height to the ground
+    // as it lies now, read every frame, so that a place dug under does not hang at the height of the first frame.
+    // This is a bridge default and no physics; it goes when the body port is read here (R015).
+    double rack_height = 0.0;
+    if (ground.height(rack_place_.x, rack_place_.z, rack_height)) {
+        rack_place_.y = static_cast<float>(rack_height);
     }
 
     // The stem place plugTap lays the trough beside. The dibber's hole: a sowing apply() accepted gets this frame's
@@ -276,10 +281,16 @@ void VivariumCarryBridge::fill(VivariumHudFrame& now, const ::godot::Vector3& pa
         sown_ = true;
         sown_at_ = now.clock;
         sown_place_ = patch;
+        dug_ = false;
+        seeded_ = false;
+        covered_ = true;  // the dibber pricks the hole, the nutlet goes in and closes it in one tap (sowTap)
     }
     now.sow.sown = sown_;
     now.sow.place = sown_place_;
     now.sow.age = now.clock - sown_at_;
+    now.sow.open = dug_;  // the planting hole of the spade (usecase:100388, Q02) stands until cover() fills it
+    now.sow.seeded = seeded_;
+    now.sow.covered = covered_;
 
     pack_things_.clear();
     pouch_things_.clear();
@@ -359,6 +370,8 @@ void VivariumCarryBridge::fill(VivariumHudFrame& now, const ::godot::Vector3& pa
                 place = rack_place_ + rack_right_ * static_cast<float>(thing.along) +
                         rack_view_ * static_cast<float>(slot_ahead_);
             }
+            // NOT BOUND (GAP_BODY, N0487): the height of a thing on the ground is to come from its ase-physics body
+            // (HUB_PHYS_BODY_Y); until that port delivers, the bridge lays it on the ground under it.
             double height = 0.0;
             if (ground.height(place.x, place.z, height)) {
                 place.y = static_cast<float>(height);

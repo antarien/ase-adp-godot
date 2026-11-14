@@ -5,8 +5,8 @@
  *
  * @file        godot_hud_knife_tool.hpp
  * @brief       The widget of the iron knife: a tool held in the hand that has no use in the garden yet
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table "je Gerät eine eigene Widget-Klasse über
- *              UiItemSprite": KnifeTool, the mockup's ToolItem of the faca. It holds one ItemWidget and learns
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.7, the table of one widget class per device over
+ *              UiItemSprite: KnifeTool, the mockup's ToolItem of the faca. It holds one ItemWidget and learns
  *              its item from hud.items, where the entry naming KnifeTool gives the key and the mode hold. The
  *              knife names no care case of its own (its case words read "kein Fall in Phase 3"); it is a thing
  *              of the growing interface that the keeper carries, so the file names the case of the inventory

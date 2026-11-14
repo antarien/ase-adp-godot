@@ -26,7 +26,7 @@
  * @actor       Worldkeeper Perception Relay (WORLPERREL)
  * @created     2026-11-01
  * @modified    2026-11-13
- * @version     00.00.05.00000
+ * @version     00.00.06.00001
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -60,16 +60,20 @@ uint32_t build_water(const std::vector<VivariumStreamView>& streams, const std::
  * ground are one cell, its triangles (sw, se, ne) and (sw, ne, nw). The water level of a stream at each of its
  * GODOT_WATER_STATIONS sections is the lowest ground vertex of the section within the bed (half the bed width
  * plus GODOT_WATER_SWING_SHARE of it from the line between its ends) plus the depth ase-hydro gives the stream,
- * never sinking toward the source under the level below it; a dry stream holds no water. A ground vertex in a
- * bed carries the highest level of the streams whose beds hold it. For every cell with such a corner below its
- * level, the quad of that cell at the level, a bank corner outside every bed at the lowest level of the cell's bed
- * corners, its two triangles in the ground's order (the front face looking up). One vertex per ground vertex a
- * wet cell names, shared by the cells that name it; its texture coordinates the world metres east and north. The
+ * never sinking toward the source under the level below it nor under the groundwater table the stream runs in
+ * (its groundwater_level_m, NN0 GODOT_WATER_TABLE_M while the record carries none, N0484); a dry stream holds no
+ * water of its own. A ground vertex in a bed carries the highest level of the streams whose beds hold it. A
+ * ground vertex in no bed but within the groundwater reach of a stream (groundwater_reach_m from the line between
+ * its ends, held within its ends) carries the highest groundwater level of those streams (groundwater_level_m,
+ * B0286), so a pit dug below that level fills to it; every other ground vertex carries the table at NN0, so every
+ * hollow below NN0 holds water. For every cell with a corner below its level, the quad of that cell at the level,
+ * a bank corner outside every bed at the lowest level of the cell's bed corners where that stands above its own
+ * table, its two triangles in the ground's order (the front face looking up). One vertex per ground vertex a wet
+ * cell names, shared by the cells that name it; its texture coordinates the world metres east and north. The
  * vertex colour carries the water: red the velocity share of the fastest stream whose bed holds the vertex, green
  * the depth of the water above the ground vertex over GODOT_WATER_DEPTH_FULL_M, blue and alpha that stream's
- * unit course mapped into [0, 1] (north where no stream flows). A cell in no bed, or wholly above its water,
- * draws nothing; a cell whose corner the terrain port did not carry is no cell of the ground and draws nothing
- * either.
+ * unit course mapped into [0, 1] (north where no stream flows). A cell wholly above its water draws nothing; a
+ * cell whose corner the terrain port did not carry is no cell of the ground and draws nothing either.
  *
  * The ground is read as the dig left it: patch_ground writes the moved samples into the same arrays, so the
  * table follows a dig without a lookup by object id (P0690).
@@ -78,5 +82,38 @@ uint32_t build_water(const std::vector<VivariumStreamView>& streams, const std::
  */
 uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const PlantMeshArrays& ground,
                            PlantMeshArrays& out);
+
+/**
+ * Appends the line the water of `stream` runs along to `out`, x, height and z per point, from the start of the
+ * bed to its end (B0285): one point per station of the GODOT_WATER_STATIONS sections that holds water, at the
+ * level build_water_table lays there, and across the bed at the centre of the ground vertices of the section
+ * under that level, each weighted by the water over it. The water of a winding bed stands off the line between
+ * the ends, and this line follows it, so a mark laid along it lies on the water the table draws. Only the
+ * vertices whose water `seen` answers true for (`context`, x, level, z) count: the camera looks flat over the
+ * bank of a carved bed, the lip hides the near water, and the centre of all the water landed on the bank under
+ * the strip the eye sees (run 20261113-1951-m05-rain). A station no ground vertex falls into, or none of whose
+ * vertices lies under its level with its water seen, lays no point; a dry stream lays none.
+ *
+ * @return the points appended
+ */
+uint32_t build_water_line(const VivariumStreamView& stream, const PlantMeshArrays& ground,
+                          bool (*seen)(const void* context, float x, float y, float z), const void* context,
+                          std::vector<float>& out);
+
+/**
+ * Appends the line the carved bed of `stream` runs along as the eye sees it to `out`, x, height and z per point,
+ * from the start of the bed to its end (B0285): one point per station of the GODOT_WATER_STATIONS sections, at
+ * the centre of the ground vertices of the section `seen` answers true for (`context`, x, height, z), each
+ * weighted by how far it lies under the highest vertex of its section, so the bank around the bed weighs nothing
+ * and the walls and floor of the bed carry the point, which stands on that ground. A bed carved 0.6 m deep with
+ * water 0.17 m deep in it shows the eye 1.9 m high no water over its near lip (run 20261113-d2309-tri: 1716 of
+ * 1716 water points hidden, no water colour in the picture); what the eye sees of the brook then is its bed, and
+ * a mark laid along this line lies on it. A station without a seen vertex under its highest one lays no point.
+ *
+ * @return the points appended
+ */
+uint32_t build_bed_line(const VivariumStreamView& stream, const PlantMeshArrays& ground,
+                        bool (*seen)(const void* context, float x, float y, float z), const void* context,
+                        std::vector<float>& out);
 
 }  // namespace ase::adp::godot

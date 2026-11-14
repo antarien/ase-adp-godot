@@ -79,6 +79,9 @@ bool VivariumView::load_hud(const ::godot::Dictionary& root) {
     if (!load_hud_bridge(hud_.theme())) {
         return false;  // the failing hud_bridge_* token of SHA stands on the error panel already
     }
+    if (!load_figure_hud(hud_.theme())) {
+        return false;  // the failing hud_figure_* token of SHA stands on the error panel already (07.9)
+    }
     read_hud_still();
     std::string carry_failed;
     if (!hud_carry_.load(hud_.theme(), carry_failed)) {

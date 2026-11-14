@@ -3,8 +3,8 @@
  *
  * @file        godot_vivarium_flatten.cpp
  * @brief       VivariumView - Aplanar: the flatten mode and the disc the player levels where he taps
- * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8, operator order of 2026-10-25 ("wo kann ich da das
- *              Gebiet flatten"): the player levels the ground at a place of his choosing with the mouse or
+ * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8, operator order of 2026-10-25 (flatten an area of
+ *              the ground): the player levels the ground at a place of his choosing with the mouse or
  *              the finger. In the flatten mode a tap on the ground sends a disc of radius view.flatten_m
  *              around the terrain sample under the tap to the flatten port; ase-pl-flora lays its body,
  *              ase-terrain levels it to the height of its centre, and the view shows the new ground once
@@ -96,15 +96,9 @@ bool VivariumView::flatten(const ::godot::Vector2& at, float radius_m) {
     return status == ase::kernel::HostStatusOk;  // the HUD toasts only an act the port took (applyTerr's changed)
 }
 
-bool VivariumView::lower(const ::godot::Vector2& at, float radius_m, float depth_m) {
-    float x = 0.0f;
-    float z = 0.0f;
-    float nearest_px = -1.0f;
-    if (!pick_ground(at, x, z, nearest_px)) {
-        note("lower at " + ::godot::String::num(at.x, 0) + "," + ::godot::String::num(at.y, 0) +
-             " result=none nearest_px=" + ::godot::String::num(nearest_px, 1));
-        return false;
-    }
+bool VivariumView::lower(float x, float z, float radius_m, float depth_m) {
+    // The caller picked the ground point once (send_hud_verb): the tap's, or the planting hole's when the spade opens
+    // it, so the dig and the fill of one hole land on the same ground (B0297).
     // The view shows the dug ground once the terrain port carries it; water stands where it lies at or below NN0.
     ::godot::Time* clock = ::godot::Time::get_singleton();
     const uint64_t act_start_usec = clock->get_ticks_usec();
@@ -117,15 +111,8 @@ bool VivariumView::lower(const ::godot::Vector2& at, float radius_m, float depth
     return status == ase::kernel::HostStatusOk;
 }
 
-bool VivariumView::raise(const ::godot::Vector2& at, float radius_m, float height_m) {
-    float x = 0.0f;
-    float z = 0.0f;
-    float nearest_px = -1.0f;
-    if (!pick_ground(at, x, z, nearest_px)) {
-        note("raise at " + ::godot::String::num(at.x, 0) + "," + ::godot::String::num(at.y, 0) +
-             " result=none nearest_px=" + ::godot::String::num(nearest_px, 1));
-        return false;
-    }
+bool VivariumView::raise(float x, float z, float radius_m, float height_m) {
+    // the ground point as lower() takes it: the tap's, or the planting hole's when amontoar fills it (B0297)
     ::godot::Time* clock = ::godot::Time::get_singleton();
     const uint64_t act_start_usec = clock->get_ticks_usec();
     const HostStatus status = resources_.raise(x, z, radius_m, height_m);

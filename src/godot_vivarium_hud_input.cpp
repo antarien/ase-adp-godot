@@ -6,7 +6,8 @@
  * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.5: while the HUD is live every press, drag and release goes
  *              through VivariumHud in mockup units (the inverse of hud_frame_), and its clock runs on the real
  *              time of the frames. Each request it fires goes through the port that carries it - the pour, the
- *              cut, the flatten, the level, the bed, the pace, the jumps of the debug layer - or, where no port
+ *              cut, the pace, the jumps of the debug layer - the terrain verbs and the planting hole in
+ *              godot_vivarium_hud_verb.cpp (usecase:100388) - or, where no port
  *              carries it yet, its register id is logged once on the edge of the bridge (open_gap), never shown.
  *
  *              BACKEND GAPS OF THE REQUESTS (register carrier N0448): N0451 take, equip and sow;
@@ -173,7 +174,7 @@ void VivariumView::tick_hud(double elapsed_s) {
         if (hud_carry_.flow(step, factor, hud_bridge_sap_cap_l_, hud_bridge_sap_l_)) {
             note("hud sap full: l=" + ::godot::String::num(hud_bridge_sap_l_, GODOT_LOG_DECIMALS) +
                  " factor=" + ::godot::String::num(factor, GODOT_LOG_DECIMALS));
-            if (!hud_.toast(VivariumHud::TOAST_VESSEL_FULL, {}, VivariumHud::COLOUR_SAP, hud_clock_, failed)) {
+            if (!hud_.toast(VivariumHud::TOAST_VESSEL_FULL, {}, VivariumHud::COLOUR_SAP, failed)) {
                 fail_hud(failed);
                 return;
             }
@@ -214,7 +215,7 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
             // turns to focus (TOOLS.prune.ok()). The marks of this frame still count the shoot just cut.
             if (status == ase::kernel::HostStatusOk) {
                 std::string failed;
-                if (!hud_.toast(VivariumHud::TOAST_PRUNED, {}, VivariumHud::COLOUR_CUT, hud_clock_, failed)) {
+                if (!hud_.toast(VivariumHud::TOAST_PRUNED, {}, VivariumHud::COLOUR_CUT, failed)) {
                     fail_hud(failed);
                     return;
                 }
@@ -258,8 +259,8 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
                 hud_.put_away();
             }
             note(::godot::String(("hud sow " + std::string(sown ? "done: " : "refused: ") + done).c_str()));
-            if (!hud_.toast(toast, {}, sown ? VivariumCarryBridge::COLOUR_LIFE : GODOT_HUD_COLOUR_REFUSED, hud_clock_,
-                            failed)) {
+            if (toast != nullptr &&
+                !hud_.toast(toast, {}, sown ? VivariumCarryBridge::COLOUR_LIFE : GODOT_HUD_COLOUR_REFUSED, failed)) {
                 fail_hud(failed);
                 return;
             }
@@ -289,7 +290,7 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
             note(::godot::String(("hud brook " + std::string(filled ? "done: " : "refused: ") + done).c_str()));
             // The values stand named before the test (-Wdangling-pointer, as in godot_vivarium_water.cpp).
             const std::vector<HudPortValue> held{HudPortValue{"l", hud_decimals(litres, 0)}};
-            if (toast != nullptr && !hud_.toast(toast, held, VivariumHud::COLOUR_WATER, hud_clock_, failed)) {
+            if (toast != nullptr && !hud_.toast(toast, held, VivariumHud::COLOUR_WATER, failed)) {
                 fail_hud(failed);
                 return;
             }
@@ -306,8 +307,7 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
                 hud_.put_away();
             }
             note(::godot::String(("hud sap trunk " + std::string(tapped ? "done: " : "refused: ") + done).c_str()));
-            if (!hud_.toast(toast, {}, tapped ? VivariumHud::COLOUR_SAP : GODOT_HUD_COLOUR_REFUSED, hud_clock_,
-                            failed)) {
+            if (!hud_.toast(toast, {}, tapped ? VivariumHud::COLOUR_SAP : GODOT_HUD_COLOUR_REFUSED, failed)) {
                 fail_hud(failed);
                 return;
             }
@@ -324,7 +324,7 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
                 hud_bridge_sap_l_ = 0.0;
                 hud_.put_away();
                 if (!hud_.toast(VivariumHud::TOAST_SAP_TAKEN, {HudPortValue{"l", hud_decimals(held_l, 1)}},
-                                VivariumHud::COLOUR_SAP, hud_clock_, failed)) {
+                                VivariumHud::COLOUR_SAP, failed)) {
                     fail_hud(failed);
                     return;
                 }
@@ -333,89 +333,6 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
             fail_hud("a request of no known kind: " + kind);
             return;
         }
-    }
-}
-
-void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
-    const auto found = hud_verbs_.find(request.key);
-    if (found == hud_verbs_.end()) {
-        fail_hud("hud.verbs." + request.key);
-        return;
-    }
-    const VivariumHudVerb& verb = found->second;
-    const std::string& op = verb.op;
-    settle_bed_choice();  // a verb or mode chosen earlier in this frame drops an old start before this tap lays one
-    // The brush lies in mockup units; the ports read the ground under it on the canvas.
-    const ::godot::Vector2 at = hud_frame_.xform(request.point);
-    // THE READINGS AT THE TAP. hud_now_ was laid in the frame before the finger set down, its brush still where the
-    // last tap left it (run v13-enxada-014635: soltar beside the ring toasted plain while the panel named the zone,
-    // amontoar at the same spot warned from the stem tap before). applyTerr asks inRoot, hAt and slopeAt where the
-    // finger set down (m.html 979), so the hand's ground is read again at this tap with the verb's own brush.
-    HandSlotFrame hand = hud_now_.hand;
-    hand.brush_m = verb.brush_m;
-    GroundReticleFrame reticle = hud_now_.terrain.reticle;
-    float tap_x = 0.0f;
-    float tap_z = 0.0f;
-    float nearest_px = -1.0f;
-    reticle.brush_on = pick_ground(at, tap_x, tap_z, nearest_px);
-    reticle.brush_x = static_cast<double>(tap_x);
-    reticle.brush_z = static_cast<double>(tap_z);
-    hud_hand_.ground(hand, reticle);
-    // applyTerr (m.html 979 to 991): a verb toasts only once it acted. The ports that carry an act answer whether
-    // they took it (bed, flatten, level, lower, raise; the bed's first tap lays nothing); the acts no port carries yet act in the
-    // bridge's frame, their gap logged once on the edge.
-    bool acted = false;
-    std::vector<HudPortValue> values;
-    if (op == VivariumHud::OP_BED) {
-        acted = bed(at);
-    } else if (op == VivariumHud::OP_FLATTEN) {
-        acted = flatten(at, static_cast<float>(verb.brush_m));
-    } else if (op == VivariumHud::OP_LEVEL) {
-        if (selected_place_ == GODOT_NO_PLACE && !start_.patches.empty()) {
-            select(patch_focus_place(selected_place_, start_.patches.front().place));
-        }
-        acted = level();
-    } else if (op == VivariumHud::OP_LOWER) {
-        acted = lower(at, static_cast<float>(verb.brush_m), static_cast<float>(verb.depth_m));
-    } else if (op == VivariumHud::OP_RAISE) {
-        acted = raise(at, static_cast<float>(verb.brush_m), static_cast<float>(verb.depth_m));
-    } else if (op == VivariumHud::OP_LOOSEN) {
-        // applyTerr soltar (m.html 980): the bridge loosens the points under the brush while flora.patch.v1 carries
-        // no loose soil (N0456); the crumbs and the patch's share read it from there
-        open_gap(GODOT_HUD_GAP_LOOSE, request.kind);
-        if (reticle.brush_on) {
-            hud_loose_.loosen(reticle.brush_x, reticle.brush_z, verb.brush_m);
-        }
-        acted = true;
-    } else if (op == VivariumHud::OP_MEASURE) {
-        // ALT f1(hAt) M · DECLIVE round(slopeAt)°: the ground under the brush as the bridge reads it (N0464).
-        open_gap(VivariumHud::GAP_MEASURE, request.kind);
-        values.push_back(HudPortValue{"m", hud_decimals(hand.height_m, 1)});
-        values.push_back(HudPortValue{"deg", hud_decimals(hand.slope_deg, 0)});
-        acted = true;
-    } else {
-        fail_hud("hud.verbs." + request.key + ".op");
-        return;
-    }
-    if (!acted) {
-        return;
-    }
-    // THE ROOT ZONE. A brush over the roots turns the toast into the verb's warning in DOMAIN_ALERT: loosening hurts
-    // only living roots (inRoot && !S.dead), shaping warns of the zone whatever the birch's state; a verb whose
-    // roots word is empty warns of nothing (the bed, the level of the whole patch, the measure).
-    const bool warn = !verb.roots.empty() && hand.in_roots && (op != VivariumHud::OP_LOOSEN || !hand.dead);
-    if (warn && op == VivariumHud::OP_LOOSEN) {
-        // RAÍZES FERIDAS costs the bridge's growth (S.grow - 4 of 100, m.html 980), N0454 and N0456
-        hud_bridge_growth_ = ase::math::max(0.0, hud_bridge_growth_ - hud_loose_.root_cost());
-    }
-    const std::vector<HudPortValue> none;
-    const std::string colour =
-        warn ? std::string(GODOT_HUD_COLOUR_REFUSED)
-             : std::string("DOMAIN_") + ::godot::String(verb.tone.c_str()).to_upper().utf8().get_data();
-    note(::godot::String(("hud verb " + request.key + " toast=" + (warn ? verb.roots : verb.toast)).c_str()));
-    std::string failed;
-    if (!hud_.toast(warn ? verb.roots : verb.toast, warn ? none : values, colour, hud_clock_, failed)) {
-        fail_hud(failed);
     }
 }
 

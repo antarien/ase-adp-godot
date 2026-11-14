@@ -22,8 +22,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-12
- * @version     00.00.10.00011
+ * @modified    2026-11-14
+ * @version     00.00.10.00012
  *
  * WHY THE PORT KEYS ARE WRITTEN A SECOND TIME
  *
@@ -140,6 +140,9 @@ constexpr const char* GODOT_KEY_ORDER = "order";              // organ record: b
 constexpr const char* GODOT_KEY_X = "x";                      // organ record: metres east of the stem base; patch record: the stem base, world metres east; corner record: place on the unit
 constexpr const char* GODOT_KEY_Y = "y";                      // organ record: metres above the ground at the stem base; patch record: the stem base, world metres up (TRN_FLAT_HGT); corner record: place along the unit
 constexpr const char* GODOT_KEY_Z = "z";                      // organ record: metres north of the stem base; patch record: the stem base, world metres north; corner record: place on the unit
+constexpr const char* GODOT_KEY_AIM_X = "aim_x";              // view request: the point the camera looks at, world metres east (FLORA_HOST_KEY_AIM_X)
+constexpr const char* GODOT_KEY_AIM_Y = "aim_y";              // view request: the point the camera looks at, world metres up (FLORA_HOST_KEY_AIM_Y)
+constexpr const char* GODOT_KEY_AIM_Z = "aim_z";              // view request: the point the camera looks at, world metres north (FLORA_HOST_KEY_AIM_Z)
 // An organ record carries the organ's frame in place of a direction: the unit quaternion ase-render-data
 // builds from the direction and roll of ase-phytomer or ase-radix (hub_plnt_part_quat_comp.hpp). It turns
 // the plant frame (y up) into the organ's: local y along the organ, local x along its roll axis.
@@ -172,6 +175,19 @@ constexpr uint32_t GODOT_SWAY_TEXELS = 2u;                    // texels of one i
 constexpr uint32_t GODOT_SWAY_TEXEL_VALUES = 4u;              // values of one texel of the sway data texture (RGBA)
 constexpr uint32_t GODOT_SWAY_VALUES = GODOT_SWAY_TEXELS * GODOT_SWAY_TEXEL_VALUES;  // values of one instance: the seven of its record and one spare
 constexpr uint32_t GODOT_SWAY_ROW_INSTANCES = 1024u;          // instances in one row of the sway data texture: the row count stays far below every texture limit
+// The bark tube of every axis (register B0295 point 4, usecase:101613 show the plant bark tubes): one record per
+// vertex on the bark port, its object id the vertex row; ase-render-data built the tube with frames carried by
+// parallel transport, ase-pl-flora lays it out page by page (FLORA_HOST_PORT_BARK, FLORA_HOST_KEY_NEXT/BELOW/ORGAN,
+// repeated here because the adapter reads the port and never links the plugin). A record carries body, x, y, z
+// (plant-local), nx, ny, nz, u (0..1 around the ring) and v (metres along the axis from its foot ring), and the
+// three links below; the view closes the quad strip between two rings by object id and builds no geometry.
+constexpr const char* GODOT_KEY_NEXT = "next";                // bark record: object id of the next vertex on the same knot ring, InvalidEntityId after the closing one
+constexpr const char* GODOT_KEY_BELOW = "below";              // bark record: object id of the vertex at the same place on the ring below, InvalidEntityId on a foot ring
+constexpr const char* GODOT_KEY_ORGAN = "organ";              // bark record: object id of the internode whose knot ring the vertex belongs to (a segment record)
+constexpr uint32_t GODOT_BARK_VERTS_PER_PASS = 4096u;         // bark vertices ase-pl-flora files per pass (FLORA_HOST_BARK_VERTS_PER_PASS): a new set takes one pass per page before the host swaps it in
+constexpr const char* GODOT_BARK_SCHEDULE = "Production";     // schedule in which ase-pl-flora files the bark pages, one pass per tick
+constexpr uint32_t GODOT_BARK_CUSTOM_VALUES = 4u;            // values of one custom array of a bark vertex (RGBA float): CUSTOM0 = bark share and the three tilings, CUSTOM1 = sway slot, sway share, ring radius and order
+constexpr uint32_t GODOT_LINK_NONE = UINT32_MAX;              // bark record: a link that names no vertex (InvalidEntityId of the engine)
 
 /**
  * The organ ports of ase-pl-flora (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.3): one port per organ class,
@@ -381,8 +397,10 @@ constexpr const char* GODOT_PLANT_GROUND = "PlantGround";         // the ground 
 constexpr const char* GODOT_PLANT_WATER = "PlantWater";           // the water of the brooks in their beds (usecase:101339 - show the ground around plant)
 constexpr const char* GODOT_PLANT_BODIES = "PlantBodies";         // the node the plants stand under, one child per body
 constexpr const char* GODOT_PLANT_BODY_PREFIX = "PlantBody";      // name of a plant's node: this and the object id of its patch
-constexpr const char* GODOT_PLANT_TUBES = "PlantTubes";           // the internodes up to the shown orders, on the fine cylinder
-constexpr const char* GODOT_PLANT_TWIGS = "PlantTwigs";           // the internodes above them, on the coarse cylinder
+constexpr const char* GODOT_PLANT_BARK = "PlantBark";             // the continuous bark tube of every axis of the plant, the node of its two meshes below (usecase:101613)
+constexpr const char* GODOT_PLANT_TUBES = "PlantTubes";           // the bark tube of the internodes up to the shown orders, every corner of the knot ring
+constexpr const char* GODOT_PLANT_TWIGS = "PlantTwigs";           // the bark tube of the internodes above them, on evenly spaced corners of the knot ring
+constexpr uint32_t GODOT_TWIG_LEAST_CORNERS = 3u;                 // corners of a knot ring a twig is drawn with at least: the fewest that close a surface, RENDER_DATA_TMPL_CYL_SIDES_CORS of ase-render-data
 constexpr const char* GODOT_PLANT_LEAVES = "PlantLeaves";         // the leaves as instances
 constexpr const char* GODOT_PLANT_MALE = "PlantMale";             // the male catkins as instances
 constexpr const char* GODOT_PLANT_FEMALE = "PlantFemale";         // the female catkins as instances
@@ -671,6 +689,9 @@ constexpr const char* GODOT_SELFTEST_KEY_Z = "z";                    // lay: cen
 constexpr const char* GODOT_SELFTEST_KEY_HALF = "half_m";            // lay: half edge of the patch square, metres
 constexpr const char* GODOT_SELFTEST_KEY_VIEW = "view";              // action: place the eye of the view through the view port
 constexpr const char* GODOT_SELFTEST_KEY_Y = "y";                    // view: the eye, world metres up (x east, z north as for lay)
+constexpr const char* GODOT_SELFTEST_KEY_AIM_X = "aim_x";            // view: the point the eye looks at, world metres east
+constexpr const char* GODOT_SELFTEST_KEY_AIM_Y = "aim_y";            // view: the point the eye looks at, world metres up
+constexpr const char* GODOT_SELFTEST_KEY_AIM_Z = "aim_z";            // view: the point the eye looks at, world metres north
 constexpr const char* GODOT_SELFTEST_RECORD_CLOCK = "clock";         // record: the clock port
 constexpr const char* GODOT_SELFTEST_RECORD_PATCH = "patch";         // record: the patch port; an organ port by its GODOT_ORGAN_WORDS
 constexpr const char* GODOT_SELFTEST_OP_EQ = "eq";                   // |actual - value| <= tolerance
@@ -781,7 +802,7 @@ constexpr double GODOT_WATER_ARRIVED_SHARE = 0.5;  // share of the expected rise
  */
 constexpr uint32_t GODOT_INIT_RENDER_FRAMES = 10u;          // frames in a row the complete scene renders under the start screen without a new pipeline compilation before it lifts
 constexpr uint32_t GODOT_INIT_SCENE_PARTS = 5u;             // parts the scene must stand with: terrain, streams, templates, organs, camera focus
-constexpr double GODOT_INIT_STEPS = 4.0;                    // equal steps of the progress bar: patches, brooks, scene parts, quiet frames
+constexpr double GODOT_INIT_STEPS = 6.0;                    // equal steps of the progress bar: patches, brooks, scene parts, sky and clock, figure file, quiet frames
 constexpr float GODOT_PROGRESS_WIDTH_SHARE = 0.6f;          // width of the progress bar as share of the place area
 constexpr float GODOT_PROGRESS_HEIGHT = 14.0f;              // height of the progress bar (logical pixels)
 constexpr float GODOT_PROGRESS_GAP = 36.0f;                 // gap between the loading line and the progress bar, and the bar and its percent line
@@ -898,14 +919,15 @@ constexpr int32_t GODOT_ITEM_CURVE_POINTS = 16;                       // points 
 constexpr int32_t GODOT_ITEM_POLYGON_MIN = 3;                         // fewest corners a filled outline needs
 constexpr double GODOT_ITEM_POINT_EPSILON = 1.0e-4;                   // view-box distance at which two outline points count as one
 
-// The backend gaps of the care view (PLAN_ASE_VIVARIUM_PHASE_06_HUD "Die Brücke", carrier N0448): a block
-// whose value a port does not deliver yet shows texts.hud.backend_open_id with its register entry and logs
-// it once on the edge, never a stand-in value. The register is the one list; these name its entries.
+// The backend gaps of the care view (PLAN_ASE_VIVARIUM_PHASE_06_HUD bridge section, carrier N0448): while a port
+// does not deliver a value, the bridge writes the mockup's value from SHA into the frame and the picture stays
+// whole; VivariumView::open_gap logs the gap once on its edge with its register entry, never in the picture.
+// The register is the one list; these name its entries.
 constexpr const char* GODOT_HUD_GAP_CARRY = "N0451";                  // flora.carry.v1: things, place, containers, load (ase-inventory)
 constexpr const char* GODOT_HUD_GAP_STOW = "N0452";                   // flora.stow.v1: moving a thing with its refusal code
 constexpr const char* GODOT_HUD_GAP_WEATHER = "N0449";                // flora.weather.v1: the weather kind, wind and what falls (ase-weather)
 constexpr const char* GODOT_HUD_GAP_PATCH = "N0454";                  // flora.patch.v1: soil water and the preview after watering
-constexpr const char* GODOT_HUD_GAP_LOOSE = "N0456";                  // the loosened share of the soil after the spade (Boden lockern)
+constexpr const char* GODOT_HUD_GAP_LOOSE = "N0456";                  // the loosened share of the soil after the spade (loosen the soil)
 constexpr const char* GODOT_HUD_GAP_SAP = "N0457";                    // birch sap: a running tap and the fill of its vessel
 constexpr const char* GODOT_HUD_GAP_PACE = "N0459";                   // flora.pace.v1: the factor ase-time runs this host's clock at
 constexpr const char* GODOT_HUD_GAP_ROOT = "N0463";                   // the roots of the patch on the port: depth and spread under the trunk

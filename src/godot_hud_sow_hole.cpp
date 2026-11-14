@@ -44,8 +44,11 @@ bool SowHole::bind(const UiTheme& theme, std::string& failed) {
 }
 
 void SowHole::draw(UiPen& canvas, const ::godot::Transform2D& frame, const SowHoleFrame& now) const {
-    if (!now.sown || now.anchor == nullptr || now.age < 0.0 || now.age * 1000.0 >= open_ms_) {
-        return;  // no seed went in, or the seed has closed its hole
+    // THE PLANTING HOLE THE SPADE DUG stands until amontoar closes it (operator 2026-11-13, usecase:100388, Q02 to
+    // Q04); the dibber's hole of sowTap closes after hud_world_sow_hole_ms on its own.
+    const bool dibbed = now.sown && now.age >= 0.0 && now.age * 1000.0 < open_ms_;
+    if (now.anchor == nullptr || (!now.open && !dibbed)) {
+        return;  // no hole is dug, no seed went in, or the seed has closed its hole
     }
     ::godot::Vector2 at;
     if (!now.anchor->place(now.place, at)) {

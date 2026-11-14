@@ -7,8 +7,8 @@
  *              applies to its INV: wt() and vol() of a thing, fits() of a thing at a place with the refusal code
  *              and the values its word fit_<code> names, layAt() onto the ground or the next slot of the tool
  *              place, stow() and equip(); the acts apply() follows on them: take and equip, stow and a drop
- *              (send); and sowTap in sow(), which judges the place, the birch and the pouch in the mockup's order
- *              and names the toast of its answer. Every number is a hud_bridge_* token load() read
+ *              (send). The planting acts, sowTap's sow() with dig() and cover() of the planting hole, stand in
+ *              godot_vivarium_hud_carry_plant.cpp (usecase:100388). Every number is a hud_bridge_* token load() read
  *              (godot_vivarium_hud_carry_frame.cpp); the gap stays on the view's edge.
  *
  * @module      ase-adp-godot
@@ -359,40 +359,6 @@ bool VivariumCarryBridge::brook(bool picked, const ::godot::Vector3& point, bool
     toast = TOAST_FILLED_BROOK;
     note = "filled " + can->key + " to " + std::to_string(cap) + " L";
     return true;
-}
-
-bool VivariumCarryBridge::sow(bool picked, const ::godot::Vector3& point, bool dead, const char*& toast,
-                              std::string& note) {
-    // sowTap's order (m.html 958 to 960): the place first, then the birch, then the pouch.
-    const float across_x = point.x - stem_place_.x;
-    const float across_z = point.z - stem_place_.z;
-    const double off = static_cast<double>(ase::math::sqrt(across_x * across_x + across_z * across_z));
-    if (!picked || off > sow_reach_m_) {
-        toast = TOAST_OFF_PATCH;
-        note = picked ? "the tap lies " + std::to_string(off) + " m from the stem place" : "the tap found no ground";
-        return false;
-    }
-    if (!dead) {
-        toast = TOAST_ALIVE;
-        note = "the birch still lives";
-        return false;
-    }
-    for (size_t index = 0; index < carried_.size(); ++index) {
-        Carried& seed = carried_[index];
-        if (facts_[seed.facts].id == seed_item_ && seed.count > 0) {
-            --seed.count;
-            if (seed.count <= 0) {
-                carried_.erase(carried_.begin() + static_cast<std::ptrdiff_t>(index));
-            }
-            sow_pending_ = true;  // S.hole: the dibber's hole opens at the stem place (SowHole, N14)
-            toast = TOAST_SOWN;
-            note = "sowed one " + seed_item_;
-            return true;
-        }
-    }
-    toast = TOAST_NO_SEED;
-    note = "no " + seed_item_ + " left";
-    return false;
 }
 
 bool VivariumCarryBridge::poured(const std::string& key, double litres) {

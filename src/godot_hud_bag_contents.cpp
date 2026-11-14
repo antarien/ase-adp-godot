@@ -174,6 +174,7 @@ bool BagContents::draw(UiPen& canvas, const ::godot::Transform2D& frame, const C
             text.color = view.ink;
             text.opacity = opacity;
             text.still = true;
+            text.bare = true;  // <text class="d"> past T, no sh (m.html 756): an outline smudged it on the linen
             count_.draw(canvas, frame, text);
         }
     }

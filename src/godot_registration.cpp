@@ -41,6 +41,7 @@
  * @version     00.00.01.00003
  */
 
+#include <ase/adp/godot/godot_asset_loader.hpp>
 #include <ase/adp/godot/godot_registration.hpp>
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/types.hpp>
@@ -194,12 +195,14 @@ void initialize_vivarium_module(::godot::ModuleInitializationLevel level) {
     const ::godot::StringName engine_class(GODOT_VIEW_ENGINE_CLASS);
     ::godot::internal::gdextension_interface_classdb_register_extension_class5(
         ::godot::internal::library, view_class._native_ptr(), engine_class._native_ptr(), &info);
+    register_image_skip();
 }
 
 void uninitialize_vivarium_module(::godot::ModuleInitializationLevel level) {
     if (level != ::godot::MODULE_INITIALIZATION_LEVEL_SCENE) {
         return;
     }
+    unregister_image_skip();
     const ::godot::StringName view_class(GODOT_VIEW_CLASS);
     ::godot::internal::gdextension_interface_classdb_unregister_extension_class(::godot::internal::library,
                                                                                view_class._native_ptr());
