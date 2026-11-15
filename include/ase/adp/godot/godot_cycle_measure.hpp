@@ -31,7 +31,11 @@
  * @actor       Organ Arrangement Generator (ORGAARRGEN)
  * @created     2026-10-10
  * @modified    2026-11-13
- * @version     00.00.02.00000
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/kernel/kernel_embedded_host.hpp>

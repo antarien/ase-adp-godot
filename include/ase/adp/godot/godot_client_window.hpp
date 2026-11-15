@@ -24,7 +24,11 @@
  * @actor       Vivarium Steward (VIVARIUSTE)
  * @created     2026-11-05
  * @modified    2026-11-05
- * @version     00.00.01.00000
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <cstdint>

@@ -25,7 +25,11 @@
  * @register    N0487 (the stem base as a body its owner reports through its port), carrier N0448
  * @created     2026-10-18
  * @modified    2026-11-15
- * @version     00.00.02.00023
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>

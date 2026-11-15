@@ -16,6 +16,10 @@
  * @modified    2026-11-15
  * @version     00.00.04.00023 [seed]
  *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
+ *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
  *   Godot node (OOP)             ResourceManager (NOT ECS!)

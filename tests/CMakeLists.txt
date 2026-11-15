@@ -58,6 +58,10 @@ tests could run against - a test against an invented bundle or a table of its ow
 case without touching the path Godot takes.
 
 @usecase     usecase:100051 - resolve module dependencies
+
+Copyright (c) Jan Ohlmann. All rights reserved.
+Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+SPDX-License-Identifier: LicenseRef-ASE-LIC
 ]]
 
 foreach(_adp_godot_test_input ASE_ADP_GODOT_TEST_BUNDLE_DIR ASE_ADP_GODOT_TEST_BUNDLE_TARGET

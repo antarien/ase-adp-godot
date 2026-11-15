@@ -23,7 +23,11 @@
  * @actor       cycle/DAY/NIGHT (semi/nbp) Day/Night Cycle
  * @created     2026-10-26
  * @modified    2026-11-11
- * @version     00.00.02.00001
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>

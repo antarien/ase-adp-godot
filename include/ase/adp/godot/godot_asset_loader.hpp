@@ -32,7 +32,11 @@
  * @actor       Flora Blueprint Keeper (FLORBLUKEE)
  * @created     2026-10-11
  * @modified    2026-11-14
- * @version     00.00.02.00003
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>

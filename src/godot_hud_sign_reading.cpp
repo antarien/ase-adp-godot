@@ -14,7 +14,11 @@
  * @register    N0461, N0451, N0457, N0460, carrier N0448
  * @created     2026-11-10
  * @modified    2026-11-10
- * @version     00.00.01.00001
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_hud_sign_reading.hpp>

@@ -15,7 +15,11 @@
  * @actor       Organ Instance Courier (ORGNINST)
  * @created     2026-10-26
  * @modified    2026-10-26
- * @version     00.00.01.00000
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include "test_godot_plant_records.hpp"

@@ -25,7 +25,11 @@
  * @actor       Worldkeeper Perception Relay (WORLPERREL)
  * @created     2026-11-12
  * @modified    2026-11-12
- * @version     00.00.01.00002
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <godot_cpp/variant/color.hpp>

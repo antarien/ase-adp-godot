@@ -38,7 +38,11 @@
  * @register    N0463 (flora.root.v1), N0454 (flora.patch.v1 level after a pour), carrier N0448
  * @created     2026-11-10
  * @modified    2026-11-11
- * @version     00.00.01.00001
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>

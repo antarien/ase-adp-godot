@@ -25,7 +25,11 @@
  *              N0457 (the marks of the tools: soil_not_full, branch_uncut, season_saltatrix, tap_open), carrier N0448
  * @created     2026-11-10
  * @modified    2026-11-13
- * @version     00.00.01.00003
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>

@@ -14,7 +14,11 @@
  * @register    N0449 (flora.weather.v1), carrier N0448
  * @created     2026-11-11
  * @modified    2026-11-12
- * @version     00.00.04.00000
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_hud_sky_overcast.hpp>

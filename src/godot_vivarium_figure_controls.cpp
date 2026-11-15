@@ -28,7 +28,11 @@
  * @actor       Player Input Warden (PLAYINPWAR)
  * @created     2026-11-13
  * @modified    2026-11-14
- * @version     00.00.03.00003
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>

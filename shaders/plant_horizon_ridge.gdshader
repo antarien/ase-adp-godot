@@ -20,6 +20,10 @@
  * @created     2026-11-12
  * @modified    2026-11-12
  * @version     00.00.01.00000
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 shader_type spatial;
 render_mode unshaded, fog_disabled, cull_disabled;

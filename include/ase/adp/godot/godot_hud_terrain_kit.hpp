@@ -54,7 +54,11 @@
  * @register    N0463 (flora.root.v1: the radius of the root zone, the bridge fills it), N0456 (flora.patch.v1 loose), carrier N0448
  * @created     2026-11-10
  * @modified    2026-11-13
- * @version     00.00.02.00001
+ * @version     00.00.21.00021 [init]
+ *
+ * Copyright (c) Jan Ohlmann. All rights reserved.
+ * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+ * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>

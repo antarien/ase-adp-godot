@@ -26,6 +26,10 @@ ASE GODOT ADAPTER BUILD CONFIGURATION
 @design      DSGN_021
 @created     2026-10-05
 @modified    2026-11-15
+
+Copyright (c) Jan Ohlmann. All rights reserved.
+Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
+SPDX-License-Identifier: LicenseRef-ASE-LIC
 ]]
 
 #[[ VERBOTEN: no module or plugin header and no unit of the embedded set - the adapter binds
