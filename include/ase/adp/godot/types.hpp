@@ -22,8 +22,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-14
- * @version     00.00.10.00012
+ * @modified    2026-11-15
+ * @version     00.00.10.00015
  *
  * WHY THE PORT KEYS ARE WRITTEN A SECOND TIME
  *
@@ -64,7 +64,8 @@ constexpr const char* GODOT_KEY_STAGE = "stage";              // patch record: g
 constexpr const char* GODOT_KEY_CONDITION = "condition";      // patch record: condition code (PLT_CONDITION)
 constexpr const char* GODOT_KEY_SOIL_MM = "soil_mm";          // patch record: soil water, mm (HYD_SOIL_WATER)
 constexpr const char* GODOT_KEY_SOIL_REL = "soil_rel";        // patch record: soil water over field capacity, 0..1
-constexpr const char* GODOT_KEY_CAPACITY_MM = "capacity_mm";  // patch record: field capacity, mm
+constexpr const char* GODOT_KEY_CAPACITY_MM = "capacity_mm";  // patch record and patch lay request: field capacity of the soil, mm
+constexpr const char* GODOT_KEY_GRAVITY_REL = "gravity_rel";  // patch lay request: gravity of the patch relative to g; ase-pl-flora judges the bounds
 constexpr const char* GODOT_KEY_GROW_AT_H = "grow_at_h";      // patch record: game hour ase-plant forecasts CRESCENDO at (PLT_GROW_AT_H)
 constexpr const char* GODOT_KEY_MTUR_AT_H = "mtur_at_h";      // patch record: game hour ase-plant forecasts MADURA at (PLT_MTUR_AT_H)
 constexpr const char* GODOT_KEY_BASE_Y = "base_y";            // stem record: the stem foot ase-physics holds, metres above the level of its patch
@@ -80,7 +81,7 @@ constexpr const char* GODOT_KEY_SEEK_TARGET_DAY = "seek_target_day";  // clock r
 constexpr const char* GODOT_KEY_SEEK_TARGET_H = "seek_target_h";  // clock record: hour of that day, below TIM_CONST_HOURS_PER_DAY, -1 = none or refused (TIM_SEEK_TARGET_H); the absolute target is day · hours_per_day + hour
 constexpr double GODOT_SEEK_FORM_NONE = -1.0;                 // a seek form the request does not use (FLORA_SEEK_FORM_NONE)
 constexpr double GODOT_SEEK_SEQ_FIRST = 1.0;                  // number of the host's first request (FLORA_SEEK_SEQ_FIRST)
-constexpr double GODOT_SEEK_SEQ_MAX = 16777216.0;             // largest request number a float slot holds exactly, 2^24 (FLORA_SEEK_SEQ_MAX)
+constexpr double GODOT_SEEK_SEQ_MAX = 16777216.0;             // largest request number a float slot holds exactly, 2^24 (TIM_CONST_SEEK_SEQ_MAX, ase-time)
 constexpr int GODOT_SEEK_ORDER_NONE = 0;                      // verdict: no request judged yet (TIME_SEEK_ORDER_NONE)
 constexpr int GODOT_SEEK_ORDER_AHEAD = 1;                     // verdict: the clock was set to the target in one write (TIME_SEEK_ORDER_AHEAD)
 constexpr int GODOT_SEEK_ORDER_AT = 2;                        // verdict: the clock already stood at the target (TIME_SEEK_ORDER_AT)
@@ -688,6 +689,8 @@ constexpr const char* GODOT_SELFTEST_KEY_SOIL = "soil";              // lay: gro
 constexpr const char* GODOT_SELFTEST_KEY_X = "x";                    // lay: centre of the patch, world metres east
 constexpr const char* GODOT_SELFTEST_KEY_Z = "z";                    // lay: centre of the patch, world metres north
 constexpr const char* GODOT_SELFTEST_KEY_HALF = "half_m";            // lay: half edge of the patch square, metres
+constexpr const char* GODOT_SELFTEST_KEY_CAPACITY = "capacity_mm";   // lay: field capacity of the patch soil, mm
+constexpr const char* GODOT_SELFTEST_KEY_GRAVITY = "gravity_rel";    // lay: gravity of the patch relative to g
 constexpr const char* GODOT_SELFTEST_KEY_VIEW = "view";              // action: place the eye of the view through the view port
 constexpr const char* GODOT_SELFTEST_KEY_Y = "y";                    // view: the eye, world metres up (x east, z north as for lay)
 constexpr const char* GODOT_SELFTEST_KEY_AIM_X = "aim_x";            // view: the point the eye looks at, world metres east

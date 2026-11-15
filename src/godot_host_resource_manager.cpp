@@ -13,8 +13,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-14
- * @version     00.00.04.00021 [seed]
+ * @modified    2026-11-15
+ * @version     00.00.04.00023 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -1067,7 +1067,8 @@ bool patches_layable(const std::vector<VivariumPatchSpec>& patches) {
     return true;
 }
 
-/** The lay request of one patch: place, species id, seed, ground and where it lies in the world. */
+/** The lay request of one patch: place, species id, seed, ground, where it lies in the world, the field
+ * capacity of its soil and its gravity; ase-pl-flora places nothing without all nine. */
 KernelHostInput lay_input(const VivariumPatchSpec& patch) {
     KernelHostInput input{};
     (void)put_value(input, GODOT_KEY_PLACE, static_cast<double>(patch.place));
@@ -1078,6 +1079,8 @@ KernelHostInput lay_input(const VivariumPatchSpec& patch) {
     (void)put_value(input, GODOT_KEY_X, patch.x);
     (void)put_value(input, GODOT_KEY_Z, patch.z);
     (void)put_value(input, GODOT_KEY_HALF, patch.half_m);
+    (void)put_value(input, GODOT_KEY_CAPACITY_MM, patch.capacity_mm);
+    (void)put_value(input, GODOT_KEY_GRAVITY_REL, patch.gravity_rel);
     return input;
 }
 
@@ -1541,13 +1544,20 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         patch.x = (*lay)[GODOT_SELFTEST_KEY_X].value_or(std::nan(""));
         patch.z = (*lay)[GODOT_SELFTEST_KEY_Z].value_or(std::nan(""));
         patch.half_m = (*lay)[GODOT_SELFTEST_KEY_HALF].value_or(std::nan(""));
+        patch.capacity_mm = (*lay)[GODOT_SELFTEST_KEY_CAPACITY].value_or(std::nan(""));
+        patch.gravity_rel = (*lay)[GODOT_SELFTEST_KEY_GRAVITY].value_or(std::nan(""));
         const std::string expected = (*lay)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
+        // The adapter only sees that every number is there and finite; the bounds of capacity and gravity
+        // are ase-pl-flora's (FLORA_WATER_MIN_MM..MAX_MM, GRV_CONST_AREA_REL_MIN..MAX), and a case that
+        // expects a refusal sends a value outside them on purpose.
         if (place < 0 || place > static_cast<int64_t>(UINT32_MAX) || seed < 0 ||
             seed > static_cast<int64_t>(UINT32_MAX) || patch.species.empty() || patch.soil >= GODOT_SOIL_COUNT ||
-            !std::isfinite(patch.x) || !std::isfinite(patch.z) || !(patch.half_m > 0.0) || expected.empty()) {
+            !std::isfinite(patch.x) || !std::isfinite(patch.z) || !(patch.half_m > 0.0) ||
+            !std::isfinite(patch.capacity_mm) || !std::isfinite(patch.gravity_rel) || expected.empty()) {
             report_broken(label, GODOT_SELFTEST_KEY_LAY,
-                          "needs place, species, seed, a known soil, x, z, a positive half_m and status", result,
-                          report);
+                          "needs place, species, seed, a known soil, x, z, a positive half_m, capacity_mm, "
+                          "gravity_rel and status",
+                          result, report);
             return false;
         }
         patch.place = static_cast<uint32_t>(place);

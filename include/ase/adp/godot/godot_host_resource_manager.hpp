@@ -18,8 +18,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-14
- * @version     00.00.04.00020 [seed]
+ * @modified    2026-11-15
+ * @version     00.00.04.00022 [seed]
  *
  * FLYWEIGHT PATTERN (INST_ASE_ECS_SER)
  *
@@ -100,6 +100,8 @@ struct VivariumPatchSpec {
     double      x = 0.0;       // centre of the patch, world metres east; ase-terrain levels the ground there
     double      z = 0.0;       // centre of the patch, world metres north
     double      half_m = 0.0;  // half edge of the patch square, metres; the levelled disc has this radius
+    double      capacity_mm = 0.0;  // field capacity of its soil, mm; ase-pl-flora files it at ase-hydro
+    double      gravity_rel = 0.0;  // gravity of the patch relative to g; ase-pl-flora files it at ase-physics
 };
 
 /**

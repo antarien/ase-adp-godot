@@ -32,8 +32,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-11-14
- * @version     00.00.02.00008
+ * @modified    2026-11-15
+ * @version     00.00.02.00010
  */
 
 #include <doctest/doctest.h>
@@ -56,6 +56,10 @@ namespace ase::adp::godot::test {
 // of 16 +- 12 m, and the half edge of each - the radius of the disc ase-terrain levels.
 inline constexpr double kPatchCentres[4][2] = {{10.0, 10.0}, {22.0, 10.0}, {10.0, 22.0}, {22.0, 22.0}};
 inline constexpr double kPatchHalfM = 2.0;
+// The soil and gravity every test patch is laid with: field capacity in mm and gravity relative to g,
+// inside the bounds ase-pl-flora checks (FLORA_WATER_MIN_MM..MAX_MM, GRV_CONST_AREA_REL_MIN..MAX).
+inline constexpr double kPatchCapacityMm = 100.0;
+inline constexpr double kPatchGravityRel = 1.0;
 
 // The tests' VivariumStageReadFn: one file of the bundle directory `user` names.
 inline bool read_bundle_file(const char* name, std::string& out, void* user) {
@@ -79,6 +83,9 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // The stage forecasts (usecase:101120): read_snapshot merges them into the patches by object id, so
     // boot() asks the set for this port as well.
     config.forecast_port = "flora.forecast.v1";
+    // The stem feet ase-physics holds (usecase:100708, N0487): read_snapshot merges their height into the
+    // patches by object id, so boot() asks the set for this port as well.
+    config.stem_port = "flora.stem.v1";
     config.clock_port = "flora.clock.v1";
     // The SURA date record (FloraHostClkExptSystem): snapshot() reads it beside the clock, so boot()
     // asks the set for this port as well.
@@ -176,6 +183,8 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
         patch.x = kPatchCentres[place][0];
         patch.z = kPatchCentres[place][1];
         patch.half_m = kPatchHalfM;
+        patch.capacity_mm = kPatchCapacityMm;
+        patch.gravity_rel = kPatchGravityRel;
         config.patches.push_back(patch);
     }
     return config;

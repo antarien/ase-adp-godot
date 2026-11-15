@@ -16,8 +16,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-11-12
- * @version     00.00.01.00006
+ * @modified    2026-11-15
+ * @version     00.00.01.00008
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -359,6 +359,15 @@ bool VivariumView::load_patches(const ::godot::Dictionary& root) {
         }
         if (!read_number(entry, "half_m", patch.half_m) || !(patch.half_m > 0.0)) {
             return fail_config("patches[].half_m");
+        }
+        // The field capacity of its soil and its gravity: data of the scene, which ase-pl-flora files at
+        // ase-hydro and ase-physics. Finite numbers here; the bounds are ase-pl-flora's, which refuses the
+        // lay outside them (FLORA_WATER_MIN_MM..MAX_MM, GRV_CONST_AREA_REL_MIN..MAX).
+        if (!read_number(entry, GODOT_KEY_CAPACITY_MM, patch.capacity_mm) || !std::isfinite(patch.capacity_mm)) {
+            return fail_config("patches[].capacity_mm");
+        }
+        if (!read_number(entry, GODOT_KEY_GRAVITY_REL, patch.gravity_rel) || !std::isfinite(patch.gravity_rel)) {
+            return fail_config("patches[].gravity_rel");
         }
         patch.place = static_cast<uint32_t>(place);
         patch.species = utf8_of(species);

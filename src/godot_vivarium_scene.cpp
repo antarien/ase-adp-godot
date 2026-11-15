@@ -24,8 +24,8 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @register    N0487 (the stem base as a body its owner reports through its port), carrier N0448
  * @created     2026-10-18
- * @modified    2026-11-13
- * @version     00.00.02.00022
+ * @modified    2026-11-15
+ * @version     00.00.02.00023
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -133,11 +133,15 @@ void VivariumView::follow_scene(double elapsed_s) {
     // BRIDGE GAP (register N0487, carrier N0448): the view sets the stem base onto the terrain height at the stem (B0304), so a
     // hole dug under the birch takes it down. That is the plant's own place computed here, which the owner of the
     // plant has to report through its port as the body ase-physics holds; the seed port already does so (D2312).
-    // Until the patch port carries that height, the terrain at the stem stands in on the lattice and the record's
-    // level off it. This is a bridge, never evidence that the plant stands on the ground; its edge is logged once
+    // The owner reports it: ase-physics holds the stem foot as a standing body (usecase:100708), ase-pl-flora
+    // files its height on the stem port (flora.stem.v1, base_y), read_snapshot merges it into the patch and
+    // plant_origins places the plant at level plus base_y. The terrain at the stem stands in on the lattice over
+    // that height as long as the migration proof of R015 for this block is not accepted (register N0487); both
+    // heights agree while the foot follows the ground. This is a bridge, never evidence that the plant stands on
+    // the ground; its edge is logged once
     hud_ground_.follow(resources_.get_terrain(), start_.ground, resources_.terrain_generation());
     if (!origins.empty()) {
-        open_gap(VivariumCarryBridge::GAP_BODY, "flora.patch.v1.base_y");  // stem base as the owner's body (N0487)
+        open_gap(VivariumCarryBridge::GAP_BODY, "flora.stem.v1.base_y");  // stem base as the owner's body (N0487)
     }
     for (auto& origin : origins) {
         double ground = 0.0;
