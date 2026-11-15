@@ -50,6 +50,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.forecast");
     }
     start_.forecast_port = utf8_of(text);
+    // The stem feet ase-physics holds (usecase:100708 land the dispersed seeds, N0487): a port of their own,
+    // one record per patch whose stem stands, its value the height of the foot over the level of the patch.
+    if (!read_text(ports, "stem", text)) {
+        return fail_config("ports.stem");
+    }
+    start_.stem_port = utf8_of(text);
     if (!read_text(ports, "clock", text)) {
         return fail_config("ports.clock");
     }

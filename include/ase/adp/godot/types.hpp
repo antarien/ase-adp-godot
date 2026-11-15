@@ -67,6 +67,7 @@ constexpr const char* GODOT_KEY_SOIL_REL = "soil_rel";        // patch record: s
 constexpr const char* GODOT_KEY_CAPACITY_MM = "capacity_mm";  // patch record: field capacity, mm
 constexpr const char* GODOT_KEY_GROW_AT_H = "grow_at_h";      // patch record: game hour ase-plant forecasts CRESCENDO at (PLT_GROW_AT_H)
 constexpr const char* GODOT_KEY_MTUR_AT_H = "mtur_at_h";      // patch record: game hour ase-plant forecasts MADURA at (PLT_MTUR_AT_H)
+constexpr const char* GODOT_KEY_BASE_Y = "base_y";            // stem record: the stem foot ase-physics holds, metres above the level of its patch
 constexpr const char* GODOT_KEY_AMOUNT_MM = "amount_mm";      // irrigate request: water poured on the patch, mm
 constexpr const char* GODOT_KEY_FACTOR = "factor";            // pace request: the multiple of ase-time's base pace the host's clock runs at, 0 = its default
 constexpr const char* GODOT_KEY_GAME_HOUR = "game_hour";      // seek request: the absolute game hour (day x hours per day + hour) the host's clock moves to

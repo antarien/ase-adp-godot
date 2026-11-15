@@ -13,8 +13,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-09
- * @modified    2026-10-26
- * @version     00.00.08.00000
+ * @modified    2026-11-15
+ * @version     00.00.09.00000
  */
 
 #include <ase/adp/godot/godot_plant_geometry.hpp>
@@ -34,14 +34,16 @@ void append3(std::vector<float>& out, float a, float b, float c) {
 }
 
 std::unordered_map<uint32_t, PlantOrigin> plant_origins(const std::vector<VivariumPatchView>& patches) {
-    // the stem base as the patch record carried it; a value it did not carry is NaN (read_snapshot)
+    // the stem base as the patch record carried it; a value it did not carry is NaN (read_snapshot). The
+    // height is the level of the patch plus the stem foot ase-physics holds (base_y from the stem port,
+    // usecase:100708, N0487): a dug hole lowers it, a heap raises it, a patch without a record stands at 0.
     std::unordered_map<uint32_t, PlantOrigin> origins;
     for (const VivariumPatchView& patch : patches) {
         if (!std::isfinite(patch.x) || !std::isfinite(patch.y) || !std::isfinite(patch.z)) {
             continue;
         }
-        origins[patch.object_id] =
-            PlantOrigin{static_cast<float>(patch.x), static_cast<float>(patch.y), static_cast<float>(patch.z)};
+        origins[patch.object_id] = PlantOrigin{static_cast<float>(patch.x), static_cast<float>(patch.y + patch.base_y),
+                                               static_cast<float>(patch.z)};
     }
     return origins;
 }

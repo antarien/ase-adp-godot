@@ -27,8 +27,8 @@
  * @usecase     usecase:101554 - receive player input
  * @actor       Player Input Warden (PLAYINPWAR)
  * @created     2026-11-13
- * @modified    2026-11-14
- * @version     00.00.02.00005
+ * @modified    2026-11-15
+ * @version     00.00.02.00007
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
@@ -387,12 +387,23 @@ void VivariumView::follow_figure(double elapsed_s) {
         }
     }
     // the frame the zoom keys are let go, the eye and the aim the rail settled at are noted once: the distance
-    // between them is the zoom step a run judges (vivarium_figure_acceptance.py, face still)
+    // between them is the zoom step a run judges (vivarium_figure_acceptance.py, face still). Face and eye as they
+    // are drawn ride on the same line (07.3): the coarser detail level shown and the edges of the albedo on the face
+    // and the iris material, which a run holds against level 0 and the edges of the source images; "face none"
+    // while no face and eye are drawn
     if (zoom_delta == 0.0 && figure_zoomed_) {
+        int32_t face_level = 0;
+        int64_t face_edge = 0;
+        int64_t eye_edge = 0;
+        const ::godot::String face =
+            figure_face_look(scene_, camera.figure, face_level, face_edge, eye_edge)
+                ? " lod " + ::godot::String::num_int64(face_level) + " face " +
+                      ::godot::String::num_int64(face_edge) + " eye " + ::godot::String::num_int64(eye_edge)
+                : ::godot::String(" face none");
         note("figure zoomed figure=" + ::godot::String::num_uint64(camera.figure) + " eye " +
              ::godot::String::num(camera.eye_x, 2) + " " + ::godot::String::num(camera.eye_y, 2) + " " +
              ::godot::String::num(camera.eye_z, 2) + " aim " + ::godot::String::num(camera.aim_x, 2) + " " +
-             ::godot::String::num(camera.aim_y, 2) + " " + ::godot::String::num(camera.aim_z, 2));
+             ::godot::String::num(camera.aim_y, 2) + " " + ::godot::String::num(camera.aim_z, 2) + face);
     }
     figure_zoomed_ = zoom_delta != 0.0;
 }

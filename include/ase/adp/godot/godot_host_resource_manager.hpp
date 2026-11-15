@@ -148,6 +148,7 @@ struct VivariumStartConfig {
     std::string log_file;            // ABSOLUTE log file under user://, empty = callback only
     std::string patch_port;          // host port of the patches (ase-pl-flora: flora.patch.v1)
     std::string forecast_port;       // host port of the stage forecasts, one record per forecast patch (ase-pl-flora: flora.forecast.v1)
+    std::string stem_port;           // host port of the stem feet ase-physics holds, one record per standing stem (ase-pl-flora: flora.stem.v1)
     std::string clock_port;          // host port of the game clock (ase-pl-flora: flora.clock.v1)
     std::string scene_port;          // host port the patches are laid through (ase-pl-flora: flora.scene.v1)
     std::string organ_ports[GODOT_ORGAN_COUNT];  // one host port per organ class, index = GODOT_ORGAN_*
@@ -434,6 +435,7 @@ struct VivariumPatchView {
     double   mtur_at_h = 0.0;   // game hour ase-plant forecasts the stand to reach MADURA (PLT_MTUR_AT_H, forecast port), NaN unmeasured
     double   x = 0.0;           // stem base, world metres east: the centre of the patch square
     double   y = 0.0;           // stem base, world metres up: the height ase-terrain levelled the patch to
+    double   base_y = 0.0;      // stem foot, metres above y: where ase-physics holds the stem body (stem port), 0 while no record came
     double   z = 0.0;           // stem base, world metres north: the centre of the patch square
 };
 

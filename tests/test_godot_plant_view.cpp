@@ -17,8 +17,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-09
- * @modified    2026-10-26
- * @version     00.00.09.00000
+ * @modified    2026-11-15
+ * @version     00.00.10.00000
  */
 
 #include <doctest/doctest.h>
@@ -67,6 +67,23 @@ TEST_CASE("03.11: the stem base of a patch is taken from its record - centre and
     CHECK(base.z == static_cast<float>(-0.9));
     // no record, no origin
     CHECK(plant_origins({}).empty());
+}
+
+TEST_CASE("usecase:100708: the stem base stands at the level of its patch plus the stem foot ase-physics holds (N0487)") {
+    VivariumPatchView patch;
+    patch.object_id = kPatch;
+    patch.place = 2u;
+    patch.x = 1.1;
+    patch.y = 0.35;
+    patch.z = -0.9;
+    // without a record of the stem port the foot stands at the level of the patch
+    CHECK(plant_origins({patch}).at(kPatch).y == static_cast<float>(0.35));
+    // a hole dug under the stem: the body ase-physics holds lies 0.4 m below the level, and the plant with it
+    patch.base_y = -0.4;
+    CHECK(plant_origins({patch}).at(kPatch).y == static_cast<float>(0.35 - 0.4));
+    // a heap raised under it: the plant stands on top
+    patch.base_y = 0.25;
+    CHECK(plant_origins({patch}).at(kPatch).y == static_cast<float>(0.35 + 0.25));
 }
 
 TEST_CASE("the visible orders follow the frame time: a lasting load takes one back, calm gives one more") {

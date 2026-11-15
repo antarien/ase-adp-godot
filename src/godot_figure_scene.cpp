@@ -17,6 +17,9 @@
  *              While the stage carries no file the child is a capsule of the figure's height in the error
  *              material of its name with a block on its front and a hand socket at its right side.
  *
+ *              The view reads height, rig, place and face of a built node back through the figure queries
+ *              (godot_figure_query.cpp); both units reach the node by the names of godot_figure_node.hpp.
+ *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @design      DSGN_030
@@ -24,14 +27,15 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-13
- * @modified    2026-11-14
- * @version     00.00.01.00011
+ * @modified    2026-11-15
+ * @version     00.00.01.00013
  */
 
 #include <ase/adp/godot/godot_figure_scene.hpp>
 #include <ase/adp/godot/godot_asset_loader.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/godot_figure_hand.hpp>
+#include <ase/adp/godot/godot_figure_node.hpp>
 #include <ase/adp/godot/godot_figure_rig.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
@@ -63,22 +67,16 @@ namespace ase::adp::godot {
 namespace {
 
 /**
- * THE FIGURE NODES, THE STAND-IN BODY AND THE MOTION OF THE BODY. Only this unit names and builds them, so the
- * names and measures stand here and not in types.hpp, which nearly every unit of the adapter includes.
+ * THE STAND-IN BODY, THE WARM INSTANCE, THE SOCKET AND THE MOTION OF THE BODY. Only this unit builds them, so the
+ * names and measures stand here and not in types.hpp, which nearly every unit of the adapter includes; the names
+ * of the figure's node, which the figure queries read too, stand in godot_figure_node.hpp.
  */
 constexpr const char* kFigureRole = "figure";              // the role of the stage the figure asset is named under (vivarium_assets.json)
-constexpr const char* kFigureHolder = "FigureBodies";       // the node the figures stand under, one child per figure
 constexpr const char* kFigureWarm = "FigureWarm";           // the instance of the figure file that stands behind the start screen while its pipelines compile
-constexpr const char* kFigurePrefix = "Figure";             // name of a figure's node: this and the object id of the figure
 constexpr const char* kFigureSocketBone = "socket_hand_r";  // the socket bone of the rig of villager_body (ase-assgen recipe), the right hand
 constexpr const char* kFigureSocket = "FigureSocketHandR";  // name of the BoneAttachment3D that follows the socket bone; what the hand carries hangs below it
-constexpr const char* kFigureMetaHeight = "figure_height";  // meta of a figure's node: height of its level 0, metres
-constexpr const char* kFigureMetaEye = "figure_eye";        // meta of a figure's node: eye height above the soles from the rest pose of its rig, metres
-constexpr const char* kFigureMetaRigTaken = "figure_rig_taken";  // meta of a figure's node: its rig was handed to the view for the rig port
-constexpr const char* kFigureMetaPlaceNoted = "figure_place_noted";  // meta of a figure's node: the place last handed to the view's place line
-constexpr const char* kFigureMetaLevel = "figure_lod";      // meta of a mesh of the figure file: its detail level
 constexpr const char* kFigureLodMark = "_lod";              // a mesh name carries its level as _lod<k>_ (villager_body_lod0_Tunic)
-constexpr int32_t kFigureLodLevels = 4;                     // detail levels of the figure file, 0 the finest
+constexpr int32_t kFigureLodLevels = 4;                    // detail levels of the figure file, 0 the finest
 constexpr float kFigureStandInRadius = 0.3f;                // stand-in body: radius of the capsule, metres
 constexpr float kFigureStandInHeight = 1.8f;                // stand-in body: height of the capsule, metres, the height of a grown villager
 constexpr float kFigureFrontEdge = 0.18f;                   // stand-in body: edge of the block on its front, metres
@@ -88,17 +86,6 @@ constexpr double kFigureAimMinSquared = 1.0e-6;             // eye and aim close
 constexpr float kFigureHandSide = 0.36f;                    // stand-in body: its hand socket beside the capsule on its right (+x), metres
 constexpr float kFigureHandLift = 0.95f;                    // stand-in body: height of its hand socket above the feet, metres
 constexpr float kFigureModelTurn = ase::math::PI;           // turn of the figure file around y: glTF faces +z, course 0 of ase-player looks along -z
-
-/** The node of `parent` with that name, cast to its class; nullptr when it has none. */
-template <typename T>
-T* child_of(::godot::Node* parent, const ::godot::String& name) {
-    return ::godot::Object::cast_to<T>(parent->get_node_or_null(::godot::NodePath(name)));
-}
-
-/** The name of a figure's node. */
-::godot::String figure_name(uint32_t object_id) {
-    return ::godot::String(kFigurePrefix) + ::godot::String::num_uint64(object_id);
-}
 
 /** The detail level a node name carries as _lod<k>_, -1 when it carries none. */
 int32_t level_of_name(const ::godot::String& name) {
@@ -213,7 +200,7 @@ void add_stand_in(::godot::Node3D* body, const ::godot::Ref<::godot::Material>& 
  */
 ::godot::Node3D* new_figure(const FigureSceneLook& look, uint32_t object_id, const VivariumFigureCodeView& codes) {
     ::godot::Node3D* body = memnew(::godot::Node3D);
-    body->set_name(figure_name(object_id));
+    body->set_name(figure_node_name(object_id));
     body->set_meta(kFigureMetaHeight, kFigureStandInHeight);
     ::godot::Node* model = look.model.is_null() ? nullptr : look.model->instantiate();
     if (model == nullptr) {
@@ -294,7 +281,7 @@ void warm_figure(::godot::Node3D* scene, const FigureSceneLook& look) {
     // Behind the opaque start screen the scene renders, and the start screen lifts only after frames without a
     // new pipeline compilation (VivariumView::follow_initialisation). The instance stands with all four detail
     // levels shown, so every surface of the file meets its pipelines here and not under the first visible frame.
-    if (scene == nullptr || look.model.is_null() || child_of<::godot::Node3D>(scene, kFigureWarm) != nullptr) {
+    if (scene == nullptr || look.model.is_null() || figure_child_of<::godot::Node3D>(scene, kFigureWarm) != nullptr) {
         return;
     }
     ::godot::Node3D* warm = memnew(::godot::Node3D);
@@ -312,7 +299,7 @@ void end_figure_warmth(::godot::Node3D* scene) {
     if (scene == nullptr) {
         return;
     }
-    ::godot::Node3D* warm = child_of<::godot::Node3D>(scene, kFigureWarm);
+    ::godot::Node3D* warm = figure_child_of<::godot::Node3D>(scene, kFigureWarm);
     if (warm == nullptr) {
         return;
     }
@@ -327,21 +314,21 @@ void fill_figures(::godot::Node3D* scene, const std::vector<VivariumFigureView>&
     if (scene == nullptr || figure_load_running(look.load)) {
         return;
     }
-    ::godot::Node3D* holder = child_of<::godot::Node3D>(scene, kFigureHolder);
+    ::godot::Node3D* holder = figure_child_of<::godot::Node3D>(scene, kFigureHolder);
     if (holder == nullptr) {
         holder = memnew(::godot::Node3D);
         holder->set_name(kFigureHolder);
         scene->add_child(holder);
     }
-    const ::godot::Camera3D* eye = child_of<::godot::Camera3D>(scene, GODOT_PLANT_CAMERA);
+    const ::godot::Camera3D* eye = figure_child_of<::godot::Camera3D>(scene, GODOT_PLANT_CAMERA);
     const double dt = scene->is_inside_tree() ? scene->get_process_delta_time() : 0.0;
     // every figure of this frame at its place; the plugin's axis order is already Godot's here
     // (VivariumFigureView: y up, z north), the course is ase-player's yaw, Godot's rotation around y
     ::godot::Dictionary carried;
     for (const VivariumFigureView& figure : figures) {
-        const ::godot::String name = figure_name(figure.object_id);
+        const ::godot::String name = figure_node_name(figure.object_id);
         carried[name] = true;
-        ::godot::Node3D* body = child_of<::godot::Node3D>(holder, name);
+        ::godot::Node3D* body = figure_child_of<::godot::Node3D>(holder, name);
         const bool fresh = body == nullptr;
         if (fresh) {
             body = new_figure(look, figure.object_id, codes);
@@ -397,7 +384,7 @@ bool aim_figure_camera(::godot::Node3D* scene, const VivariumFigureCameraView& c
     if (scene == nullptr || !camera.known) {
         return false;
     }
-    ::godot::Camera3D* eye = child_of<::godot::Camera3D>(scene, GODOT_PLANT_CAMERA);
+    ::godot::Camera3D* eye = figure_child_of<::godot::Camera3D>(scene, GODOT_PLANT_CAMERA);
     if (eye == nullptr) {
         return false;
     }
@@ -411,68 +398,6 @@ bool aim_figure_camera(::godot::Node3D* scene, const VivariumFigureCameraView& c
                                                 static_cast<float>(camera.eye_z)),
                                ::godot::Vector3(static_cast<float>(camera.aim_x), static_cast<float>(camera.aim_y),
                                                 static_cast<float>(camera.aim_z)));
-    return true;
-}
-
-bool figure_height(::godot::Node3D* scene, uint32_t object_id, double& height) {
-    if (scene == nullptr) {
-        return false;
-    }
-    ::godot::Node3D* holder = child_of<::godot::Node3D>(scene, kFigureHolder);
-    if (holder == nullptr) {
-        return false;
-    }
-    ::godot::Node3D* body = child_of<::godot::Node3D>(holder, figure_name(object_id));
-    if (body == nullptr || !body->has_meta(kFigureMetaHeight)) {
-        return false;
-    }
-    height = static_cast<double>(body->get_meta(kFigureMetaHeight));
-    return true;
-}
-
-bool take_figure_rig(::godot::Node3D* scene, uint32_t object_id, double& eye_height, double& height) {
-    if (scene == nullptr) {
-        return false;
-    }
-    ::godot::Node3D* holder = child_of<::godot::Node3D>(scene, kFigureHolder);
-    if (holder == nullptr) {
-        return false;
-    }
-    ::godot::Node3D* body = child_of<::godot::Node3D>(holder, figure_name(object_id));
-    if (body == nullptr || !body->has_meta(kFigureMetaEye) || !body->has_meta(kFigureMetaHeight) ||
-        body->has_meta(kFigureMetaRigTaken)) {
-        return false;
-    }
-    eye_height = static_cast<double>(body->get_meta(kFigureMetaEye));
-    height = static_cast<double>(body->get_meta(kFigureMetaHeight));
-    body->set_meta(kFigureMetaRigTaken, true);  // reported once per node: a node built anew is measured anew
-    return true;
-}
-
-bool take_figure_place(::godot::Node3D* scene, uint32_t object_id, double step_m, double& x, double& y, double& z) {
-    if (scene == nullptr) {
-        return false;
-    }
-    ::godot::Node3D* holder = child_of<::godot::Node3D>(scene, kFigureHolder);
-    if (holder == nullptr) {
-        return false;
-    }
-    ::godot::Node3D* body = child_of<::godot::Node3D>(holder, figure_name(object_id));
-    if (body == nullptr) {
-        return false;
-    }
-    // the node's place is the place of the body port in Godot's axes (x east, y up, z north), as fill_figures set it
-    const ::godot::Vector3 place = body->get_position();
-    if (body->has_meta(kFigureMetaPlaceNoted)) {
-        const ::godot::Vector3 noted = body->get_meta(kFigureMetaPlaceNoted);
-        if (static_cast<double>(place.distance_to(noted)) < step_m) {
-            return false;
-        }
-    }
-    body->set_meta(kFigureMetaPlaceNoted, place);  // a node built anew carries no noted place: its first stand is noted
-    x = static_cast<double>(place.x);
-    y = static_cast<double>(place.y);
-    z = static_cast<double>(place.z);
     return true;
 }
 

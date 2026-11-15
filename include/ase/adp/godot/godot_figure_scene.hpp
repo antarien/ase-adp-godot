@@ -48,8 +48,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-13
- * @modified    2026-11-14
- * @version     00.00.01.00010
+ * @modified    2026-11-15
+ * @version     00.00.01.00012
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
@@ -147,5 +147,16 @@ bool take_figure_rig(::godot::Node3D* scene, uint32_t object_id, double& eye_hei
  * False while the scene stands no such node.
  */
 bool take_figure_place(::godot::Node3D* scene, uint32_t object_id, double step_m, double& x, double& y, double& z);
+
+/**
+ * THE FACE AND THE EYE AS THEY ARE DRAWN (07.3): the edges in texels of the albedo bound on the face material
+ * (Std_Skin_Head of villager_body) and on the iris material (__Iris) of the node of figure `object_id` - the pack of
+ * the stage or the image of the file - and in `level` the coarser of the detail levels the meshes carrying them
+ * show. The view notes all three when the zoom comes to rest, so a run holds face and eye against the edges of their
+ * source images and against level 0 - both are sharp only with the texture of the source on the finest level.
+ * False for the stand-in body, when a shown level lacks either material or its albedo, and while no such node stands.
+ */
+bool figure_face_look(::godot::Node3D* scene, uint32_t object_id, int32_t& level, int64_t& face_edge,
+                      int64_t& eye_edge);
 
 }  // namespace ase::adp::godot

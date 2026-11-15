@@ -25,7 +25,7 @@ ASE GODOT ADAPTER BUILD CONFIGURATION
 @usecase     usecase:100653 - publish the module catalog
 @design      DSGN_021
 @created     2026-10-05
-@modified    2026-11-14
+@modified    2026-11-15
 ]]
 
 #[[ VERBOTEN: no module or plugin header and no unit of the embedded set - the adapter binds
@@ -303,6 +303,7 @@ add_library(ase-adp-godot SHARED
     src/godot_plant_brook.cpp    # the water of the brooks in that scene (usecase:100399 carry brook water, 03.11)
     src/godot_plant_look.cpp    # the materials and organ template files of that scene, bound once (03.2)
     src/godot_figure_scene.cpp  # the figures of the body port in that scene and the player camera at its eye (usecase:101611 animate character motion, 07.9)
+    src/godot_figure_query.cpp  # height, rig, place and face read back from a figure's node for the view (usecase:101611 animate character motion, 07.3)
     src/godot_figure_load.cpp   # the figure file parsed and packed by a task of the WorkerThreadPool (usecase:101611 animate character motion, 07.9)
     src/godot_figure_rig.cpp    # the clip mix of the figure file and the eye height of its skeleton (usecase:101611 animate character motion, 07.6)
     src/godot_figure_hand.cpp   # the tool a figure carries below its hand socket, from the gear port (usecase:101625 carry a tool in hand, 07.10)
@@ -342,6 +343,7 @@ add_library(ase-adp-godot SHARED
     include/ase/adp/godot/godot_figure_load.hpp   # FigureSceneLoad, start_figure_load, take_figure_load (usecase:101611 animate character motion)
     include/ase/adp/godot/godot_figure_rig.hpp    # add_figure_motion, drive_figure_motion, figure_eye_level (usecase:101611 animate character motion)
     include/ase/adp/godot/godot_figure_hand.hpp   # hand_kind, carry_tool (usecase:101625 carry a tool in hand)
+    include/ase/adp/godot/godot_figure_node.hpp   # holder, name prefix and metas of a figure's node, shared by figure scene and figure queries (usecase:101611 animate character motion)
     include/ase/adp/godot/godot_plant_shader.hpp
     include/ase/adp/godot/godot_config_read.hpp
     include/ase/adp/godot/godot_view_support.hpp

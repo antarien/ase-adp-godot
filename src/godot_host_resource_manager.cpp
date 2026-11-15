@@ -1010,7 +1010,7 @@ bool stars_view_of(const std::vector<KernelHostRecord>& records, uint32_t writte
 }
 
 /**
- * The ports and operations every host of the Vivarium needs: patch, forecast, clock, date, scene, ground, brook,
+ * The ports and operations every host of the Vivarium needs: patch, forecast, stem, clock, date, scene, ground, brook,
  * terrain, ground cell, the six organ ports, the five instance ports, the sky port, the stars port, the seed port, the
  * tile port, the sway port, the stream port, the level, the flatten, the lower, the raise and the elevation port and the two
  * template ports, irrigate, prune, level, flatten, lower, raise, shape and lay - every port boot()
@@ -1019,7 +1019,8 @@ bool stars_view_of(const std::vector<KernelHostRecord>& records, uint32_t writte
  * configuration check could have refused before a host existed.
  */
 bool ports_named(const VivariumStartConfig& config) {
-    bool named = !config.patch_port.empty() && !config.forecast_port.empty() && !config.clock_port.empty() &&
+    bool named = !config.patch_port.empty() && !config.forecast_port.empty() && !config.stem_port.empty() &&
+                 !config.clock_port.empty() &&
                  !config.date_port.empty() &&
                  !config.scene_port.empty() &&
                  !config.ground_port.empty() && !config.brook_port.empty() && !config.terrain_port.empty() &&
@@ -1718,6 +1719,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     }
 
     bool offered = host_->has_port(config_.patch_port.c_str()) && host_->has_port(config_.forecast_port.c_str()) &&
+                   host_->has_port(config_.stem_port.c_str()) &&
                    host_->has_port(config_.clock_port.c_str()) &&
                    host_->has_port(config_.date_port.c_str()) &&
                    host_->has_port(config_.scene_port.c_str()) && host_->has_port(config_.ground_port.c_str()) &&
@@ -2183,6 +2185,34 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         }
         found->second.grow_at_h = record_value(record, GODOT_KEY_GROW_AT_H);
         found->second.mtur_at_h = record_value(record, GODOT_KEY_MTUR_AT_H);
+    }
+
+    // THE STEM FOOT IS A BODY OF ASE-PHYSICS (FLORA_HOST_PORT_STEM, usecase:100708 land the dispersed seeds,
+    // N0487): ase-pl-flora files one record per patch whose stem body stands, its object id the patch, base_y
+    // the height of the foot over the level of the patch - a dug hole lowers it, a heap raises it. A patch
+    // without such a record stands at its level (base_y 0, set by the view's default); a record that names no
+    // patch of the patch port, or carries no height, is a broken port.
+    status = snapshot_all(*host_, config_.stem_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        patches_.clear();
+        places_.clear();
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = records_[i];
+        const auto found = patches_.find(record.object_id);
+        if (found == patches_.end()) {
+            patches_.clear();
+            places_.clear();
+            return refuse_record(*host_, config_.stem_port, record.object_id, "stem of no patch");
+        }
+        const double base_y = record_value(record, GODOT_KEY_BASE_Y);
+        if (!std::isfinite(base_y)) {
+            patches_.clear();
+            places_.clear();
+            return refuse_record(*host_, config_.stem_port, record.object_id, "stem without base_y");
+        }
+        found->second.base_y = base_y;
     }
 
     std::vector<KernelHostRecord> clock_records(1u);

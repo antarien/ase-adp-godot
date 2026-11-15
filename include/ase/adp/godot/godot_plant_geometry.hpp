@@ -27,8 +27,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-09
- * @modified    2026-10-26
- * @version     00.00.07.00000
+ * @modified    2026-11-15
+ * @version     00.00.08.00000
  */
 
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -76,7 +76,8 @@ void append3(std::vector<float>& out, float a, float b, float c);
 /**
  * Where the stem base of the plant on each patch stands, taken from its record: x and z, the centre
  * of the patch square the host laid, and y, the height ase-terrain levelled it to (TRN_FLAT_HGT, laid
- * on the record by ase-pl-flora). Keyed by the patch's object id, the body of its organ records. A
+ * on the record by ase-pl-flora) plus base_y, the stem foot ase-physics holds as a standing body that
+ * follows a dug hole or a heap (stem port, N0487). Keyed by the patch's object id, the body of its organ records. A
  * patch whose record does not carry all three as numbers - its disc is not levelled yet - has no
  * origin, and its plant is not drawn. Nothing is looked up: no grid, no sample.
  */
