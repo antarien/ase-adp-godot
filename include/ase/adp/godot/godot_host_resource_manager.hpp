@@ -461,6 +461,10 @@ struct VivariumClockView {
     double seek_order = 0.0;     // ase-time's verdict on it, GODOT_SEEK_ORDER_* (TIM_SEEK_ORDER)
     double seek_target_day = 0.0;  // whole game day of the target ase-time judged it against (TIM_SEEK_TARGET_DAY), GODOT_SEEK_FORM_NONE when refused
     double seek_target_h = 0.0;    // hour of that day (TIM_SEEK_TARGET_H), GODOT_SEEK_FORM_NONE when refused; absolute = day · hours_per_day + hour
+    bool   seek_bounds_known = false;  // false while the seek port carries no bounds record of ase-time (ase-pl-flora: flora.seek.v1)
+    double seek_seq_max = 0.0;         // largest request number a float slot holds exactly, ase-time's own constant (TIM_CONST_SEEK_SEQ_MAX)
+    double seek_order_none = 0.0;      // verdict code: no request judged yet, ase-time's own constant (TIM_CONST_SEEK_ORDER_NONE)
+    double seek_order_refused = 0.0;   // verdict code: the request named no target the clock can reach, the largest code (TIM_CONST_SEEK_ORDER_REFUSED)
     bool   date_known = false;  // false while the date port carries no SURA date record (no measured CAL_YEAR yet)
     double period = 0.0;      // code of the day period, GODOT_PERIOD_FIRST..GODOT_PERIOD_LAST (TIM_DAY_PERIOD)
     double year = 0.0;        // SURA VECTUM (CAL_YEAR)
@@ -471,6 +475,11 @@ struct VivariumClockView {
     double year_day = 0.0;    // the day of the VECTUM, from 1, part of the day record (CAL_YEAR_DAY; flora.day.v1, N0460)
     double days_per_month = 0.0;   // TUMBRAE of a LUNBREX, ase-calendar's own constant (CAL_CONST_DAYS_PER_MONTH)
     double months_per_year = 0.0;  // LUNBREX of a VECTUM, ase-calendar's own constant (CAL_CONST_MONTHS_PER_YEAR)
+    double season_glacix = 0.0;     // code of GLACIX, winter, as ase-calendar numbers it on the date record (CAL_CONST_SEASON_GLACIX)
+    double season_saltatrix = 0.0;  // code of SALTATRIX, spring (CAL_CONST_SEASON_SALTATRIX)
+    double season_ignix = 0.0;      // code of IGNIX, summer (CAL_CONST_SEASON_IGNIX)
+    double season_halitrix = 0.0;   // code of HALITRIX, autumn (CAL_CONST_SEASON_HALITRIX)
+    bool   season_codes_known = false;  // true only when the date record of ase-calendar carried the four codes; the HUD's stand-in date never sets it
     bool   day_known = false;   // N0460: false while the day port carries no day record (ase-pl-flora: flora.day.v1)
     double sunrise_h = 0.0;     // the hour the sun rises this day
     double sunset_h = 0.0;      // the hour the sun sets this day

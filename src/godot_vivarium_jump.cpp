@@ -245,7 +245,7 @@ void VivariumView::follow_debug() {
                                           " target_day=" + ::godot::String::num(clock.seek_target_day, 0) +
                                           " target_h=" + ::godot::String::num(clock.seek_target_h, GODOT_LOG_DECIMALS);
     const bool date = jump.target_year >= 0.0;
-    if (order == GODOT_SEEK_ORDER_REFUSED) {
+    if (clock.seek_bounds_known && order == static_cast<int>(clock.seek_order_refused)) {
         note("debug jump ended reason=refused" + verdict_words + " " + measure(selected_place_));
         jump = VivariumJump{};
         node_->queue_redraw();

@@ -285,8 +285,11 @@ bool VivariumView::take_seq(VivariumJump& jump) {
     // THE REQUEST NUMBER: every seek and date request of this run carries the next number, and the numbers
     // only grow - across a rewind too, so a verdict of the host before the rewind never answers a request
     // after it. ase-time answers the newest number; the jump ends on the verdict for its own. A float slot
-    // holds whole numbers exactly up to GODOT_SEEK_SEQ_MAX; past it the jump is refused, never left waiting.
-    if (debug_.seq + 1.0 > GODOT_SEEK_SEQ_MAX) {
+    // holds whole numbers exactly up to ase-time's TIM_CONST_SEEK_SEQ_MAX, read from the seek bounds record
+    // (VivariumClockView::seek_seq_max); past it, or while that record has not come, the jump is refused,
+    // never left waiting.
+    const VivariumClockView& clock = resources_.get_clock();
+    if (!clock.seek_bounds_known || debug_.seq + 1.0 > clock.seek_seq_max) {
         return false;
     }
     debug_.seq += 1.0;
@@ -304,8 +307,8 @@ HostStatus VivariumView::send_date(const VivariumClockView& clock) {
     // debug.settle_s of the run after it - the run up to the write never spends the settle.
     VivariumJump& jump = debug_.jump;
     if (!take_seq(jump)) {
-        note("debug date seek" + date_words(jump) + " seq_max=" +
-             ::godot::String::num(GODOT_SEEK_SEQ_MAX, 0) + " result=seq_spent");
+        note("debug date seek" + date_words(jump) + " seq_max=" + ::godot::String::num(clock.seek_seq_max, 0) +
+             " result=" + (clock.seek_bounds_known ? "seq_spent" : "bounds_unknown"));
         return ase::kernel::HostStatusCapacity;
     }
     const HostStatus status = resources_.seek_date(jump.seq, jump.target_year, jump.target_month,
@@ -328,8 +331,8 @@ HostStatus VivariumView::send_seek(VivariumJump& jump, double game_hour, double 
     const VivariumClockView& clock = resources_.get_clock();
     const ::godot::String forms = form_words(game_hour, ahead_h, day_hour);
     if (!take_seq(jump)) {
-        note("debug jump seek" + forms + " seq_max=" + ::godot::String::num(GODOT_SEEK_SEQ_MAX, 0) +
-             " result=seq_spent");
+        note("debug jump seek" + forms + " seq_max=" + ::godot::String::num(clock.seek_seq_max, 0) +
+             " result=" + (clock.seek_bounds_known ? "seq_spent" : "bounds_unknown"));
         return ase::kernel::HostStatusCapacity;
     }
     const HostStatus status = resources_.seek(jump.seq, game_hour, ahead_h, day_hour);

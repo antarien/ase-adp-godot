@@ -96,7 +96,7 @@ struct RackTool {
 struct ToolRackWorld {
     const UiAnchor* anchor = nullptr;  // the projection of this frame
     ::godot::Vector3 place;            // the tool place on the ground
-    bool bodied = false;               // the rack body stands in the 3D scene (lay_tools): only its shadow is drawn here
+    bool bodied = false;               // the rack body stands in the 3D scene (lay_tools): nothing is drawn here, the sun casts its shadow
     bool struck = false;               // the camera ray of the last press met the rack body (rack_struck): D01 while bodied
 };
 

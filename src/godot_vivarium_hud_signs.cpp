@@ -90,6 +90,16 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
         open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.soil_mm");
     }
     const auto season = static_cast<uint32_t>(ase::math::floor(static_cast<float>(clock.season)));
+    // The season's signs compare against ase-calendar's codes as the date record carries them, never against a
+    // number of the view; while the HUD's stand-in date stands, no code stands and no season's sign is shown.
+    if (clock.season_codes_known) {
+        close_gap(GODOT_HUD_GAP_CLOCK, "calendar.season_codes");
+    } else {
+        open_gap(GODOT_HUD_GAP_CLOCK, "calendar.season_codes");  // ase-calendar: CAL_CONST_SEASON_GLACIX .. HALITRIX
+    }
+    const bool glacix = clock.season_codes_known && season == static_cast<uint32_t>(clock.season_glacix);
+    const bool saltatrix = clock.season_codes_known && season == static_cast<uint32_t>(clock.season_saltatrix);
+    const bool halitrix = clock.season_codes_known && season == static_cast<uint32_t>(clock.season_halitrix);
     const std::string weather = band.weather_kind != nullptr ? band.weather_kind : "";
     const bool clear = weather == GODOT_HUD_WEATHER_CLEAR;
     const bool fog = weather == GODOT_HUD_WEATHER_FOG;
@@ -101,16 +111,16 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     } else if (standing && soil_rel < hud_sign_rules_.wilt_soil) {
         game.signs.emplace_back("wilt");
     }
-    if (standing && season == GODOT_HUD_SEASON_SALTATRIX) {
+    if (standing && saltatrix) {
         game.signs.emplace_back("flush");
     }
-    if (standing && season == GODOT_HUD_SEASON_HALITRIX) {
+    if (standing && halitrix) {
         game.signs.emplace_back("shed");
     }
-    if (standing && season == GODOT_HUD_SEASON_GLACIX) {
+    if (standing && glacix) {
         game.signs.emplace_back("rest");
     }
-    if (!dead && season == GODOT_HUD_SEASON_SALTATRIX && stage == GODOT_STAGE_MATURE) {
+    if (!dead && saltatrix && stage == GODOT_STAGE_MATURE) {
         game.signs.emplace_back("catkin");
     }
     if (hud_bridge_sap_running_) {
@@ -138,8 +148,9 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     // the mockup's TOOLS[].ok() decides over the same values: water while the soil has room (S.soil < 95),
     // prune while a candidate of the crown is uncut, the sap in SALTATRIX and while no tap runs, the plug while
     // one runs. Each gap is logged once on its edge with the port field named. The season's mark has no gap of its
-    // own (N0460): it stands on clock.season, which flora.day.v1 carries (CAL_CONST_SEASON_SALTATRIX is 1 on both
-    // sides); while no day record stands, VivariumView::bridge_clock fills the season and logs flora.day.v1 itself.
+    // own (N0460): it stands on clock.season, which flora.day.v1 carries, against CAL_CONST_SEASON_SALTATRIX as the
+    // date record carries it (calendar.season_codes above); while no day record stands, VivariumView::bridge_clock
+    // fills the season and logs flora.day.v1 itself.
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.soil_not_full");
     open_gap(GODOT_HUD_GAP_PRUNE, "flora.scene.v1.branch_uncut");
     open_gap(GODOT_HUD_GAP_SAP, "flora.patch.v1.tap_open");
@@ -153,7 +164,7 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     if (hud_bridge_branch_uncut_ && hand.prune_left > 0u) {
         game.marks.emplace_back("branch_uncut");
     }
-    if (season == GODOT_HUD_SEASON_SALTATRIX) {
+    if (saltatrix) {
         game.marks.emplace_back("season_saltatrix");
     }
     game.marks.emplace_back(hud_bridge_sap_running_ ? "tap_open" : "tap_closed");

@@ -72,11 +72,6 @@ namespace ase::adp::godot {
 /** The mark hud.signs.sap.alert names: the vessel under the tap is full. */
 constexpr const char* GODOT_HUD_MARK_VESSEL_FULL = "vessel_full";
 
-/** The season codes of ase-calendar (CAL_CONST_SEASON_*, CAL_SEASON) a sign is reported in; texts.hud.seasons.<code>. */
-constexpr uint32_t GODOT_HUD_SEASON_GLACIX = 0;     // CAL_CONST_SEASON_GLACIX: winter, the rest of the birch
-constexpr uint32_t GODOT_HUD_SEASON_SALTATRIX = 1;  // CAL_CONST_SEASON_SALTATRIX: spring, new leaves and catkins
-constexpr uint32_t GODOT_HUD_SEASON_HALITRIX = 3;   // CAL_CONST_SEASON_HALITRIX: autumn, the leaves fall
-
 /** What the signs show this frame. */
 struct SignMarkerFrame {
     HudShown shown;                       // the context's decision: the signs, the open one, the level

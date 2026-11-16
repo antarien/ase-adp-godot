@@ -2282,6 +2282,38 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     clock.seek_target_h = record_value(clock_records[0], GODOT_KEY_SEEK_TARGET_H);
     clock.seek_known = std::isfinite(clock.seek_seq) && std::isfinite(clock.seek_order) &&
                        std::isfinite(clock.seek_target_day) && std::isfinite(clock.seek_target_h);
+    // The bounds of a seek request are ase-time's constants (TIM_CONST_SEEK_SEQ_MAX, TIM_CONST_SEEK_ORDER_NONE,
+    // TIM_CONST_SEEK_ORDER_REFUSED), filed by the plugin from the star on a record of the seek port, because the
+    // clock record is full (HUB_CONST_HOST_VALUES_MAX). The view bounds the request number and the verdict by
+    // them and holds no number of its own; without the record no jump is filed.
+    if (!config_.seek_port.empty() && host_->has_port(config_.seek_port.c_str())) {
+        std::vector<KernelHostRecord> seek_records(1u);
+        status = snapshot_all(*host_, config_.seek_port, seek_records, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        if (written > 1u) {
+            return refuse_record(*host_, config_.seek_port, seek_records[0].object_id, "more than one seek bounds");
+        }
+        if (written == 1u) {
+            clock.seek_seq_max = record_value(seek_records[0], GODOT_KEY_SEEK_SEQ_MAX);
+            clock.seek_order_none = record_value(seek_records[0], GODOT_KEY_SEEK_ORDER_NONE);
+            clock.seek_order_refused = record_value(seek_records[0], GODOT_KEY_SEEK_ORDER_REFUSED);
+            if (!std::isfinite(clock.seek_seq_max) || !std::isfinite(clock.seek_order_none) ||
+                !std::isfinite(clock.seek_order_refused) || clock.seek_seq_max < GODOT_SEEK_SEQ_FIRST ||
+                clock.seek_order_refused <= clock.seek_order_none) {
+                return refuse_record(*host_, config_.seek_port, seek_records[0].object_id,
+                                     "seek bounds incomplete or out of order: the largest number lies below the "
+                                     "first, or the refused code does not lie above the none code");
+            }
+            clock.seek_bounds_known = true;
+        }
+    }
+    if (clock.seek_known && clock.seek_bounds_known &&
+        (clock.seek_order < clock.seek_order_none || clock.seek_order > clock.seek_order_refused)) {
+        return refuse_record(*host_, config_.clock_port, clock_records[0].object_id,
+                             "seek verdict outside ase-time's codes, none to refused");
+    }
     // The day period rides on the clock record; the SURA date (ARCH_ASE_CALENDAR 2.9.1) stands on a record
     // of its own on the date port, because one record holds at most HUB_CONST_HOST_VALUES_MAX values and
     // the hour, its constants and the sun fill the clock record already (FloraHostClkExptSystem). The date
@@ -2307,16 +2339,24 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         // its fields by them, never by a number of the view.
         clock.days_per_month = record_value(date_records[0], GODOT_KEY_DAYS_PER_MONTH);
         clock.months_per_year = record_value(date_records[0], GODOT_KEY_MONTHS_PER_YEAR);
-        const double date_parts[] = {clock.year,      clock.epoch,          clock.cycle,          clock.month,
-                                     clock.month_day, clock.days_per_month, clock.months_per_year};
+        // ase-calendar's codes of the four seasons ride with the date (CAL_CONST_SEASON_*): the signs compare the
+        // day record's season against them, never against a number of the view.
+        clock.season_glacix = record_value(date_records[0], GODOT_KEY_SEASON_GLACIX);
+        clock.season_saltatrix = record_value(date_records[0], GODOT_KEY_SEASON_SALTATRIX);
+        clock.season_ignix = record_value(date_records[0], GODOT_KEY_SEASON_IGNIX);
+        clock.season_halitrix = record_value(date_records[0], GODOT_KEY_SEASON_HALITRIX);
+        const double date_parts[] = {clock.year,          clock.epoch,           clock.cycle,
+                                     clock.month,         clock.month_day,       clock.days_per_month,
+                                     clock.months_per_year, clock.season_glacix, clock.season_saltatrix,
+                                     clock.season_ignix,  clock.season_halitrix};
         std::size_t finite_parts = 0u;
         for (const double part : date_parts) {
             finite_parts += std::isfinite(part) ? 1u : 0u;
         }
         if (finite_parts != std::size(date_parts)) {
             return refuse_record(*host_, config_.date_port, date_records[0].object_id,
-                                 "SURA date incomplete: year, epoch, cycle, month, day and the calendar lengths "
-                                 "come together");
+                                 "SURA date incomplete: year, epoch, cycle, month, day, the calendar lengths and "
+                                 "the season codes come together");
         }
         if (!std::isfinite(clock.period)) {
             return refuse_record(*host_, config_.clock_port, clock_records[0].object_id,
@@ -2324,6 +2364,7 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         }
     }
     clock.date_known = written == 1u;
+    clock.season_codes_known = clock.date_known;  // a date record stands only complete, the four codes with it
     // N0460: the day record carries the day's sunrise, sunset and daylight, the season (CAL_SEASON,
     // CAL_DAYLIGHT_DURATION) and the shares the modules place the clock, the sun and today at (TIM_DAY_PROGRESS,
     // ase-calendar's share of the year) on a port of its own, because the clock and the date record are full

@@ -245,17 +245,18 @@ bool ToolRack::draw_world(UiPen& canvas, const ::godot::Transform2D& frame, cons
     if (!metre(*now.anchor, now.place, foot, k)) {
         return true;  // the place lies behind the camera
     }
+    if (now.bodied) {
+        // the rack body of ase-pl-toolrack stands as its file in the 3D scene (lay_tools), and the sun of the scene
+        // casts its shadow on the ground (light_plant_scene); a painted shadow beside it would be a second one
+        // that neither grows nor turns with the light (PLAN Phase 06, Tasche, Guertel und Werkzeugplatz, point 5)
+        return true;
+    }
     canvas.draw_set_transform_matrix(
         frame * ::godot::Transform2D(0.0f, ::godot::Size2(static_cast<float>(k * shadow_rx_),
                                                           static_cast<float>(k * shadow_ry_)),
                                      0.0f, foot + at(shadow_dx_, shadow_dy_)));
     canvas.draw_circle(::godot::Vector2(), 1.0f, shadow_);
     canvas.draw_set_transform_matrix(frame);
-    if (now.bodied) {
-        // the rack body of ase-pl-toolrack stands as its file in the 3D scene (lay_tools); the ground keeps its shadow
-        canvas.draw_set_transform_matrix(::godot::Transform2D());
-        return true;
-    }
     for (const double side : {-stake_half_, stake_half_}) {
         const ::godot::Vector2 low = foot + at(k * side, 0.0);
         const ::godot::Vector2 high = foot + at(k * side, -k * stake_h_);

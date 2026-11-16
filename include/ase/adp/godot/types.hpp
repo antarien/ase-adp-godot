@@ -83,14 +83,14 @@ constexpr const char* GODOT_KEY_SEEK_SEQ = "seek_seq";        // clock record: n
 constexpr const char* GODOT_KEY_SEEK_ORDER = "seek_order";    // clock record: ase-time's verdict on that request (TIM_SEEK_ORDER, GODOT_SEEK_ORDER_*)
 constexpr const char* GODOT_KEY_SEEK_TARGET_DAY = "seek_target_day";  // clock record: whole game day of the target ase-time judged the request against, -1 = none or refused (TIM_SEEK_TARGET_DAY)
 constexpr const char* GODOT_KEY_SEEK_TARGET_H = "seek_target_h";  // clock record: hour of that day, below TIM_CONST_HOURS_PER_DAY, -1 = none or refused (TIM_SEEK_TARGET_H); the absolute target is day · hours_per_day + hour
+constexpr const char* GODOT_KEY_SEEK_SEQ_MAX = "seek_seq_max";  // seek bounds record: largest request number a float slot holds exactly (TIM_CONST_SEEK_SEQ_MAX)
+constexpr const char* GODOT_KEY_SEEK_ORDER_NONE = "seek_order_none";  // seek bounds record: verdict code of no request judged yet (TIM_CONST_SEEK_ORDER_NONE)
+constexpr const char* GODOT_KEY_SEEK_ORDER_REFUSED = "seek_order_refused";  // seek bounds record: verdict code of a refused request, the largest code (TIM_CONST_SEEK_ORDER_REFUSED)
 constexpr double GODOT_SEEK_FORM_NONE = -1.0;                 // a seek form the request does not use (FLORA_SEEK_FORM_NONE)
 constexpr double GODOT_SEEK_SEQ_FIRST = 1.0;                  // number of the host's first request (FLORA_SEEK_SEQ_FIRST)
-constexpr double GODOT_SEEK_SEQ_MAX = 16777216.0;             // largest request number a float slot holds exactly, 2^24 (TIM_CONST_SEEK_SEQ_MAX, ase-time)
-constexpr int GODOT_SEEK_ORDER_NONE = 0;                      // verdict: no request judged yet (TIME_SEEK_ORDER_NONE)
 constexpr int GODOT_SEEK_ORDER_AHEAD = 1;                     // verdict: the clock was set to the target in one write (TIME_SEEK_ORDER_AHEAD)
 constexpr int GODOT_SEEK_ORDER_AT = 2;                        // verdict: the clock already stood at the target (TIME_SEEK_ORDER_AT)
 constexpr int GODOT_SEEK_ORDER_BEHIND = 3;                    // verdict: the target lies behind the clock, which only runs forward (TIME_SEEK_ORDER_BEHIND)
-constexpr int GODOT_SEEK_ORDER_REFUSED = 4;                   // verdict: the request named no target the clock can reach (TIME_SEEK_ORDER_REFUSED)
 constexpr const char* GODOT_KEY_REAL_S = "real_s";            // real request: the absolute real seconds since the host started, filed every frame (TIM_REQ_TIME_REAL_S)
 constexpr const char* GODOT_KEY_REAL_LAID = "real_laid_s";    // clock record: real position ase-time last set its clock forward to in one write, 0 = never (TIM_REAL_LAID_S)
 constexpr const char* GODOT_KEY_ELAPSED = "elapsed_s";        // clock record: game time, seconds (TIM_ELAPSED_GAME)
@@ -107,6 +107,10 @@ constexpr const char* GODOT_KEY_MONTH = "month";              // date record: SU
 constexpr const char* GODOT_KEY_MONTH_DAY = "month_day";      // date record: SURA TUMBRAE, the day of the month, from 1 (CAL_DAY)
 constexpr const char* GODOT_KEY_DAYS_PER_MONTH = "days_per_month";    // date record: TUMBRAE of a LUNBREX, ase-calendar's CAL_CONST_DAYS_PER_MONTH
 constexpr const char* GODOT_KEY_MONTHS_PER_YEAR = "months_per_year";  // date record: LUNBREX of a VECTUM, ase-calendar's CAL_CONST_MONTHS_PER_YEAR
+constexpr const char* GODOT_KEY_SEASON_GLACIX = "season_glacix";        // date record: code of GLACIX, winter (CAL_CONST_SEASON_GLACIX)
+constexpr const char* GODOT_KEY_SEASON_SALTATRIX = "season_saltatrix";  // date record: code of SALTATRIX, spring (CAL_CONST_SEASON_SALTATRIX)
+constexpr const char* GODOT_KEY_SEASON_IGNIX = "season_ignix";          // date record: code of IGNIX, summer (CAL_CONST_SEASON_IGNIX)
+constexpr const char* GODOT_KEY_SEASON_HALITRIX = "season_halitrix";    // date record: code of HALITRIX, autumn (CAL_CONST_SEASON_HALITRIX)
 constexpr const char* GODOT_KEY_SUNRISE_H = "sunrise_h";      // day record (N0460): the hour the sun rises this day (ase-calendar, ase-ephemeris)
 constexpr const char* GODOT_KEY_SUNSET_H = "sunset_h";        // day record (N0460): the hour the sun sets this day (ase-calendar, ase-ephemeris)
 constexpr const char* GODOT_KEY_DAYLIGHT_H = "daylight_h";    // day record (N0460): the hours of daylight this day (CAL_DAYLIGHT_DURATION)
