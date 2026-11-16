@@ -29,7 +29,7 @@
  *              BRIDGE GAP N0451. What a holster holds is state of ase-inventory on flora.carry.v1. The belt draws
  *              both holsters in full from BeltHolsterFrame and never asks whether the port delivered: while it
  *              delivers nothing VivariumCarryBridge fills the frame with the mockup's tools, and VivariumView logs
- *              the gap once on its edge (operator decision 2026-11-10).
+ *              the gap once on its edge (design decision 2026-11-10).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)

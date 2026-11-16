@@ -390,7 +390,7 @@ void VivariumView::send_hud_debug(const DebugLayerHit& part) {
 }
 
 void VivariumView::open_gap(const char* gap, const char* act) {
-    // The edge of the bridge: logged once per id, never shown. The picture stays whole (operator decision
+    // The edge of the bridge: logged once per id, never shown. The picture stays whole (design decision
     // 2026-11-10); the request or port field (act) is named in the log line so the register task can find its
     // reader, and each one of an id is logged once of its own.
     const std::string key = std::string(gap) + "/" + (act != nullptr ? act : "");

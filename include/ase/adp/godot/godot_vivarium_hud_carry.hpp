@@ -5,7 +5,7 @@
  *
  * @file        godot_vivarium_hud_carry.hpp
  * @brief       The carried things the bridge writes into the HUD's frame while flora.carry.v1 files no record
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.7 to 06.9, operator decision 2026-11-10: the HUD draws every
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.7 to 06.9, design decision 2026-11-10: the HUD draws every
  *              element from its frame and never asks whether a port delivered. While ase-inventory files no record
  *              on flora.carry.v1 (N0451) and judges no move on flora.stow.v1 (N0452), this bridge holds the
  *              mockup's initInv and follows its rules of equip(), stow(), placeIn(), layAt(), fits(), wt() and

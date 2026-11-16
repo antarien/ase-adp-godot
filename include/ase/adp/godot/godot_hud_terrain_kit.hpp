@@ -35,7 +35,7 @@
  *              THE ROOT ZONE. The radius of the zone the roots of the patch hold comes from ase-radix over
  *              flora.root.v1; while that port is silent (N0463) the hand bridge writes the mockup's RROOT
  *              (hud_bridge_hand_root_m) into the frame and names the gap on its edge, so the ring always stands
- *              (operator decision 2026-11-10). It lies on the ground around the trunk, hud_terrain_root_steps
+ *              (design decision 2026-11-10). It lies on the ground around the trunk, hud_terrain_root_steps
  *              points dashed hud_terrain_root_dash on, hud_terrain_root_gap off in DOMAIN_ALERT at
  *              hud_terrain_root_alpha, hud_terrain_line_w wide.
  *

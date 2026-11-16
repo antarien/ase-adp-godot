@@ -5,7 +5,7 @@
  *
  * @file        godot_vivarium_hud_trail.hpp
  * @brief       The trail of past events the bridge writes into the HUD's frame while flora.trail.v1 files none
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.4 and the bridge section, operator decision 2026-11-10: the HUD
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.4 and the bridge section, design decision 2026-11-10: the HUD
  *              draws every element from its frame and never asks whether a port delivered. The trail on arrival
  *              (TrailView, the mockup's arrive()) and the dots of the year ring (YearRing, the mockup's
  *              skySheet()) stand on the records of flora.trail.v1 (N0450); while the port files none, they

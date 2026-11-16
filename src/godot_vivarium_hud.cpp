@@ -13,7 +13,7 @@
  *              drag) are filled in godot_vivarium_hud_world.cpp (fill_hud_world). A value no port carries yet is the
  *              mockup's, written by the bridge from hud_bridge_* of SHA (godot_vivarium_hud_bridge.cpp), and its register
  *              id is logged once on the edge of the bridge (open_gap), never shown: the picture stands whole
- *              (operator decision 2026-11-10). A HUD that cannot draw names why on the error panel (fail_hud). The touches go
+ *              (design decision 2026-11-10). A HUD that cannot draw names why on the error panel (fail_hud). The touches go
  *              through godot_vivarium_hud_input.cpp. After each drawn frame the places a tap reaches the HUD
  *              through are logged whenever they change (godot_vivarium_hud_place.cpp: note_hud_places).
  *

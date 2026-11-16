@@ -3,7 +3,7 @@
  *
  * @file        godot_vivarium_hud_carry_plant.cpp
  * @brief       VivariumCarryBridge - dig the planting hole, lay the seed in, cover it, and the dibber's sowTap
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.7, operator decision 2026-11-13 (Q01 to Q04 of the TASK, before
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.7, design decision 2026-11-13 (Q01 to Q04 of the TASK, before
  *              the mockup): the start shows bare soil at the stem place. The spade's cavar there opens the
  *              planting hole (dig), the sow tool lays one seed from the pouch into the open hole (sow), the spade's
  *              amontoar fills the hole over its seed (cover); the seed shows only while it lies open in the hole

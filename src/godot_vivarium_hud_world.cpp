@@ -9,7 +9,7 @@
  *              the tool place, the carried things, the cut under the trunk in the mode water and the drag's hit on
  *              the ground. A value no port carries yet is the bridge's (godot_vivarium_hud_hand.cpp,
  *              godot_vivarium_hud_carry.cpp, godot_vivarium_hud_bridge.cpp) and its register id is logged once on
- *              the edge (open_gap), never shown: the picture stands whole (operator decision 2026-11-10).
+ *              the edge (open_gap), never shown: the picture stands whole (design decision 2026-11-10).
  *
  *              THE CUT UNDER THE TRUNK (usecase:100367 water a patch). The soil now and the share a planned pour
  *              adds are the hand's readings; the roots are the hand bridge's drawRootCut tree while flora.root.v1

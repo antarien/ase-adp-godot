@@ -3,7 +3,7 @@
  *
  * @file        godot_vivarium_hud_signs.cpp
  * @brief       VivariumView - the signs the bridge reports into the HUD's frame while no port reports a sign case
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.10, operator decision 2026-11-10: the HUD draws every element from
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.10, design decision 2026-11-10: the HUD draws every element from
  *              its frame and never asks whether a port delivered. The patch set reports no state of a sign case yet
  *              (N0461) and flora.weather.v1 no weather signature (N0449), so the rail's dots, the markers at the
  *              birch and in the sky and the readings stand on the mockup's signs() applied to the values this

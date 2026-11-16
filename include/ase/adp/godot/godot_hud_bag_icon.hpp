@@ -24,7 +24,7 @@
  *              BRIDGE GAP N0451. The pack's things and their weight are state of ase-inventory on flora.carry.v1.
  *              The icon draws disc, pack and load in full from BagIconFrame and never asks whether the port
  *              delivered: while it delivers nothing VivariumCarryBridge fills the frame with the mockup's things,
- *              and VivariumView logs the gap once on its edge (operator decision 2026-11-10).
+ *              and VivariumView logs the gap once on its edge (design decision 2026-11-10).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)

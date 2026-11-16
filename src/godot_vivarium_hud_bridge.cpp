@@ -3,7 +3,7 @@
  *
  * @file        godot_vivarium_hud_bridge.cpp
  * @brief       VivariumView - the values the bridge writes into the HUD's frame while a port carries no record yet
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.5, operator decision 2026-11-10: the HUD draws every element from
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.5, design decision 2026-11-10: the HUD draws every element from
  *              its frame and never asks whether a port delivered. Where a port leaves a group of the frame empty,
  *              the bridge writes the value the accepted mockup shows (the hud_bridge_* tokens of SHA, theme.css
  *              --ase-hud-bridge-*, staged as res://config/design_tokens.json and read through UiTheme) and logs

@@ -3,7 +3,7 @@
  *
  * @file        godot_vivarium_hud_carry_frame.cpp
  * @brief       VivariumCarryBridge - the mockup's inventory read from SHA and handed into the HUD's frame
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.7 to 06.9, operator decision 2026-11-10. load() reads the
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.7 to 06.9, design decision 2026-11-10. load() reads the
  *              mockup's initInv (hud_bridge_carry_<n>_*, hud_bridge_rack_<n>_item), the facts of its ITEMS
  *              (hud_bridge_item_<id>_*, hud.items for the drawing), its CAPS (hud_bridge_container_<id>_*), the
  *              item of the sow tool (hud.tools.sow.has) and the rules of fits(), layAt() and stow(). fill() hands

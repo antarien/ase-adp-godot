@@ -3,7 +3,7 @@
  *
  * @file        godot_vivarium_hud_bridge_clock.cpp
  * @brief       VivariumView - the clock record and the factor it runs at while their ports carry no record yet
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.5, operator decision 2026-11-10: the clock of the care view (the
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.5, design decision 2026-11-10: the clock of the care view (the
  *              hour, the SURA date, the day, its phases and the seasons) and the hourglass's factor draw from their
  *              frame and never ask whether a port delivered. Where a port leaves a group empty, the bridge writes the
  *              value of the accepted mockup (hud_bridge_clock_* and hud_bridge_pace_factor of SHA, read by

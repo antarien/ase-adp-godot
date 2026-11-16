@@ -5,7 +5,7 @@
  *
  * @file        godot_vivarium_hud_hand.hpp
  * @brief       The readings of the hand the bridge writes into the HUD's frame while their ports are silent
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.4 and the bridge section, operator decision 2026-11-10: the HUD
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.4 and the bridge section, design decision 2026-11-10: the HUD
  *              draws every element from its frame and never asks whether a port delivered. The hand's readings
  *              stand on what this frame carries and on the mockup's render() and frame() where a port reports
  *              nothing yet, every rule a hud_bridge_hand_* token of SHA (theme.css --ase-hud-bridge-hand-*).

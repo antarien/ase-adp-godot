@@ -5,7 +5,7 @@
  *
  * @file        godot_vivarium_hud_sign_rules.hpp
  * @brief       The thresholds and values of the mockup's signs() the bridge reports by while no port reports a sign
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.10, operator decision 2026-11-10: the HUD draws every element from
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.10, design decision 2026-11-10: the HUD draws every element from
  *              its frame and never asks whether a port delivered. While the patch set reports no state of a sign
  *              case (N0461) and flora.weather.v1 no weather signature (N0449), VivariumView::bridge_signs
  *              (godot_vivarium_hud_signs.cpp) applies the mockup's signs() to the values the frame carries; the

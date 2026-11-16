@@ -3,7 +3,7 @@
  *
  * @file        godot_vivarium_hud_carry.cpp
  * @brief       VivariumCarryBridge - the mockup's carry rules and acts while flora.stow.v1 judges no move
- * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.7 to 06.9, operator decision 2026-11-10. The rules the mockup
+ * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.7 to 06.9, design decision 2026-11-10. The rules the mockup
  *              applies to its INV: wt() and vol() of a thing, fits() of a thing at a place with the refusal code
  *              and the values its word fit_<code> names, layAt() onto the ground or the next slot of the tool
  *              place, stow() and equip(); the acts apply() follows on them: take and equip, stow and a drop
