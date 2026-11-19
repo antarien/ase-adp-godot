@@ -14,8 +14,8 @@
  * @register    N0454 (flora.patch.v1 preview after the pour), N0463 (flora.root.v1 zone and segments), N0462
  *              (flora.scene.v1 cuttable, usecase:100365 prune a branch), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-19
+ * @version     00.00.24.00024 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -159,7 +159,13 @@ void VivariumHandBridge::frame(HandSlotFrame& hand, const VivariumPatchView* pat
     hand.poured_l = pouring_ ? litres(fill_l) : 0.0;
     hand.pour_mm = hand.poured_l * mm_per_l_;
     const double preview_mm = pouring_ ? hand.pour_mm : fill_l > 0.0 ? mm_per_l_ : 0.0;
-    hand.after_rel = ase::math::min(1.0, hand.soil_rel + preview_mm * rel_per_mm_);
+    // ase-hydro keeps the soil water as water_mm over capacity_mm (HydroBlncCalcSystem), so a millimetre poured
+    // raises the share by the reciprocal of the field capacity the patch record carries in this frame: a soil that
+    // holds more rises less. The mockup's per cent per millimetre stands in only while the record carries no
+    // capacity (NaN and 0 fail the test); the preview of the owner itself is N0454.
+    const double capacity_mm = patch != nullptr ? patch->capacity_mm : 0.0;
+    const double rel_per_mm = capacity_mm > 0.0 ? 1.0 / capacity_mm : rel_per_mm_;
+    hand.after_rel = ase::math::min(1.0, hand.soil_rel + preview_mm * rel_per_mm);
     hand.dead = patch != nullptr && patch->dead;
     ground(hand, reticle);
 

@@ -13,8 +13,10 @@
  *              THE WATER. The soil water is the patch record's (flora.patch.v1). Its preview after the pour
  *              (N0454) is the mockup's: a press pours one litre at once and one more with each measure the
  *              held can asks, never more than the can holds; each litre is hud_bridge_hand_mm_per_l, and the
- *              soil after is the soil at the press plus the millimetres as the mockup adds them to its per
- *              cent (hud_bridge_hand_rel_per_mm). While no finger holds the can the preview is one litre.
+ *              soil after is the soil at the press plus the millimetres over the field capacity the patch
+ *              record carries in this frame (capacity_mm, ase-hydro's HYD_FIELD_CAPACITY), as ase-hydro keeps
+ *              the share; the mockup's per cent (hud_bridge_hand_rel_per_mm) stands in only while the record
+ *              carries none. While no finger holds the can the preview is one litre.
  *
  *              THE GROUND. Height and slope under the brush are the terrain port's samples (UiGround), the
  *              slope read hud_bridge_hand_slope_step_m to each side as the mockup's slopeAt. The root zone
@@ -53,8 +55,8 @@
  * @register    N0454 (flora.patch.v1 preview after the pour), N0463 (flora.root.v1 zone and segments), N0462
  *              (flora.scene.v1 cuttable), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-19
+ * @version     00.00.24.00024 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -142,7 +144,7 @@ private:
                 double length, uint32_t depth, uint32_t& state);
 
     double mm_per_l_ = 0.0;      // hud_bridge_hand_mm_per_l: 1 L = 25 MM
-    double rel_per_mm_ = 0.0;    // hud_bridge_hand_rel_per_mm: the mockup's per cent of soil water per millimetre
+    double rel_per_mm_ = 0.0;    // hud_bridge_hand_rel_per_mm: the mockup's per cent of soil water per millimetre, while the patch record carries no capacity_mm
     double root_m_ = 0.0;        // hud_bridge_hand_root_m: RROOT of the mockup's field
     double slope_step_m_ = 0.0;  // hud_bridge_hand_slope_step_m: slopeAt's e of the mockup's field
     bool pouring_ = false;       // a held can pours since its press
