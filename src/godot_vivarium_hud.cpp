@@ -31,7 +31,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-13
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -142,7 +142,8 @@ bool VivariumView::fill_hud(std::string& failed) {
     // toast and the death, m.html 1033), besides the press, the release and the mode the view forces itself.
     const VivariumPatchView* live = resources_.get_patch_at(focus);
     if (focus != hud_patch_shown_place_ || (live != nullptr) != hud_patch_shown_known_ ||
-        (live != nullptr && (live->stage != hud_patch_shown_.stage || live->condition != hud_patch_shown_.condition))) {
+        (live != nullptr && (live->stage != hud_patch_shown_.stage || live->cond_known != hud_patch_shown_.cond_known ||
+                             live->wilted != hud_patch_shown_.wilted || live->dead != hud_patch_shown_.dead))) {
         hud_refresh_.force();
     }
     if (hud_refresh_.take()) {
@@ -176,14 +177,14 @@ bool VivariumView::fill_hud(std::string& failed) {
     game.place_selected = selected_place_ != GODOT_NO_PLACE;
     bridge_skill(game);
     if (patch != nullptr) {
-        if (patch->condition == GODOT_COND_DEAD) {
+        if (patch->dead) {
             game.marks.push_back(VivariumHud::MARK_DEAD);
-        } else if (patch->condition == GODOT_COND_HEALTHY || patch->condition == GODOT_COND_WILTED) {
+        } else if (patch->cond_known) {
             game.marks.push_back(VivariumHud::MARK_ALIVE);
         }
-        if (patch->stage == GODOT_STAGE_GROW) {
+        if (patch->grow) {
             game.marks.push_back(VivariumHud::MARK_STAGE_GROW);
-        } else if (patch->stage == GODOT_STAGE_MATURE) {
+        } else if (patch->mature) {
             game.marks.push_back(VivariumHud::MARK_STAGE_MATURE);
         }
     }
@@ -191,7 +192,7 @@ bool VivariumView::fill_hud(std::string& failed) {
     // the mode, the open sign, the level, the debug view, its drawer or tab, the stage or the death changed (T05).
     // The seconds count on the wall clock as the mockup's CSS animations do, never on the capped hud_clock_.
     const double opened = hud_.replay(game.level, patch != nullptr ? patch->stage : GODOT_STAGE_NONE,
-                                      patch != nullptr && patch->condition == GODOT_COND_DEAD);
+                                      patch != nullptr && patch->dead);
 
     // The birch on the screen: the foot of its trunk and the height up to its highest internode.
     if (origin != nullptr) {
@@ -210,6 +211,9 @@ bool VivariumView::fill_hud(std::string& failed) {
     hud_now_.shade.placed = origin != nullptr && hud_ground_.surface(hud_anchor_, origin->x, origin->z, 0.0,
                                                                       hud_now_.shade.trunk);
     hud_now_.shade.stage = patch != nullptr ? patch->stage : GODOT_STAGE_NONE;
+    hud_now_.shade.seed = patch != nullptr && patch->seed;
+    hud_now_.shade.sprout = patch != nullptr && patch->sprout;
+    hud_now_.shade.grow = patch != nullptr && patch->grow;
     if (hud_now_.shade.placed) {
         open_gap(VivariumCarryBridge::GAP_BODY, "flora.patch.v1.mound_y");  // seed mound on the terrain (D2314)
     }
@@ -241,12 +245,14 @@ bool VivariumView::fill_hud(std::string& failed) {
     sheet.year.months_per_year = static_cast<uint32_t>(clock.months_per_year);
     // The season records (N0460, flora.season.v1) and today's share of the year from the day record: ase-calendar
     // places the day, the ring only turns the share into an angle; the bridge filled what the ports left empty.
-    sheet.year.season_starts.clear();
-    for (const double start_lun : clock.season_start_lun) {
-        sheet.year.season_starts.push_back(static_cast<uint32_t>(start_lun));
-    }
+    // The first LUN of a season is fractional (CAL_CONST_SEASON_*_START over CAL_CONST_DAYS_PER_MONTH plus 1): the arc
+    // starts on the day the season begins, not at the start of the LUN that holds it.
+    sheet.year.season_starts = clock.season_start_lun;
     sheet.year.season_light = clock.season_light_h;
     sheet.year.year_share = clock.year_share;
+    // B0280: the share of a whole LUN from the day record places the LUN marks and the season arcs on the scale of
+    // today's share, never the LUN count of a year (the last LUN is shorter).
+    sheet.year.lun_share = clock.lun_share;
     sheet.year.elapsed = opened;
     // The past events of the trail on arrival and the ring's dots: flora.trail.v1 files none yet, so the bridge
     // writes the mockup's S.log (N0450, bridge_trail).
@@ -318,7 +324,7 @@ bool VivariumView::fill_hud(std::string& failed) {
     // higher one than the last posts the toast. The first frame only learns the stage, a dead plant grows none.
     if (patch != nullptr && patch->stage < GODOT_STAGE_COUNT) {
         const bool rose = hud_stage_seen_ != GODOT_STAGE_NONE && patch->stage > hud_stage_seen_ &&
-                          patch->condition != GODOT_COND_DEAD;
+                          !patch->dead;
         hud_stage_seen_ = patch->stage;
         if (rose) {
             std::string stage_word;
@@ -334,7 +340,9 @@ bool VivariumView::fill_hud(std::string& failed) {
     }
     if (patch != nullptr) {
         view.stage = patch->stage;
-        view.condition = patch->condition;
+        view.cond_known = patch->cond_known;
+        view.wilted = patch->wilted;
+        view.dead = patch->dead;
         view.soil_mm = patch->soil_mm;
         view.soil_rel = patch->soil_rel;
         view.coverage = patch->coverage;

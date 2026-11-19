@@ -56,6 +56,7 @@
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 
@@ -84,6 +85,10 @@ public:
 
     /** True when `point` (in the mockup's units) lies where a finger takes the rail. */
     bool hit(const ::godot::Vector2& point) const;
+
+    /** The rail as hit() takes it, mockup units, centred on its line from its near end to its foot: a tap at a share
+     *  of its height sets the distance distance_at() names there. */
+    ::godot::Rect2 place() const;
 
     /**
      * The distance in metres two fingers on the orbit half ask for: `from` metres when they came down `spread_from`

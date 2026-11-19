@@ -108,8 +108,9 @@ struct YearRingEvent {
 struct YearRingFrame {
     uint32_t lun = 0;                 // the current LUN, from 1 (CAL_MONTH)
     uint32_t months_per_year = 0;      // LUN of a VEC (CAL_CONST_MONTHS_PER_YEAR)
+    double lun_share = 0.0;            // the share of the year a whole LUN fills (CAL_LUN_SHARE): LUN m starts at (m - 1) times it, the shorter last LUN included (B0280)
 
-    std::vector<uint32_t> season_starts;  // the first LUN of each season, in the order of texts.hud.seasons.*
+    std::vector<double> season_starts;    // the first LUN of each season, fractional as ase-calendar places it, in the order of texts.hud.seasons.*
     std::vector<double> season_light;     // the hours of light of each season, in the same order
     double year_share = 0.0;              // today's share of the year, as ase-calendar places it (0 to 1)
 
@@ -157,8 +158,8 @@ private:
     bool draw_next(UiPen& canvas, const ::godot::Transform2D& frame, const YearRingFrame& now,
                    std::string& failed);
 
-    /** The angle of LUN `lun`'s start on a ring of `months` ticks. */
-    double month_angle(double lun, uint32_t months) const;
+    /** The angle of LUN `lun`'s start, each whole LUN filling `lun_share` of the turn (ase-calendar's CAL_LUN_SHARE). */
+    double month_angle(double lun, double lun_share) const;
 
     /** The LUN of mark `mark` of `marks` on a year of `months` LUN: the first LUN that begins at or after it. */
     uint32_t mark_lun(uint32_t mark, uint32_t marks, uint32_t months) const;

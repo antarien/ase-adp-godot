@@ -74,6 +74,15 @@ void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOri
     if (hud_hand_.cut_changed(cut_counts)) {
         note(::godot::String(cut_counts.c_str()));
     }
+    // Prune is TOOLS.prune.ok's TREE.cand.some(c=>!S.cuts.has(c)): the crown's own candidates still uncut, as cut()
+    // just counted them on the organ port, never the bridge value alone - with it the fan offered PODÃO over a crown
+    // of three shoots on the stem that marks none (run 20261114-c01-motion5: on_stem=3 chosen=0 left=0). The mark is
+    // laid HERE and not in bridge_signs: fill_hud lays hud_now_ anew before that bridge, so hand.prune_left read 0
+    // there in every frame and the fan never offered PODÃO (run 20261117-c01-motion9: left=1 at 21:01:21.668, the
+    // fan of 21:01:22.668 with water and ground only). The resolver reads the marks after fill_hud (draw_hud).
+    if (hud_bridge_branch_uncut_ && hud_now_.hand.prune_left > 0u) {
+        hud_now_.game.marks.emplace_back("branch_uncut");
+    }
 
     // The ground kit: the ground, its brooks, the brush under the finger and the patch the level verb levels.
     TerrainKitFrame& terrain = hud_now_.terrain;
@@ -187,6 +196,18 @@ void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOri
         }
     } else {
         open_gap(VivariumCarryBridge::GAP_BODY, "toolrack.rack.v1");  // the host offers no rack port (N0487)
+    }
+    // The can's level of ase-equipment (07.14, usecase:100367); a risen level is the fill at the brook, of the player's
+    // tap on the fill port or of the AI, and names ENCHEU NO RIACHO with the litres the can holds now (m.html 970).
+    double rose_to = -1.0;
+    hud_carry_.engine_fill(resources_.get_figure_gear(), rose_to);
+    if (rose_to >= 0.0) {
+        std::string failed;
+        // The values stand named before the test (-Wdangling-pointer, as in godot_vivarium_water.cpp).
+        const std::vector<HudPortValue> held{HudPortValue{"l", hud_decimals(rose_to, 0)}};
+        if (!hud_.toast(VivariumCarryBridge::TOAST_FILLED_BROOK, held, VivariumHud::COLOUR_WATER, failed)) {
+            fail_hud(failed);
+        }
     }
     hud_carry_.fill(hud_now_, world.patch, right, ahead, hud_ground_, body_known, body);
     open_gap(VivariumCarryBridge::GAP_BODY, "physics.body.v1.body_y");  // the loose ground things (N0487)

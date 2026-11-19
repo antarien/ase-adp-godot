@@ -23,7 +23,10 @@
  *
  *              THE BODY IN MOTION (07.9): the four clips of the file (idle, walk, run, turn) loop and one
  *              AnimationTree per figure mixes them - idle, walk and run by the gait of the port, the turn
- *              clip while the body turns on the spot toward the course of the port. Of the four detail levels
+ *              clip while the body turns on the spot toward the course of the port. THE BEND AT THE BROOK
+ *              (07.14): when the vessel the gear port shows in the figure's hand gains water, ase-equipment
+ *              filled it in one draw, and the bend clip of the file plays once over the mix - the body goes
+ *              down through hips, knees and spine of its rig, never a slide of the whole node. Of the four detail levels
  *              (meshes named _lod<k>_) the one drawn follows the figure's share of the frame height against
  *              the three bands the port carries (RND_CONST_FIGURE_LOD_NEAR/_MID/_FAR). Under the Skeleton3D of
  *              the rig a BoneAttachment3D (FigureSocketHandR) follows the socket bone socket_hand_r: what the
@@ -48,8 +51,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-13
- * @modified    2026-11-15
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-18
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -137,12 +140,14 @@ bool figure_height(::godot::Node3D* scene, uint32_t object_id, double& height);
 
 /**
  * THE RIG OF A FIGURE, ONCE (07.6): eye height and height in metres above the soles of the figure `object_id`,
- * measured when its node was built - the eyes from the rest pose of the bones L_Eye and R_Eye of its Skeleton3D,
- * the height from level 0. True exactly once per node, on the first call after the node carries a measured rig;
- * the node is marked taken, so the view reports it once to the rig port of ase-pl-avatar. False for the stand-in
- * body (it has no skeleton), for a file whose skeleton lacks an eye bone and while the scene stands no such node.
+ * and the radius of the capsule around its whole body, measured when its node was built - the eyes from the rest
+ * pose of the bones L_Eye and R_Eye of its Skeleton3D, the radius from half the span of its shoulder joints, the
+ * height from level 0. True exactly once per node, on the first call after the node carries a measured rig; the
+ * node is marked taken, so the view reports it once to the rig port of ase-pl-avatar. False for the stand-in body
+ * (it has no skeleton), for a file whose skeleton lacks an eye or a shoulder bone and while the scene stands no
+ * such node.
  */
-bool take_figure_rig(::godot::Node3D* scene, uint32_t object_id, double& eye_height, double& height);
+bool take_figure_rig(::godot::Node3D* scene, uint32_t object_id, double& eye_height, double& height, double& radius);
 
 /**
  * THE PLACE OF A FIGURE, BY STEPS: the place of the node of figure `object_id` in the scene (x east, y up, z north,
@@ -151,6 +156,24 @@ bool take_figure_rig(::godot::Node3D* scene, uint32_t object_id, double& eye_hei
  * False while the scene stands no such node.
  */
 bool take_figure_place(::godot::Node3D* scene, uint32_t object_id, double step_m, double& x, double& y, double& z);
+
+/**
+ * THE GAIT OF A FIGURE, BY CHANGE (07-F, 07-G): true on the first call after the node of figure `object_id` stood and
+ * then whenever `gait` - the gait value of the body port as ase-pl-avatar wrote it - differs from the value last
+ * returned; the node keeps that value, so the view's gait line is written per change and never per frame. The value
+ * is only compared with the one noted, never named or computed here: which gait it is, the acceptance reads against
+ * the codes of the code port written beside it. False while the scene stands no such node.
+ */
+bool take_figure_gait(::godot::Node3D* scene, uint32_t object_id, double gait);
+
+/**
+ * THE DETAIL LEVEL OF A FIGURE, BY CHANGE (07-G, each detail level): true on the first call after the node of figure
+ * `object_id` was drawn and then whenever the level its meshes are drawn on differs from the level last returned; the
+ * level lands in `level`. The scene notes the drawn level on the node each frame (show_figures), the node keeps the
+ * level returned, so the view's level line is written per change and never per frame. False while the scene stands
+ * no such node or has not drawn it yet.
+ */
+bool take_figure_level(::godot::Node3D* scene, uint32_t object_id, int32_t& level);
 
 /**
  * THE FACE AND THE EYE AS THEY ARE DRAWN (07.3): the edges in texels of the albedo bound on the face material

@@ -88,6 +88,10 @@ bool VivariumView::load_hud(const ::godot::Dictionary& root) {
     }
     read_hud_still();
     std::string carry_failed;
+    // The start screen's choice (operator order 2026-11-19): its chips, words and measures are SHA's like the HUD's.
+    if (!start_choice_.bind(hud_.theme(), carry_failed)) {
+        return fail_config(("hud " + carry_failed).c_str());
+    }
     if (!hud_carry_.load(hud_.theme(), carry_failed)) {
         return fail_config(carry_failed.c_str());  // the mockup's inventory: a hud_bridge_* token SHA does not state
     }

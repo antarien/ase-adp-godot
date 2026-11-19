@@ -4,9 +4,10 @@
  * ASE GODOT ADAPTER - FIGURE RIG
  *
  * @file        godot_figure_rig.hpp
- * @brief       The rig of the figure file: its four clips mixed by one AnimationTree, and the height of its eyes
- * @description PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.6 and 07.9: an instance of the figure file (villager_body)
- *              carries a Skeleton3D and an AnimationPlayer with the clips idle, walk, run and turn. The figure
+ * @brief       The rig of the figure file: its clips mixed by one AnimationTree, and the height of its eyes
+ * @description PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.6, 07.9 and 07.14: an instance of the figure file
+ *              (villager_body) carries a Skeleton3D and an AnimationPlayer with the clips idle, walk, run and
+ *              turn, from version 2 on also bend, the bend at the brook played once per draw. The figure
  *              scene (godot_figure_scene.hpp) builds one node per figure and hands its instance here twice:
  *              once when the node is built, so an AnimationTree beside the player mixes the clips and the
  *              eyes of the rig are measured, and every frame, so the mix follows the gait of the body port and
@@ -24,8 +25,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-14
- * @modified    2026-11-14
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-18
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -40,22 +41,34 @@ namespace ase::adp::godot {
 /**
  * The motion of the figure file: its four clips loop, and an AnimationTree beside its AnimationPlayer mixes
  * them - idle, walk and run at the gait points the code port names (`gait_stand`, `gait_walk`, `gait_run`, a
- * blend space from the stand point to the run point), the turn clip over them by the open course on the spot.
- * false when the file carries no AnimationPlayer or not all four clips.
+ * blend space from the stand point to the run point), the turn clip over them by the open course on the spot,
+ * and, where the file carries the bend clip, a OneShot that plays it once over all of them. false when the
+ * file carries no AnimationPlayer or not all four looping clips.
  */
 bool add_figure_motion(::godot::Node* model, double gait_stand, double gait_walk, double gait_run);
 
 /**
  * Drives the mix of the figure node `body` in this frame: `gait` as the body port carries it, bounded to the
- * range from `gait_stand` to `gait_run` the code port names, `turning` the share of the turn clip. Nothing when
- * the node carries no mix.
+ * range from `gait_stand` to `gait_run` the code port names, `turning` the share of the turn clip. `bend` true
+ * fires the bend clip once over the mix (07.14, the figure draws water at the brook); a bend still playing is
+ * not fired again, and a mix built from a file without the bend clip ignores it. Nothing when the node carries
+ * no mix.
  */
-void drive_figure_motion(::godot::Node3D* body, double gait, double gait_stand, double gait_run, double turning);
+void drive_figure_motion(::godot::Node3D* body, double gait, double gait_stand, double gait_run, double turning,
+                         bool bend);
 
 /**
  * The height of the eyes of the figure file `model` in the frame of its parent, metres: the mean of the rest
  * origins of L_Eye and R_Eye. false when the file carries no Skeleton3D or its skeleton lacks an eye bone.
  */
 bool figure_eye_level(::godot::Node* model, double& eye);
+
+/**
+ * The radius of the capsule around the whole body of the figure file `model`, metres: half the horizontal distance
+ * between the rest origins of L_Upperarm and R_Upperarm, the shoulder joints, in the frame of its parent. ase-physics
+ * collides the walking body as that one capsule, never as one shape per bone. false when the file carries no
+ * Skeleton3D or its skeleton lacks a shoulder bone.
+ */
+bool figure_body_radius(::godot::Node* model, double& radius);
 
 }  // namespace ase::adp::godot

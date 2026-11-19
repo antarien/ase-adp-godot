@@ -31,7 +31,7 @@
  * @usecase     usecase:100390 - return to the garden
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-06
- * @modified    2026-11-12
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -114,6 +114,7 @@ struct VivariumJump {
     double   asked_day = 0.0;                  // the game day the jump was asked on
     uint8_t  eclipse_low = GODOT_ECLIPSE_NONE;  // lowest ECLIPSE_* kind an eclipse jump lands on, NONE: no eclipse jump
     uint8_t  eclipse_high = GODOT_ECLIPSE_NONE; // highest ECLIPSE_* kind it lands on
+    uint32_t hops = 0u;                         // searches on of an eclipse jump past a landing without its eclipse, below debug.eclipse_hops (D2256)
     double   sought_run_s = GODOT_HOUR_NONE;    // stage seconds the host had ticked when the jump last set the clock (stage_seconds), below 0: not set yet
     double   target_month = GODOT_HOUR_NONE;    // LUNBREX a date jump ends at
     double   target_month_day = GODOT_HOUR_NONE;  // TUMBRAE a date jump ends at
@@ -213,13 +214,14 @@ struct VivariumDebug {
     ::godot::Ref<::godot::FontFile> icon_font;  // the Nerd Font of the button icons (debug.icon_font), loaded at run time
     double          icon_web_px = 0.0;          // the font size the offsets of the icon table are meant for (its web_size_px)
     double          settle_s = 0.0;             // simulated seconds that run at the new time after a jump set the clock, before it is judged (debug.settle_s)
+    uint32_t        eclipse_hops = 0u;          // how often an eclipse jump searches on from the end of ase-ephemeris' horizon before it notes no_eclipse (debug.eclipse_hops, D2256)
     std::vector<VivariumDebugButton> buttons;   // the time lapse buttons (debug.buttons)
     std::vector<VivariumDebugJump> jumps;       // the jump buttons (debug.jumps)
     std::vector<VivariumDebugRelief> reliefs;   // the relief buttons (debug.reliefs)
     VivariumDebugDate date;                     // the free date entry (debug.date)
     double          height_scale_m = 0.0;       // the height amplitude that stands: the boot's ground.height_scale_m, then the one last granted by the elevation port
     double          factor = GODOT_PACE_NONE;   // the factor asked of the running host, GODOT_PACE_NONE = its default pace
-    double          seq = GODOT_SEEK_SEQ_FIRST - 1.0;  // number of the last seek or date request of this run; it only grows, across a rewind too
+    double          seq = 0.0;                  // number of the last seek or date request of this run, 0 = none taken yet; it only grows, across a rewind too, and starts at ase-time's TIM_CONST_SEEK_SEQ_MIN
     VivariumJump    jump;                       // the jump that runs
 };
 

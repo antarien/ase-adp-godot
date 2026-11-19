@@ -170,8 +170,8 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
 
 /**
  * Tells the materials what the patch records carry (03.2): the ground the soil water of the focused
- * patch (`ground`, GODOT_SHADER_SOIL_REL), the leaves of each plant the condition of its patch (`stands`
- * by body, GODOT_SHADER_CONDITION), as instance shader parameters. An unknown value sets the parameter
+ * patch (`ground`, GODOT_SHADER_SOIL_REL), the leaves of each plant the wilted and the dead mark of its patch
+ * (`stands` by body, GODOT_SHADER_WILTED, GODOT_SHADER_DEAD), as instance shader parameters. An unknown value sets the parameter
  * back to the shader's own default. Wet soil and a wilted leaf look as the asset's shader draws them; a
  * material without the parameter draws as it is.
  */

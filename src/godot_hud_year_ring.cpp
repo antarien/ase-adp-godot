@@ -144,8 +144,10 @@ bool YearRing::bind(const UiTheme& theme, std::string& failed) {
            number_.bind_data(theme, failed) && stage_.bind_label(theme, failed);
 }
 
-double YearRing::month_angle(double lun, uint32_t months) const {
-    return (lun - 1.0) * GODOT_RING_TURN_DEG / static_cast<double>(months);
+double YearRing::month_angle(double lun, double lun_share) const {
+    // B0280: ase-calendar places LUN m at (m - 1) whole LUN of the year; the last LUN is shorter, so the turn is never
+    // cut into equal LUN parts - today's share of the year and the LUN marks stand on the same scale
+    return (lun - 1.0) * lun_share * GODOT_RING_TURN_DEG;
 }
 
 uint32_t YearRing::mark_lun(uint32_t mark, uint32_t marks, uint32_t months) const {
@@ -163,8 +165,8 @@ bool YearRing::draw_seasons(UiPen& canvas, const ::godot::Transform2D& frame,
     const ::godot::Vector2 centre(static_cast<float>(x_), static_cast<float>(y_));
     for (size_t index = 0; index < seasons_.size(); ++index) {
         const YearRingSeason& season = seasons_[index];
-        const double from = month_angle(now.season_starts[index], now.months_per_year);
-        double to = month_angle(now.season_starts[(index + 1) % seasons_.size()], now.months_per_year);
+        const double from = month_angle(now.season_starts[index], now.lun_share);
+        double to = month_angle(now.season_starts[(index + 1) % seasons_.size()], now.lun_share);
         if (to <= from) {
             to += GODOT_RING_TURN_DEG;
         }
@@ -232,11 +234,11 @@ bool YearRing::draw_months(UiPen& canvas, const ::godot::Transform2D& frame, con
     for (uint32_t mark = 0; mark < marks; ++mark) {
         const uint32_t lun = mark_lun(mark, marks, now.months_per_year);
         const uint32_t next_lun = mark_lun(mark + 1U, marks, now.months_per_year);
-        const double angle = month_angle(static_cast<double>(lun), now.months_per_year);
+        const double angle = month_angle(static_cast<double>(lun), now.lun_share);
         const bool current = now.lun >= lun && now.lun < next_lun;
         if (current) {
             stretch_from = angle;
-            stretch_to = month_angle(static_cast<double>(next_lun), now.months_per_year);
+            stretch_to = month_angle(static_cast<double>(next_lun), now.lun_share);
         }
         canvas.draw_line(UiRing::point(centre, radius_ + tick_inner_, angle),
                          UiRing::point(centre, radius_ + tick_outer_, angle), faint_,
@@ -318,6 +320,10 @@ bool YearRing::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Year
                     std::string& failed) {
     if (now.months_per_year == 0 || now.lun == 0 || now.lun > now.months_per_year) {
         failed = "YearRing: the clock record must give the LUN of a year and a current LUN from 1 within it";
+        return false;
+    }
+    if (!(now.lun_share > 0.0) || now.lun_share > 1.0) {
+        failed = "YearRing: the day record must give the share of the year a whole LUN fills (CAL_LUN_SHARE)";
         return false;
     }
     canvas.draw_set_transform_matrix(frame);

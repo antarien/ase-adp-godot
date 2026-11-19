@@ -35,7 +35,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-11
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -152,13 +152,13 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
                                 "hud_bridge_clock_month_day",      "hud_bridge_clock_year_day",
                                 "hud_bridge_clock_hour",           "hud_bridge_clock_period",
                                 "hud_bridge_clock_hours_per_day",  "hud_bridge_clock_days_per_month",
-                                "hud_bridge_clock_months_per_year", "hud_bridge_clock_sunrise_h",
-                                "hud_bridge_clock_sunset_h",       "hud_bridge_clock_daylight_h",
-                                "hud_bridge_clock_season"};
+                                "hud_bridge_clock_months_per_year", "hud_bridge_clock_lun_share",
+                                "hud_bridge_clock_sunrise_h",      "hud_bridge_clock_sunset_h",
+                                "hud_bridge_clock_daylight_h",     "hud_bridge_clock_season"};
     double* const values[] = {&out.year,          &out.month,           &out.month_day, &out.year_day,
                               &out.hour,          &out.period,          &out.hours_per_day,
-                              &out.days_per_month, &out.months_per_year, &out.sunrise_h, &out.sunset_h,
-                              &out.daylight_h,    &out.season};
+                              &out.days_per_month, &out.months_per_year, &out.lun_share, &out.sunrise_h,
+                              &out.sunset_h,      &out.daylight_h,      &out.season};
     for (uint32_t index = 0; index < sizeof(keys) / sizeof(keys[0]); ++index) {
         if (!theme.measure(keys[index], *values[index])) {
             return fail_config(keys[index]);
@@ -166,6 +166,9 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
     }
     if (!(out.hours_per_day > 0.0) || !(out.days_per_month > 0.0) || !(out.months_per_year > 0.0)) {
         return fail_config("hud_bridge_clock_hours_per_day, _days_per_month, _months_per_year: above 0");
+    }
+    if (!(out.lun_share > 0.0) || out.lun_share > 1.0) {
+        return fail_config("hud_bridge_clock_lun_share: a share of the year above 0, at most 1");
     }
     if (out.period < static_cast<double>(GODOT_PERIOD_FIRST) || out.period > static_cast<double>(GODOT_PERIOD_LAST)) {
         return fail_config("hud_bridge_clock_period: a GODOT_PERIOD_*");
@@ -304,15 +307,11 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
     // daysToNext(): the way left over the growth of a day.
     const uint32_t stage = patch != nullptr && patch->stage != GODOT_CODE_UNKNOWN ? patch->stage : 0u;
     const uint32_t next = stage + 1u;
-    focus.next_due = next < GODOT_STAGE_COUNT && !(patch != nullptr && patch->condition == GODOT_COND_DEAD);
+    focus.next_due = next < GODOT_STAGE_COUNT && !(patch != nullptr && patch->dead);
     const double hours =
         clock.known && clock.hours_per_day > 0.0 ? clock.hours_per_day : hud_bridge_clock_.hours_per_day;
-    double due_h = GODOT_HOUR_NONE;
-    if (patch != nullptr && next == GODOT_STAGE_GROW) {
-        due_h = patch->grow_at_h;
-    } else if (patch != nullptr && next == GODOT_STAGE_MATURE) {
-        due_h = patch->mtur_at_h;
-    }
+    // The forecast of the next position, by the key of the stage record it is read under (usecase:101635, D2455).
+    const double due_h = patch != nullptr ? resources_.stage_due_h(*patch, static_cast<uint8_t>(next)) : GODOT_HOUR_NONE;
     if (due_h >= 0.0 && clock.known && hours > 0.0) {
         const double now_h = clock.day * hours + clock.hour;
         focus.next_days = ase::math::max(0.0, (due_h - now_h) / hours);

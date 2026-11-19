@@ -32,7 +32,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-11-15
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -87,6 +87,12 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // The stage forecasts (usecase:101120): read_snapshot merges them into the patches by object id, so
     // boot() asks the set for this port as well.
     config.forecast_port = "flora.forecast.v1";
+    // The condition codes of ase-plant (usecase:101340 - show the bed condition, D2454): read_snapshot compares
+    // every patch condition against this one record, so boot() asks the set for this port as well.
+    config.cond_port = "flora.cond.v1";
+    // The stage codes of ase-plant (usecase:101635 - show the plant stage, D2455): read_snapshot turns every patch
+    // stage into its position among this one record, so boot() asks the set for this port as well.
+    config.stage_port = "flora.stage.v1";
     // The stem feet ase-physics holds (usecase:100708, N0487): read_snapshot merges their height into the
     // patches by object id, so boot() asks the set for this port as well.
     config.stem_port = "flora.stem.v1";

@@ -24,7 +24,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-11-13
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -87,8 +87,14 @@ TEST_CASE("L1: the game host starts once - the whole set from the bundle, four p
         CHECK(resources.get_patch(patch.object_id) == resources.get_patch_at(place));
         CHECK(patch.capacity_mm == doctest::Approx(100.0));
         CHECK(patch.soil_mm <= 20.0);
-        CHECK(patch.stage == GODOT_STAGE_SEED);
-        CHECK(patch.condition == GODOT_COND_HEALTHY);
+        CHECK(patch.seed);  // the stage of a fresh patch equals stage_seed of flora.stage.v1 (usecase:101635)
+        CHECK(patch.stage < GODOT_STAGE_COUNT);
+        CHECK_FALSE(patch.sprout);
+        CHECK_FALSE(patch.grow);
+        CHECK_FALSE(patch.mature);
+        CHECK(patch.cond_known);  // the condition of a seed equals a code of flora.cond.v1
+        CHECK_FALSE(patch.wilted);
+        CHECK_FALSE(patch.dead);
     }
     CHECK(resources.get_patch_at(4u) == nullptr);
     CHECK(resources.get_patch(GODOT_NO_OBJECT) == nullptr);

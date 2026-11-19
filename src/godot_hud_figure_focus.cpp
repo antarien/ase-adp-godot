@@ -223,4 +223,23 @@ bool FigureFocus::hit_figure(const ::godot::Vector2& point) const {
     return radius_ > 0.0 && static_cast<double>(point.distance_to(centre_)) <= radius_;
 }
 
+bool FigureFocus::reach_place(::godot::Rect2& reach) const {
+    if (!(radius_ > 0.0)) {
+        return false;
+    }
+    const float half = static_cast<float>(radius_);
+    reach = ::godot::Rect2(centre_.x - half, centre_.y - half, half * 2.0f, half * 2.0f);
+    return true;
+}
+
+bool FigureFocus::comb_place(::godot::Rect2& comb) const {
+    if (!comb_shown_) {
+        return false;
+    }
+    const double outer = comb_radius_ + comb_hit_;
+    const float side = static_cast<float>(outer * 2.0);
+    comb = ::godot::Rect2(comb_.x - static_cast<float>(outer), comb_.y - static_cast<float>(outer), side, side);
+    return true;
+}
+
 }  // namespace ase::adp::godot

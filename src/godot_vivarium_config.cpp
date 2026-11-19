@@ -287,6 +287,11 @@ bool VivariumView::load_view(const ::godot::Dictionary& root) {
         return fail_config("view.pick_px");
     }
     pick_px_ = static_cast<float>(pick);
+    double least_ring = 0.0;
+    if (!read_number(view, GODOT_VIEW_KEY_LEAST_RING, least_ring) || !(least_ring > 0.0)) {
+        return fail_config("view.least_ring_px");
+    }
+    least_ring_px_ = static_cast<float>(least_ring);
     double flatten = 0.0;
     if (!read_number(view, GODOT_VIEW_KEY_FLATTEN, flatten) || !(flatten > 0.0)) {
         return fail_config("view.flatten_m");

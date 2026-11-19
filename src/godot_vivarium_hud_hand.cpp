@@ -160,7 +160,7 @@ void VivariumHandBridge::frame(HandSlotFrame& hand, const VivariumPatchView* pat
     hand.pour_mm = hand.poured_l * mm_per_l_;
     const double preview_mm = pouring_ ? hand.pour_mm : fill_l > 0.0 ? mm_per_l_ : 0.0;
     hand.after_rel = ase::math::min(1.0, hand.soil_rel + preview_mm * rel_per_mm_);
-    hand.dead = patch != nullptr && patch->condition == GODOT_COND_DEAD;
+    hand.dead = patch != nullptr && patch->dead;
     ground(hand, reticle);
 
     // THE SAP of a running tap: the bridge's.

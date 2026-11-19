@@ -42,6 +42,7 @@
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 
@@ -60,6 +61,9 @@ public:
 
     /** True when `point` (in the mockup's units) lies in the square a tap takes the switch in. */
     bool hit(const ::godot::Vector2& point) const;
+
+    /** The square hit() takes a tap in, mockup units: the place the window acceptance taps cam.mode at. */
+    ::godot::Rect2 place() const;
 
 private:
     double x_ = 0.0;            // hud_figure_switch_x

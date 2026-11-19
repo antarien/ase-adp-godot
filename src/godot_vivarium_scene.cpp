@@ -105,9 +105,10 @@ void VivariumView::follow_scene(double elapsed_s) {
     if (ground_moved || streams != scene_streams_) {
         scene_streams_ = streams;
         // the edge of the bridge for the groundwater beside a brook (N0484): the stream port carries no level
-        // until ase-hydro publishes one; logged once on its edge, the water stays in the beds meanwhile
+        // until ase-gis has mapped the cell at the start of the bed (GIS_HYD_CELL_LEVEL, filed by
+        // FloraHostStrmExptSystem); logged once on its edge, the water stays in the beds meanwhile
         constexpr const char* GAP_GROUNDWATER = "N0484";
-        constexpr const char* GROUNDWATER_FIELD = "flora.brook.v1.groundwater_level_m";
+        constexpr const char* GROUNDWATER_FIELD = "flora.stream.v1.groundwater_level_m";
         bool groundwater = false;
         for (const VivariumStreamView& stream : resources_.get_streams()) {
             groundwater = groundwater || std::isfinite(stream.groundwater_level_m);

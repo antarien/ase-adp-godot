@@ -48,8 +48,10 @@
  *              run, only the note waits. On landing the note says what the
  *              star shows there: the stage of the watched patch, the standing eclipse record, the moons in the
  *              camera's frustum. A landing that misses its sight (a stage not reached, no eclipse standing at its
- *              predicted maximum) is the producing module's finding to fix, never a reason for the view to search
- *              on.
+ *              predicted maximum) is noted as the producing module's finding. Only the eclipse jump searches on
+ *              (D2256): ase-ephemeris names the end of its horizon for a kind without an eclipse in reach, and a
+ *              reader that jumps by it searches on from there (CAUSA_ASE_EPHEMERIS, EphemerisEclNextSystem), so
+ *              the jump takes the prediction made at the new time, up to debug.eclipse_hops times.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -59,7 +61,7 @@
  * @usecase     usecase:100390 - return to the garden
  * @actor       Growth Clock Controller (GROWCLOCON), Plant Keeper (PLNTKEEPER)
  * @created     2026-11-07
- * @modified    2026-11-12
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -159,12 +161,8 @@ void VivariumView::ask_jump(const VivariumDebugJump& jump, uint32_t index) {
             note("debug jump " + stage_word + " result=reached " + measure(selected_place_));
             return;
         }
-        double due_h = GODOT_HOUR_NONE;
-        if (jump.stage == GODOT_STAGE_GROW) {
-            due_h = patch->grow_at_h;
-        } else if (jump.stage == GODOT_STAGE_MATURE) {
-            due_h = patch->mtur_at_h;
-        }
+        // The forecast of the target position, by the key of the stage record it is read under (usecase:101635).
+        const double due_h = resources_.stage_due_h(*patch, jump.stage);
         if (!(due_h >= 0.0)) {
             // No forecast: Broto carries none, an unmeasured forecast is NaN.
             note("debug jump " + stage_word + " due_h=" + ::godot::String::num(due_h, GODOT_LOG_DECIMALS) +
@@ -311,20 +309,46 @@ void VivariumView::follow_debug() {
         }
         const bool reached = patch->stage != GODOT_CODE_UNKNOWN && patch->stage >= jump.stage;
         const ::godot::String outcome =
-            reached ? "reached" : (patch->condition == GODOT_COND_DEAD ? "missed reason=dead" : "missed");
+            reached ? "reached" : (patch->dead ? "missed reason=dead" : "missed");
         note("debug jump " + outcome + " stage=" + ::godot::String::num_uint64(jump.stage) +
              " shown=" + ::godot::String::num_uint64(patch->stage) + at_words + " " + measure(jump.place));
     } else if (jump.eclipse_low != GODOT_ECLIPSE_NONE) {
-        // THE LANDING OF AN ECLIPSE JUMP: the eclipse record ase-ephemeris shows at its predicted maximum. No
-        // eclipse of the button standing there is ase-ephemeris' prediction to fix.
+        // THE LANDING OF AN ECLIPSE JUMP: the eclipse record ase-ephemeris shows at its predicted maximum.
         const VivariumSkyView& sky = resources_.get_sky();
         const VivariumEclipseView& eclipse = sky.eclipse[0];
         const bool standing = sky.known && sky.eclipses > 0u &&
                               eclipse.kind >= static_cast<double>(jump.eclipse_low) &&
                               eclipse.kind <= static_cast<double>(jump.eclipse_high);
-        note(::godot::String("debug jump ") + (standing ? "reached" : "missed reason=no_eclipse") +
-             " eclipse=" + ::godot::String::num_uint64(jump.eclipse_low) + ".." +
-             ::godot::String::num_uint64(jump.eclipse_high) + " kind=" + ::godot::String::num(eclipse.kind, 0) +
+        // THE SEARCH ON (D2256): a kind without an eclipse inside ase-ephemeris' horizon carries the end of the
+        // horizon, and a reader that jumps by it searches on from there (CAUSA_ASE_EPHEMERIS,
+        // EphemerisEclNextSystem). Without the eclipse standing, the jump takes ase-ephemeris' prediction made at
+        // the new time and writes the clock there once more, up to debug.eclipse_hops times; the times stay
+        // ase-ephemeris' and the view computes no orbit. Every landing without the eclipse is noted, so a
+        // prediction that misses its own eclipse stays visible as ase-ephemeris' finding.
+        const bool solar = jump.eclipse_high <= GODOT_ECLIPSE_SOLAR_MAX;
+        double predicted_h = GODOT_HOUR_NONE;
+        if (sky.known && sky.eclipse_nexts > 0u) {
+            predicted_h = solar ? sky.eclipse_next[0].next_solar : sky.eclipse_next[0].next_lunar;
+        }
+        const ::godot::String kinds_word = "eclipse=" + ::godot::String::num_uint64(jump.eclipse_low) + ".." +
+                                           ::godot::String::num_uint64(jump.eclipse_high);
+        if (!standing && jump.hops < debug_.eclipse_hops && predicted_h > 0.0) {
+            VivariumJump next;
+            next.running = true;
+            next.button = jump.button;
+            next.asked_day = jump.asked_day;
+            next.eclipse_low = jump.eclipse_low;
+            next.eclipse_high = jump.eclipse_high;
+            next.hops = jump.hops + 1u;
+            if (seek_jump(next, GODOT_SEEK_FORM_NONE, predicted_h, GODOT_SEEK_FORM_NONE,
+                          kinds_word + ::godot::String(" searched_on hop=") + ::godot::String::num_uint64(next.hops) +
+                              ::godot::String(" predicted_h=") + ::godot::String::num(predicted_h, GODOT_LOG_DECIMALS) +
+                              at_words)) {
+                return;
+            }
+        }
+        note(::godot::String("debug jump ") + (standing ? "reached " : "missed reason=no_eclipse ") + kinds_word +
+             " hops=" + ::godot::String::num_uint64(jump.hops) + " kind=" + ::godot::String::num(eclipse.kind, 0) +
              " obscuration=" + ::godot::String::num(eclipse.obscuration, GODOT_LOG_DECIMALS) +
              " hours_to_max=" + ::godot::String::num(eclipse.hours_to_max, GODOT_LOG_DECIMALS) + at_words + " " +
              measure(selected_place_));

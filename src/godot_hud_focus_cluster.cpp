@@ -138,9 +138,8 @@ std::string FocusCluster::percent(double share) {
 
 bool FocusCluster::draw(UiPen& canvas, const ::godot::Transform2D& frame,
                         const FocusClusterFrame& now, std::string& failed) {
-    if (now.condition >= GODOT_COND_COUNT) {
-        failed = "FocusCluster: condition code " + std::to_string(static_cast<uint32_t>(now.condition)) +
-                 " outside GODOT_COND_*";
+    if (!now.cond_known) {
+        failed = "FocusCluster: the condition of the patch in focus equals none of the codes of flora.cond.v1";
         return false;
     }
     FocusRingFrame ring;
@@ -148,7 +147,7 @@ bool FocusCluster::draw(UiPen& canvas, const ::godot::Transform2D& frame,
     ring.height = now.height;
     ring.level = now.level;
     ring.stage = now.stage;
-    ring.dead = now.condition == GODOT_COND_DEAD;
+    ring.dead = now.dead;
     ring.soil_rel = now.soil_rel;
     ring.growth_share = now.growth_share;
     ring.elapsed = now.elapsed;
@@ -208,7 +207,7 @@ bool FocusCluster::draw_head(UiPen& canvas, const ::godot::Transform2D& frame,
 bool FocusCluster::rows(const FocusClusterFrame& now, std::vector<UiSpineRow>& out, std::string& failed) const {
     out.clear();
     const bool bars = now.level >= level_bars_;
-    const bool dead = now.condition == GODOT_COND_DEAD;
+    const bool dead = now.dead;
     const bool dry = now.soil_rel < soil_dry_;
 
     // ESTÁGIO: the stage's word, or the dash for a dead stand; the pips lit up to the stage.
@@ -307,10 +306,10 @@ bool FocusCluster::marks(const FocusClusterFrame& now, std::vector<UiSpineRow>& 
     }
 
     // CONDIÇÃO: the mark ase-plant set on the stand.
-    if (now.condition != GODOT_COND_HEALTHY) {
+    if (now.wilted || now.dead) {
         UiSpineRow condition;
         if (!plain_word(*theme_, "row_condition", condition.label, failed) ||
-            !plain_word(*theme_, now.condition == GODOT_COND_DEAD ? "words.dead" : "words.wilted", condition.value,
+            !plain_word(*theme_, now.dead ? "words.dead" : "words.wilted", condition.value,
                         failed) ||
             !plain_word(*theme_, "focus_source.condition", condition.source, failed)) {
             return false;
@@ -324,7 +323,7 @@ bool FocusCluster::marks(const FocusClusterFrame& now, std::vector<UiSpineRow>& 
 
 bool FocusCluster::draw_next(UiPen& canvas, const ::godot::Transform2D& frame,
                              const FocusClusterFrame& now, std::string& failed) {
-    if (now.level < level_bars_ || now.condition == GODOT_COND_DEAD || !now.next_due) {
+    if (now.level < level_bars_ || now.dead || !now.next_due) {
         return true;
     }
     // L([[TX+R*k, ry+R*k], [TX+from, fy], [TX+to, fy]]) under the ring.

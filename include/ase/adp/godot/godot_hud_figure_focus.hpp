@@ -60,6 +60,7 @@
 
 #include <ase/adp/godot/godot_hud_ui_pen.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 
@@ -96,6 +97,14 @@ public:
 
     /** True when `point` (in the mockup's units) lies on the comb soul.mode drawn last over the head. */
     bool hit_comb(const ::godot::Vector2& point) const;
+
+    /** The square round the reach laid last, mockup units; its middle is a point hit_figure() takes. False before the
+     *  first lay. */
+    bool reach_place(::godot::Rect2& reach) const;
+
+    /** The square round the comb drawn last at the size hit_comb() takes, mockup units; its middle is a point
+     *  hit_comb() takes. False while the focus is closed. */
+    bool comb_place(::godot::Rect2& comb) const;
 
 private:
     double anchor_share_ = 0.0;     // hud_figure_focus_anchor_share

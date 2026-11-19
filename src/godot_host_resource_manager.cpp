@@ -13,7 +13,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-15
+ * @modified    2026-11-19
  * @version     00.00.04.00023 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -167,6 +167,24 @@ uint8_t code_of(double value, uint8_t count) {
 }
 
 /**
+ * THE STAGE POSITIONS, a fixed mapping of this file (usecase:101635 - show the plant stage, D2455): the key of
+ * the stage record each position of VivariumPatchView::stage is read under, in the order seed, sprout, grow,
+ * mature; nullptr outside them. The position orders the tables of the view (words, colours, scales); the codes
+ * behind the keys are ase-plant's, and no number of them stands in this adapter.
+ */
+const char* stage_key(uint8_t position) {
+    const char* const keys[GODOT_STAGE_COUNT] = {GODOT_KEY_STGE_SEED, GODOT_KEY_STGE_SPRT, GODOT_KEY_STGE_GROW,
+                                                 GODOT_KEY_STGE_MTUR};
+    return position < GODOT_STAGE_COUNT ? keys[position] : nullptr;
+}
+
+/** Whether a stage position is read under `key` of the stage record. */
+bool stage_named(uint8_t position, const char* key) {
+    const char* named = stage_key(position);
+    return named != nullptr && ase::utils::str_equal(named, key, ase::kernel::HostKeyBytes);
+}
+
+/**
  * THE ORGAN CLASSES, a fixed mapping of this file: the word of each class, index = GODOT_ORGAN_*.
  * The same words name the ports in the start configuration and the records in the self-test table.
  */
@@ -189,6 +207,7 @@ constexpr const char* kDayKeyYearDay = "year_day";
  * view reads them into Godot's order (east, up, north) and computes nothing on them.
  */
 constexpr const char* kFigureKeyCourse = "yaw";
+constexpr const char* kFigureKeyCharacter = "character";  // spawn request: id of the character the figure plays, AVATAR_HOST_KEY_CHARACTER of ase-pl-avatar
 constexpr const char* kFigureKeyVelX = "vel_x";
 constexpr const char* kFigureKeyVelY = "vel_y";
 constexpr const char* kFigureKeyGait = "gait";
@@ -203,6 +222,8 @@ constexpr const char* kFigureKeyEyeZ = "eye_z";
 constexpr const char* kFigureKeyAimX = "aim_x";
 constexpr const char* kFigureKeyAimY = "aim_y";
 constexpr const char* kFigureKeyAimZ = "aim_z";
+constexpr const char* kFigureKeyBound = "bound";
+constexpr const char* kFigureKeyEdge = "edge";
 constexpr const char* kFigureKeyForward = "forward";
 constexpr const char* kFigureKeyStrafe = "strafe";
 constexpr const char* kFigureKeySprint = "sprint";
@@ -211,11 +232,15 @@ constexpr const char* kFigureKeyYawDelta = "yaw_delta";
 constexpr const char* kFigureKeyPitchDelta = "pitch_delta";
 constexpr const char* kFigureKeyZoomDelta = "zoom_delta";  // turn request: change of the orbit distance, m (AVATAR_HOST_KEY_ZOOM_DELTA)
 constexpr const char* kFigureKeyItem = "item";      // hold request: catalog id of the thing (AVATAR_HOST_KEY_ITEM)
+constexpr const char* kFigureKeyLitres = "litres";  // drain request: litres the release lets go (AVTR_HOST_KEY_LITRES)
 constexpr const char* kFigureKeyBearer = "bearer";  // gear record: the figure that carries the piece (AVATAR_HOST_KEY_BEARER)
 constexpr const char* kFigureKeyEyeHeight = "eye_height";  // rig report: eyes above the soles, m (AVATAR_HOST_KEY_EYE_HEIGHT)
 constexpr const char* kFigureKeyHeight = "height";         // rig report: body above the soles, m (AVATAR_HOST_KEY_HEIGHT)
+constexpr const char* kFigureKeyRadius = "radius";         // rig report: radius of the capsule around the whole body, m (AVATAR_HOST_KEY_RADIUS)
+constexpr const char* kFigureKeyPlate = "plate";           // bind request: entity id of the area plate (AVATAR_HOST_KEY_PLATE)
 constexpr const char* kFigureKeySlot = "slot";      // gear record: name_id of the socket (AVATAR_HOST_KEY_SLOT)
 constexpr const char* kFigureKeyKind = "kind";      // gear record: catalog id of the thing (AVATAR_HOST_KEY_KIND)
+constexpr const char* kFigureKeyWater = "water_l";  // gear record: litres a vessel holds, only on a vessel (AVATAR_HOST_KEY_WATER)
 constexpr const char* kFigureKeyGaitStnd = "gait_stnd";    // code record: gait of a standing figure (AVATAR_HOST_KEY_GAIT_STND)
 constexpr const char* kFigureKeyGaitWalk = "gait_walk";    // code record: gait of a walking figure (AVATAR_HOST_KEY_GAIT_WALK)
 constexpr const char* kFigureKeyGaitRun = "gait_run";      // code record: gait of a running figure (AVATAR_HOST_KEY_GAIT_RUN)
@@ -224,6 +249,11 @@ constexpr const char* kFigureKeySoulSspc = "soul_sspc";    // code record: soul 
 constexpr const char* kFigureKeyCamFixed = "cam_fixed";    // code record: camera in the fixed view (AVATAR_HOST_KEY_CAM_FIXED)
 constexpr const char* kFigureKeyCamPlayer = "cam_player";  // code record: camera following the figure (AVATAR_HOST_KEY_CAM_PLAYER)
 constexpr uint32_t kFigureCodeObject = 0u;  // object id of the one code record; the codes belong to no figure (AVATAR_HOST_CODE_OBJECT)
+constexpr const char* kFigureKeyNormalX = "normal_x";  // boundary record: east share of the outward normal of the edge (AVTR_HOST_KEY_NORMAL_X)
+constexpr const char* kFigureKeyNormalZ = "normal_z";  // boundary record: north share of the outward normal of the edge (AVTR_HOST_KEY_NORMAL_Z)
+constexpr const char* kFigureKeyTouchX = "touch_x";    // boundary record: touched point, world metres east (AVTR_HOST_KEY_TOUCH_X)
+constexpr const char* kFigureKeyTouchZ = "touch_z";    // boundary record: touched point, world metres north (AVTR_HOST_KEY_TOUCH_Z)
+constexpr const char* kFigureKeyBumps = "bumps";       // boundary record: bumps of the body since it walks (AVTR_HOST_KEY_BUMPS)
 constexpr double kFigureIdMax = 4294967295.0;       // the largest id a uint32_t holds
 
 /**
@@ -241,14 +271,27 @@ bool figure_id_of(double value, uint32_t& out) {
 
 /**
  * One gear record as a piece view (07.10). false for a record that misses one of its three values or carries one
- * that is no whole id: the gear port writes bearer, slot and kind of every piece (AvatarHostGearExptSystem).
+ * that is no whole id: the gear port writes bearer, slot and kind of every piece (AvatarHostGearExptSystem). A
+ * vessel adds water_l (07.14): a record without it is no vessel, one with a negative or endless value is broken.
  */
 bool figure_gear_of(const KernelHostRecord& record, VivariumFigureGearView& out) {
     out = VivariumFigureGearView{};
     out.object_id = record.object_id;
-    return figure_id_of(record_value(record, kFigureKeyBearer), out.bearer) &&
-           figure_id_of(record_value(record, kFigureKeySlot), out.slot) &&
-           figure_id_of(record_value(record, kFigureKeyKind), out.kind);
+    if (!figure_id_of(record_value(record, kFigureKeyBearer), out.bearer) ||
+        !figure_id_of(record_value(record, kFigureKeySlot), out.slot) ||
+        !figure_id_of(record_value(record, kFigureKeyKind), out.kind)) {
+        return false;
+    }
+    const double water = record_value(record, kFigureKeyWater);
+    if (std::isnan(water)) {
+        return true;
+    }
+    if (!std::isfinite(water) || water < 0.0) {
+        return false;
+    }
+    out.vessel = true;
+    out.water_l = water;
+    return true;
 }
 
 /**
@@ -275,6 +318,25 @@ bool figure_code_of(const KernelHostRecord& record, VivariumFigureCodeView& out)
     out.cam_player = values[6];
     out.known = true;
     return true;
+}
+
+/**
+ * One boundary record as a bump view (07.13, usecase:101612). false for a record that misses one of its five values,
+ * carries one that is not finite, a normal that is no unit share of an edge or a count that is no whole id: the
+ * boundary port writes all five of every bumping body (AvatarHostBndyExptSystem).
+ */
+bool figure_bump_of(const KernelHostRecord& record, VivariumFigureBumpView& out) {
+    out = VivariumFigureBumpView{};
+    out.object_id = record.object_id;
+    out.normal_x = record_value(record, kFigureKeyNormalX);
+    out.normal_z = record_value(record, kFigureKeyNormalZ);
+    out.touch_x = record_value(record, kFigureKeyTouchX);
+    out.touch_z = record_value(record, kFigureKeyTouchZ);
+    if (!std::isfinite(out.normal_x) || !std::isfinite(out.normal_z) || !std::isfinite(out.touch_x) ||
+        !std::isfinite(out.touch_z) || ase::math::abs(out.normal_x) > 1.0 || ase::math::abs(out.normal_z) > 1.0) {
+        return false;
+    }
+    return figure_id_of(record_value(record, kFigureKeyBumps), out.bumps);
 }
 
 /**
@@ -316,12 +378,24 @@ bool figure_camera_of(const KernelHostRecord& record, VivariumFigureCameraView& 
     out.figure = record.object_id;
     const double values[] = {record_value(record, kFigureKeyEyeX), record_value(record, kFigureKeyEyeZ),
                              record_value(record, kFigureKeyEyeY), record_value(record, kFigureKeyAimX),
-                             record_value(record, kFigureKeyAimZ), record_value(record, kFigureKeyAimY)};
+                             record_value(record, kFigureKeyAimZ), record_value(record, kFigureKeyAimY),
+                             record_value(record, kFigureKeyBound), record_value(record, kFigureKeyEdge)};
     for (const double value : values) {
         if (!std::isfinite(value)) {
             return false;
         }
     }
+    // the rim state is a mark of ase-camera: 1 while it holds the camera on the rim of the loaded area, else 0
+    if (values[6] != 0.0 && values[6] != 1.0) {
+        return false;
+    }
+    out.bound = values[6] == 1.0;
+    // the rim state of the followed figure is a mark of ase-physics (HUB_PHYS_STAND_BNDY): 1 in every step it holds
+    // the walking body at a chunk border of the loaded ground, else 0 - RAND DES AREALS (07-G, 07.13)
+    if (values[7] != 0.0 && values[7] != 1.0) {
+        return false;
+    }
+    out.edge = values[7] == 1.0;
     out.eye_x = values[0];
     out.eye_y = values[1];  // the plugin's eye height
     out.eye_z = values[2];
@@ -369,12 +443,13 @@ bool ground_cell_view_of(const KernelHostRecord& record, VivariumGroundCellView&
 /**
  * One stream record as a view. false for a record that misses one of the eight keys the stream port writes for
  * every brook it names (ase-pl-flora, FloraHostStrmExptSystem). The groundwater beside the bed (B0286) is read
- * from its own two keys and fails no record: until ase-hydro publishes it (N0484) record_value gives NaN, the
- * fields keep it, and the view's bridge logs the gap on its edge (VivariumView::follow_scene).
+ * from its own two keys and fails no record: the plugin files them only while ase-gis has mapped the cell at the
+ * start of the bed (N0484: layer GIS_LYR_HYD_LEVEL, answered as GIS_HYD_CELL_LEVEL); before, record_value gives
+ * NaN, the fields keep it, and the view's bridge logs the gap on its edge (VivariumView::follow_scene).
  */
 bool stream_view_of(const KernelHostRecord& record, VivariumStreamView& out) {
-    constexpr const char* KEY_GROUNDWATER_LEVEL = "groundwater_level_m";  // HYD_STREAM_GNDW_LEVEL, world metres
-    constexpr const char* KEY_GROUNDWATER_REACH = "groundwater_reach_m";  // HYD_STREAM_GNDW_REACH, metres
+    constexpr const char* KEY_GROUNDWATER_LEVEL = "groundwater_level_m";  // FLORA_HOST_KEY_GNDW_LEVEL: GIS_HYD_CELL_LEVEL, world metres above NN0
+    constexpr const char* KEY_GROUNDWATER_REACH = "groundwater_reach_m";  // FLORA_HOST_KEY_GNDW_REACH: HYD_CONST_GNDW_REACH, metres
     out = VivariumStreamView{};
     out.object_id = record.object_id;
     out.x = record_value(record, GODOT_KEY_X);
@@ -1023,7 +1098,9 @@ bool stars_view_of(const std::vector<KernelHostRecord>& records, uint32_t writte
  * configuration check could have refused before a host existed.
  */
 bool ports_named(const VivariumStartConfig& config) {
-    bool named = !config.patch_port.empty() && !config.forecast_port.empty() && !config.stem_port.empty() &&
+    bool named = !config.patch_port.empty() && !config.forecast_port.empty() && !config.cond_port.empty() &&
+                 !config.stage_port.empty() &&
+                 !config.stem_port.empty() &&
                  !config.clock_port.empty() &&
                  !config.date_port.empty() &&
                  !config.scene_port.empty() &&
@@ -1718,6 +1795,14 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     if (status != ase::kernel::HostStatusOk) {
         return fail(GODOT_STEP_CREATE, status);
     }
+    // THE START MODE BELONGS TO THE HOST'S CREATION: it is named before any unit loads, so the pass
+    // that reads back the last state of the owners already finds it in its first tick.
+    if (config_.start_fresh) {
+        status = host_->set_start_fresh();
+        if (status != ase::kernel::HostStatusOk) {
+            return fail(GODOT_STEP_CREATE, status);
+        }
+    }
 
     status = read_bundle();
     if (status != ase::kernel::HostStatusOk) {
@@ -1733,6 +1818,8 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     }
 
     bool offered = host_->has_port(config_.patch_port.c_str()) && host_->has_port(config_.forecast_port.c_str()) &&
+                   host_->has_port(config_.cond_port.c_str()) &&
+                   host_->has_port(config_.stage_port.c_str()) &&
                    host_->has_port(config_.stem_port.c_str()) &&
                    host_->has_port(config_.clock_port.c_str()) &&
                    host_->has_port(config_.date_port.c_str()) &&
@@ -1865,6 +1952,7 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     figure_camera_ = VivariumFigureCameraView{};
     figure_gear_.clear();
     figure_code_ = VivariumFigureCodeView{};
+    figure_bumps_.clear();
     if (!host_) {
         return status;  // no host, no logger: the node shows and prints the failure itself
     }
@@ -2135,7 +2223,42 @@ HostStatus GodotHostResourceManager::advance(double elapsed_s) {
 
 HostStatus GodotHostResourceManager::read_snapshot() {
     uint32_t written = 0u;
-    HostStatus status = snapshot_all(*host_, config_.patch_port, records_, written);
+    // THE CONDITION CODES ARE ASE-PLANT'S (FLORA_HOST_PORT_COND, usecase:101340 - show the bed condition, D2454):
+    // ase-pl-flora files PLT_CONST_COND_HEALTHY, PLT_CONST_COND_WLTG and PLT_CONST_COND_DEAD as one record, and
+    // the view compares the condition of each patch against them, never against a number of its own. While no
+    // record came (the codes not yet on the star) every condition stays unknown; two records are a broken port.
+    HostStatus status = snapshot_all(*host_, config_.cond_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written > 1u) {
+        return refuse_record(*host_, config_.cond_port, records_[1].object_id, "more than one condition record");
+    }
+    const double nan = std::nan("");
+    const double cond_healthy = written == 1u ? record_value(records_[0], GODOT_KEY_COND_HEALTHY) : nan;
+    const double cond_wilted = written == 1u ? record_value(records_[0], GODOT_KEY_COND_WILTED) : nan;
+    const double cond_dead = written == 1u ? record_value(records_[0], GODOT_KEY_COND_DEAD) : nan;
+    const bool codes = whole(cond_healthy) && whole(cond_wilted) && whole(cond_dead);
+
+    // THE STAGE CODES ARE ASE-PLANT'S (FLORA_HOST_PORT_STAGE, usecase:101635 - show the plant stage, D2455):
+    // ase-pl-flora files PLT_CONST_STAGE_SEED, _SPRT, _GROW and _MTUR as one record, and the view turns the stage
+    // of each patch into its position among them (stage_key), never against a number of its own. While no record
+    // came every stage stays unknown; two records are a broken port.
+    status = snapshot_all(*host_, config_.stage_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written > 1u) {
+        return refuse_record(*host_, config_.stage_port, records_[1].object_id, "more than one stage record");
+    }
+    double stage_codes[GODOT_STAGE_COUNT] = {};
+    bool stage_codes_known = written == 1u;
+    for (uint8_t position = 0u; position < GODOT_STAGE_COUNT; ++position) {
+        stage_codes[position] = written == 1u ? record_value(records_[0], stage_key(position)) : nan;
+        stage_codes_known = stage_codes_known && whole(stage_codes[position]);
+    }
+
+    status = snapshot_all(*host_, config_.patch_port, records_, written);
     if (status != ase::kernel::HostStatusOk) {
         return status;
     }
@@ -2172,8 +2295,20 @@ HostStatus GodotHostResourceManager::read_snapshot() {
             return refuse_record(*host_, config_.patch_port, record.object_id, "place is no whole number");
         }
         view.place = static_cast<uint32_t>(place);
-        view.stage = code_of(stage, GODOT_STAGE_COUNT);
-        view.condition = code_of(condition, GODOT_COND_COUNT);
+        view.stage = GODOT_CODE_UNKNOWN;
+        for (uint8_t position = 0u; stage_codes_known && whole(stage) && position < GODOT_STAGE_COUNT; ++position) {
+            if (stage == stage_codes[position]) {
+                view.stage = position;
+            }
+        }
+        view.seed = stage_named(view.stage, GODOT_KEY_STGE_SEED);
+        view.sprout = stage_named(view.stage, GODOT_KEY_STGE_SPRT);
+        view.grow = stage_named(view.stage, GODOT_KEY_STGE_GROW);
+        view.mature = stage_named(view.stage, GODOT_KEY_STGE_MTUR);
+        view.condition = condition;
+        view.wilted = codes && whole(condition) && condition == cond_wilted;
+        view.dead = codes && whole(condition) && condition == cond_dead;
+        view.cond_known = view.wilted || view.dead || (codes && whole(condition) && condition == cond_healthy);
         view.soil = code_of(record_value(record, GODOT_KEY_SOIL), GODOT_SOIL_COUNT);
         patches_[view.object_id] = view;
         places_[view.place] = view.object_id;
@@ -2296,11 +2431,13 @@ HostStatus GodotHostResourceManager::read_snapshot() {
             return refuse_record(*host_, config_.seek_port, seek_records[0].object_id, "more than one seek bounds");
         }
         if (written == 1u) {
+            clock.seek_seq_min = record_value(seek_records[0], GODOT_KEY_SEEK_SEQ_MIN);
             clock.seek_seq_max = record_value(seek_records[0], GODOT_KEY_SEEK_SEQ_MAX);
             clock.seek_order_none = record_value(seek_records[0], GODOT_KEY_SEEK_ORDER_NONE);
             clock.seek_order_refused = record_value(seek_records[0], GODOT_KEY_SEEK_ORDER_REFUSED);
-            if (!std::isfinite(clock.seek_seq_max) || !std::isfinite(clock.seek_order_none) ||
-                !std::isfinite(clock.seek_order_refused) || clock.seek_seq_max < GODOT_SEEK_SEQ_FIRST ||
+            if (!std::isfinite(clock.seek_seq_min) || !std::isfinite(clock.seek_seq_max) ||
+                !std::isfinite(clock.seek_order_none) || !std::isfinite(clock.seek_order_refused) ||
+                clock.seek_seq_min <= 0.0 || clock.seek_seq_max < clock.seek_seq_min ||
                 clock.seek_order_refused <= clock.seek_order_none) {
                 return refuse_record(*host_, config_.seek_port, seek_records[0].object_id,
                                      "seek bounds incomplete or out of order: the largest number lies below the "
@@ -2347,8 +2484,8 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         clock.season_halitrix = record_value(date_records[0], GODOT_KEY_SEASON_HALITRIX);
         const double date_parts[] = {clock.year,          clock.epoch,           clock.cycle,
                                      clock.month,         clock.month_day,       clock.days_per_month,
-                                     clock.months_per_year, clock.season_glacix, clock.season_saltatrix,
-                                     clock.season_ignix,  clock.season_halitrix};
+                                     clock.months_per_year, clock.season_glacix,
+                                     clock.season_saltatrix, clock.season_ignix, clock.season_halitrix};
         std::size_t finite_parts = 0u;
         for (const double part : date_parts) {
             finite_parts += std::isfinite(part) ? 1u : 0u;
@@ -2391,9 +2528,13 @@ HostStatus GodotHostResourceManager::read_snapshot() {
             clock.sunset_share = record_value(day, GODOT_KEY_SUNSET_SHARE);
             clock.year_share = record_value(day, GODOT_KEY_YEAR_SHARE);
             clock.year_day = record_value(day, kDayKeyYearDay);
+            // B0280: ase-calendar's share of a whole LUNBREX rides with today's share; the year ring places its LUN
+            // marks and season arcs by it and never divides by the LUNBREX of a year (the last one is shorter)
+            clock.lun_share = record_value(day, GODOT_KEY_LUN_SHARE);
             const double day_parts[] = {clock.sunrise_h,     clock.sunset_h,     clock.daylight_h,
                                         clock.season,        clock.day_share,    clock.sunrise_share,
-                                        clock.sunset_share,  clock.year_share,   clock.year_day};
+                                        clock.sunset_share,  clock.year_share,   clock.year_day,
+                                        clock.lun_share};
             std::size_t finite_day = 0u;
             for (const double part : day_parts) {
                 finite_day += std::isfinite(part) ? 1u : 0u;
@@ -3013,6 +3154,7 @@ HostStatus GodotHostResourceManager::read_figures() {
     figure_camera_ = VivariumFigureCameraView{};
     figure_gear_.clear();
     figure_code_ = VivariumFigureCodeView{};
+    figure_bumps_.clear();
     if (!figure_offered()) {
         return ase::kernel::HostStatusOk;
     }
@@ -3057,9 +3199,27 @@ HostStatus GodotHostResourceManager::read_figures() {
         if (!figure_gear_of(organ_records_[i], piece)) {
             figure_gear_.clear();
             return refuse_record(*host_, config_.figure_gear_port, organ_records_[i].object_id,
-                                 "gear piece without bearer, slot or kind as whole id");
+                                 "gear piece without bearer, slot or kind as whole id, or with a broken water_l");
         }
         figure_gear_.push_back(piece);
+    }
+    // the bumps against the edge of the first own chunk (07.13, usecase:101612): the plugin closes the boundary set
+    // every Production run after the organism record (AvatarHostBndyExptSystem), one record per walking body that
+    // bumped since it walks. The edge is the terrain's and holds every walking body, so the set is read before the
+    // codes and stands with or without a figure the view draws
+    status = snapshot_all(*host_, config_.figure_boundary_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    figure_bumps_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumFigureBumpView bump;
+        if (!figure_bump_of(organ_records_[i], bump)) {
+            figure_bumps_.clear();
+            return refuse_record(*host_, config_.figure_boundary_port, organ_records_[i].object_id,
+                                 "bump without normal, touched point or count, or with a value not finite");
+        }
+        figure_bumps_.push_back(bump);
     }
     // what gait, soul and camera of the body record mean (usecase:101611): the plugin files one code record every
     // Production run (AvatarHostCodeExptSystem), so standing figures without it are a broken plugin, never a view
@@ -3098,6 +3258,10 @@ HostStatus GodotHostResourceManager::spawn_figure(uint32_t seat, double x, doubl
     input.object_id = seat;
     (void)put_value(input, GODOT_KEY_X, x);
     (void)put_value(input, GODOT_KEY_Y, z);
+    // The character of the seat, as the id the units key their catalogs with; ase-pl-avatar carries it on
+    // the spawn row and ase-creation gives the figure the genome and the start values of that character.
+    (void)put_value(input, kFigureKeyCharacter,
+                    static_cast<double>(KernelEmbeddedHost::name_id(config_.figure_character.c_str())));
     return host_->submit(config_.figure_spawn_port.c_str(), config_.op_spawn.c_str(), &input);
 }
 
@@ -3217,9 +3381,37 @@ HostStatus GodotHostResourceManager::drop_figure(uint32_t figure) {
     return host_->submit(config_.figure_drop_port.c_str(), config_.op_drop.c_str(), &input);
 }
 
-HostStatus GodotHostResourceManager::measure_figure(uint32_t figure, double eye_height, double height) {
-    // The scene measured the skeleton it built (07.6): eye height and height go to the plugin as they are;
-    // their range is ase-pl-avatar's to check, the face landing of ase-camera reads the eye height from there.
+HostStatus GodotHostResourceManager::fill_figure(uint32_t figure) {
+    // brookTap under SS/PC (07.14): no value, the engine fills the vessel in the hand to its room.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    return host_->submit(config_.figure_fill_port.c_str(), config_.op_fill.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::drain_figure(uint32_t figure, double litres) {
+    // The release of the can (07.14): the litres travel as they are; their range is ase-pl-avatar's to check.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kFigureKeyLitres, litres);
+    return host_->submit(config_.figure_drain_port.c_str(), config_.op_drain.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::measure_figure(uint32_t figure, double eye_height, double height, double radius) {
+    // The scene measured the skeleton it built (07.6): eye height, height and body radius go to the plugin as they
+    // are; their range is ase-pl-avatar's to check, the face landing of ase-camera reads the eye height from there and
+    // ase-physics height and radius as the capsule the walking body collides with.
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
@@ -3230,6 +3422,7 @@ HostStatus GodotHostResourceManager::measure_figure(uint32_t figure, double eye_
     input.object_id = figure;
     (void)put_value(input, kFigureKeyEyeHeight, eye_height);
     (void)put_value(input, kFigureKeyHeight, height);
+    (void)put_value(input, kFigureKeyRadius, radius);
     return host_->submit(config_.figure_rig_port.c_str(), config_.op_measure.c_str(), &input);
 }
 
@@ -3245,6 +3438,21 @@ HostStatus GodotHostResourceManager::turn_figure(uint32_t figure, double yaw_del
     input.object_id = figure;
     (void)put_value(input, kFigureKeyYawDelta, yaw_delta);
     return host_->submit(config_.figure_turn_port.c_str(), config_.op_turn.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::bind_figure_area(uint32_t figure, uint32_t plate) {
+    // 07.7: the plate travels as f64, which holds every u32 id exactly; whether it names a living plate and the
+    // figure a figure of the star is ase-pl-avatar's to check (AvatarHostAreaSystem).
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kFigureKeyPlate, static_cast<double>(plate));
+    return host_->submit(config_.figure_area_port.c_str(), config_.op_bind.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::irrigate(uint32_t object_id, double amount_mm) {
@@ -3433,6 +3641,16 @@ const VivariumPatchView* GodotHostResourceManager::get_patch_at(uint32_t place) 
     return found == places_.end() ? nullptr : get_patch(found->second);
 }
 
+double GodotHostResourceManager::stage_due_h(const VivariumPatchView& patch, uint8_t position) const {
+    if (stage_named(position, GODOT_KEY_STGE_GROW)) {
+        return patch.grow_at_h;
+    }
+    if (stage_named(position, GODOT_KEY_STGE_MTUR)) {
+        return patch.mtur_at_h;
+    }
+    return GODOT_HOUR_NONE;
+}
+
 bool GodotHostResourceManager::has_patch(uint32_t object_id) const {
     return patches_.find(object_id) != patches_.end();
 }
@@ -3532,6 +3750,10 @@ const VivariumFigureCodeView& GodotHostResourceManager::get_figure_code() const 
     return figure_code_;
 }
 
+const std::vector<VivariumFigureBumpView>& GodotHostResourceManager::get_figure_bumps() const {
+    return figure_bumps_;
+}
+
 bool GodotHostResourceManager::figure_offered() const {
     // every figure port of the configuration, or none: a half offered plugin is no figure
     return host_ && !config_.figure_body_port.empty() && host_->has_port(config_.figure_body_port.c_str()) &&
@@ -3539,9 +3761,11 @@ bool GodotHostResourceManager::figure_offered() const {
            host_->has_port(config_.figure_stick_port.c_str()) && host_->has_port(config_.figure_orbit_port.c_str()) &&
            host_->has_port(config_.figure_switch_port.c_str()) && host_->has_port(config_.figure_release_port.c_str()) &&
            host_->has_port(config_.figure_seize_port.c_str()) && host_->has_port(config_.figure_hold_port.c_str()) &&
-           host_->has_port(config_.figure_drop_port.c_str()) && host_->has_port(config_.figure_gear_port.c_str()) &&
+           host_->has_port(config_.figure_drop_port.c_str()) && host_->has_port(config_.figure_fill_port.c_str()) &&
+           host_->has_port(config_.figure_drain_port.c_str()) && host_->has_port(config_.figure_gear_port.c_str()) &&
            host_->has_port(config_.figure_rig_port.c_str()) && host_->has_port(config_.figure_turn_port.c_str()) &&
-           host_->has_port(config_.figure_code_port.c_str());
+           host_->has_port(config_.figure_code_port.c_str()) && host_->has_port(config_.figure_area_port.c_str()) &&
+           host_->has_port(config_.figure_boundary_port.c_str());
 }
 
 // LOG LINES
@@ -3733,6 +3957,7 @@ void GodotHostResourceManager::clear_all() {
     figure_camera_ = VivariumFigureCameraView{};  // and the camera following one
     figure_gear_.clear();       // and what the figures carry
     figure_code_ = VivariumFigureCodeView{};  // and what their codes mean
+    figure_bumps_.clear();      // and the bumps against the chunk edge
     bundle_ = VivariumBundleInfo{};
     manifests_.clear();
 }

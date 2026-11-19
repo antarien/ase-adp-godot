@@ -53,7 +53,7 @@ bool VivariumView::can_water() const {
         return false;
     }
     const VivariumPatchView* patch = resources_.get_patch_at(selected_place_);
-    return patch != nullptr && patch->condition != GODOT_COND_DEAD;
+    return patch != nullptr && !patch->dead;
 }
 
 bool VivariumView::water(double amount_mm, bool emptied) {

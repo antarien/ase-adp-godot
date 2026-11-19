@@ -79,7 +79,7 @@ struct FocusRingFrame {
     double height = 0.0;            // the plant's height in the mockup's units
     uint32_t level = 0;             // the perception level (hud.perception.levels)
     uint8_t stage = 0;              // GODOT_STAGE_* of flora.patch.v1
-    bool dead = false;              // ase-plant marks the stand GODOT_COND_DEAD
+    bool dead = false;              // ase-plant marks the stand dead (cond_dead of flora.cond.v1)
     double soil_rel = 0.0;          // soil water over field capacity, 0..1
     double growth_share = 0.0;      // the growth toward the next stage, 0..1 (flora.patch.v1 or the bridge)
     double elapsed = 0.0;           // seconds since the focus opened

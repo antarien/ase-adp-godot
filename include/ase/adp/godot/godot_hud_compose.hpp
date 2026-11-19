@@ -67,7 +67,7 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -215,10 +215,10 @@ public:
     static constexpr const char* MARK_DRAGGING = "dragging";
 
     // The port marks of hud.tools.requires the patch record decides: its condition and its stage codes.
-    static constexpr const char* MARK_ALIVE = "alive";               // GODOT_COND_HEALTHY or GODOT_COND_WILTED
-    static constexpr const char* MARK_DEAD = "dead";                 // GODOT_COND_DEAD
-    static constexpr const char* MARK_STAGE_GROW = "stage_grow";     // GODOT_STAGE_GROW
-    static constexpr const char* MARK_STAGE_MATURE = "stage_mature"; // GODOT_STAGE_MATURE
+    static constexpr const char* MARK_ALIVE = "alive";               // the condition equals a code of flora.cond.v1 and ase-plant marks the stand not dead
+    static constexpr const char* MARK_DEAD = "dead";                 // ase-plant marks the stand dead (cond_dead of flora.cond.v1)
+    static constexpr const char* MARK_STAGE_GROW = "stage_grow";     // VivariumPatchView::grow, the grow code of flora.stage.v1
+    static constexpr const char* MARK_STAGE_MATURE = "stage_mature"; // VivariumPatchView::mature, the mature code of flora.stage.v1
 
     // The terrain operations of hud.verbs.<verb>.op.
     static constexpr const char* OP_LOWER = "lower";       // cavar: a disc of the ground lowered

@@ -64,14 +64,15 @@ struct PlantOrigin {
 
 /**
  * What the materials of a patch's ground and leaves are told, taken from its record: the soil water
- * over field capacity and the condition code. The look of wet soil and of a wilted leaf is the asset
- * shader's (GODOT_SHADER_SOIL_REL, GODOT_SHADER_CONDITION); a default stand is an unknown one.
+ * over field capacity and the marks of its condition. The look of wet soil and of a wilted leaf is the asset
+ * shader's (GODOT_SHADER_SOIL_REL, GODOT_SHADER_WILTED, GODOT_SHADER_DEAD); a default stand is an unknown one.
  */
 struct PlantStand {
     bool  soil_known = false;       // the record carried soil_rel as a number
     float soil_rel = 0.0f;          // soil water over field capacity, 0..1, as the record carried it
-    bool  condition_known = false;  // the record carried a condition code the view knows
-    float condition = 0.0f;         // GODOT_COND_* as the record carried it
+    bool  condition_known = false;  // the condition of the record equals one of the codes of flora.cond.v1 (VivariumPatchView::cond_known)
+    float wilted = 0.0f;            // 1 while ase-plant marks the stand wilted, else 0 (VivariumPatchView::wilted)
+    float dead = 0.0f;              // 1 while ase-plant marks the stand dead, else 0 (VivariumPatchView::dead)
 };
 
 /** Appends one three-component value - a place or a normal - to the array of a mesh surface. */
@@ -89,8 +90,9 @@ std::unordered_map<uint32_t, PlantOrigin> plant_origins(const std::vector<Vivari
 
 /**
  * The stand of every patch, taken from its record and keyed by its object id like plant_origins:
- * soil_rel as the number it carried, the condition as the GODOT_COND_* code it carried. A soil_rel the
- * record did not carry (NaN) and a condition outside the documented codes stay unknown - the material
+ * soil_rel as the number it carried, the condition as the wilted and the dead mark the patch view compared out
+ * of it. A soil_rel the record did not carry (NaN) and a condition none of the codes of flora.cond.v1 names
+ * stay unknown - the material
  * then draws its shader's own default, never a value made up here.
  */
 std::unordered_map<uint32_t, PlantStand> plant_stands(const std::vector<VivariumPatchView>& patches);

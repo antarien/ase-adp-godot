@@ -43,6 +43,7 @@ constexpr const char* GODOT_ORGAN_SHADER_FILE = "res://shaders/plant_organ.gdsha
 constexpr const char* GODOT_BARK_SHADER_FILE = "res://shaders/plant_bark.gdshader";          // the continuous bark tube of every axis, white and stem-base mixed, swinging by its includes
 constexpr const char* GODOT_BARK_SHOWN_ORDERS = "shown_orders";  // uniform of the bark shader: a ring of a higher order closes onto its axis (OrderBudget::shown)
 constexpr const char* GODOT_BARK_COARSE = "coarse";              // uniform of the bark shader: true on the twig tube, where a ring up to the shown orders closes onto its axis instead
+constexpr const char* GODOT_BARK_LEAST_PIXELS = "least_pixels";  // uniform of the bark shader: screen pixels a ring of the own tube is held at when it is narrower (view.least_ring_px)
 constexpr const char* GODOT_GROUND_SHADER_FILE = "res://shaders/plant_ground.gdshader";      // the ground of one soil
 
 // The swing of a branch (usecase:101335 animate the branch sway): the two uniforms of sway_uniforms.gdshaderinc,
@@ -53,14 +54,13 @@ constexpr int32_t GODOT_ORGAN_SWAY_SURFACES = 1;              // surfaces of a b
 
 // The instance uniforms the scene hands on every frame (mark_plant_stands, godot_plant_scene.cpp).
 constexpr const char* GODOT_SHADER_SOIL_REL = "soil_rel";     // instance uniform of the ground material: soil water over field capacity of the focused patch, 0..1
-constexpr const char* GODOT_SHADER_CONDITION = "condition";   // instance uniform of the leaf material: GODOT_COND_* of the plant's patch
+constexpr const char* GODOT_SHADER_WILTED = "wilted";         // instance uniform of the leaf material: 1 while ase-plant marks the plant's patch wilted (VivariumPatchView::wilted)
+constexpr const char* GODOT_SHADER_DEAD = "dead";             // instance uniform of the leaf material: 1 while ase-plant marks the plant's patch dead (VivariumPatchView::dead)
 
 // plant_stand_in.gdshader (operator order of 2026-10-23).
 constexpr const char* GODOT_STAND_IN_COLOR = "stand_in_color";            // stand-in shader uniform: the colour of the name
 constexpr const char* GODOT_STAND_IN_WILTED = "wilted_color";             // stand-in shader uniform: colour of a wilted stand
 constexpr const char* GODOT_STAND_IN_DEAD = "dead_color";                 // stand-in shader uniform: colour of a dead stand
-constexpr const char* GODOT_STAND_IN_WILTED_CODE = "wilted_code";         // stand-in shader uniform: GODOT_COND_WILTED
-constexpr const char* GODOT_STAND_IN_DEAD_CODE = "dead_code";             // stand-in shader uniform: GODOT_COND_DEAD
 constexpr const char* GODOT_STAND_IN_WET = "wet_shade";                   // stand-in shader uniform: GODOT_STAND_IN_WET_SHADE
 constexpr const char* GODOT_STAND_IN_ROUGH = "stand_in_roughness";        // stand-in shader uniform: GODOT_STAND_IN_ROUGHNESS
 constexpr float GODOT_STAND_IN_WET_SHADE = 0.55f;                         // share of its colour the ground keeps at field capacity: wet earth is darker

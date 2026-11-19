@@ -15,7 +15,7 @@
  *              name in hud.modes, the open sign by its id, the perception level of hud.perception.levels, the
  *              debug view, its drawer and its tab (GODOT_HUD_DEBUG_TAB_*), the stage of the patch in focus
  *              (GODOT_STAGE_* of flora.patch.v1, GODOT_STAGE_NONE without a patch) and whether ase-plant marks
- *              that stand GODOT_COND_DEAD.
+ *              that stand dead (cond_dead of flora.cond.v1).
  *
  *              THE CLOCK. HudReplay holds the key of the last call and the clock the animations play from.
  *              take() compares a new key with the held one: on any difference it takes the new key and the
@@ -57,7 +57,7 @@ struct HudReplayKey {
     bool drawer = false;                             // S.drawer: its drawer is open
     uint32_t tab = GODOT_HUD_DEBUG_TAB_TEMPO;        // S.dtab: GODOT_HUD_DEBUG_TAB_* the drawer shows
     uint8_t stage = GODOT_STAGE_NONE;                // S.stage: GODOT_STAGE_* of the patch in focus
-    bool dead = false;                               // S.dead: ase-plant marks the stand GODOT_COND_DEAD
+    bool dead = false;                               // S.dead: ase-plant marks the stand dead (cond_dead of flora.cond.v1)
 };
 
 /** The clock the HUD's fades and drawings play from, and the key it was taken at. */

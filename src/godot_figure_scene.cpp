@@ -8,7 +8,8 @@
  *              from the body port. The bound figure file is parsed and packed once by a task of the
  *              WorkerThreadPool (godot_figure_load.hpp); no figure node is built before the view took the
  *              pack. Every new figure is an instance of the pack: its clips
- *              idle, walk, run and turn loop and are mixed by one AnimationTree and the height of its eyes is
+ *              idle, walk, run and turn loop and are mixed by one AnimationTree, the bend clip plays once over
+ *              them when the vessel in its hand gains water at the brook, and the height of its eyes is
  *              measured from the rest pose of its skeleton (godot_figure_rig.hpp), and its meshes are marked
  *              with the detail level their name carries (villager_body_lod<k>_<part>); a BoneAttachment3D
  *              under its Skeleton3D follows the socket bone socket_hand_r, and the tool the gear port hangs
@@ -27,8 +28,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-13
- * @modified    2026-11-15
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-18
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -90,6 +91,24 @@ constexpr double kFigureAimMinSquared = 1.0e-6;             // eye and aim close
 constexpr float kFigureHandSide = 0.36f;                    // stand-in body: its hand socket beside the capsule on its right (+x), metres
 constexpr float kFigureHandLift = 0.95f;                    // stand-in body: height of its hand socket above the feet, metres
 constexpr float kFigureModelTurn = ase::math::PI;           // turn of the figure file around y: glTF faces +z, course 0 of ase-player looks along -z
+constexpr const char* kFigureMetaWater = "figure_vessel_water_l";  // litres of the carried vessel the gear port showed last, so a rise reads as one draw
+constexpr double kFigureWaterRise = 1.0e-3;                 // litres the vessel must gain between two snapshots to count as a draw, above float noise of the port
+
+/**
+ * The litres of the vessel the figure `bearer` carries as the gear port shows them; false while it carries
+ * none. ase-equipment fills the vessel in one act of a draw (EquipmentReqWatrSystem), so a rise of these
+ * litres is the owner's own statement that the figure drew water at the brook - the view bends it then and
+ * computes nothing of the draw.
+ */
+bool carried_water(uint32_t bearer, const std::vector<VivariumFigureGearView>& gear, double& litres) {
+    for (const VivariumFigureGearView& piece : gear) {
+        if (piece.bearer == bearer && piece.vessel) {
+            litres = piece.water_l;
+            return true;
+        }
+    }
+    return false;
+}
 
 /** The detail level a node name carries as _lod<k>_, -1 when it carries none. */
 int32_t level_of_name(const ::godot::String& name) {
@@ -225,6 +244,11 @@ void add_stand_in(::godot::Node3D* body, const ::godot::Ref<::godot::Material>& 
         if (figure_eye_level(model, eye)) {
             body->set_meta(kFigureMetaEye, eye - bottom);
         }
+        // the capsule ase-physics collides the walking body as: one around the whole body, as wide as the shoulders
+        double radius = 0.0;
+        if (figure_body_radius(model, radius)) {
+            body->set_meta(kFigureMetaRadius, radius);
+        }
     }
     // the clip mix spans the gait values of the code port: stand, walk and run as ase-pl-avatar writes them
     if (codes.known) {
@@ -356,7 +380,19 @@ void fill_figures(::godot::Node3D* scene, const std::vector<VivariumFigureView>&
                 walk_span > 0.0 ? ase::math::clamp((figure.gait - codes.gait_stand) / walk_span, 0.0, 1.0) : 0.0;
             const double turning =
                 ase::math::min(1.0, ase::math::abs(gap) / look.motion.turn_full) * (1.0 - moving);
-            drive_figure_motion(body, figure.gait, codes.gait_stand, codes.gait_run, turning);
+            // the bend at the brook (07.14): the vessel in its hand gained water since the last snapshot, under
+            // SS/PC by the player's tap and under AI/PC by the fill of the BDI alike; the first sight of a
+            // vessel only records its litres
+            double litres = 0.0;
+            bool bend = false;
+            if (carried_water(figure.object_id, gear, litres)) {
+                bend = body->has_meta(kFigureMetaWater) &&
+                       litres > static_cast<double>(body->get_meta(kFigureMetaWater)) + kFigureWaterRise;
+                body->set_meta(kFigureMetaWater, litres);
+            } else if (body->has_meta(kFigureMetaWater)) {
+                body->remove_meta(kFigureMetaWater);
+            }
+            drive_figure_motion(body, figure.gait, codes.gait_stand, codes.gait_run, turning, bend);
         }
 
         // the detail level by the figure's share of the frame height
@@ -365,7 +401,9 @@ void fill_figures(::godot::Node3D* scene, const std::vector<VivariumFigureView>&
             eye == nullptr ? 0.0
                            : static_cast<double>(eye->get_global_position().distance_to(
                                  place + ::godot::Vector3(0.0f, static_cast<float>(look.motion.look_lift), 0.0f)));
-        show_level(body, level_for(eye, height, distance, figure));
+        const int32_t level = level_for(eye, height, distance, figure);
+        body->set_meta(kFigureMetaLevelDrawn, level);  // the level line of the view reads it per change (07-G)
+        show_level(body, level);
 
         // what the right hand carries by the gear port, below the socket of the rig or of the stand-in
         const ::godot::TypedArray<::godot::Node> sockets = body->find_children(kFigureSocket, "Node3D", true, false);

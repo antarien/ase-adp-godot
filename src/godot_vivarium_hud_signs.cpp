@@ -24,7 +24,7 @@
  * @register    N0461 (the state fields of each sign case), N0449 (the weather signatures), N0454, N0462, N0460,
  *              N0457 (the marks of the tools: soil_not_full, branch_uncut, season_saltatrix, tap_open), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -76,9 +76,11 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     game.signs.clear();
     signs.values.clear();
 
-    const bool dead = patch != nullptr && patch->condition == GODOT_COND_DEAD;
-    const uint32_t stage = patch != nullptr && patch->stage != GODOT_CODE_UNKNOWN ? patch->stage : GODOT_STAGE_SEED;
-    const bool standing = !dead && stage >= GODOT_STAGE_SPROUT;
+    const bool dead = patch != nullptr && patch->dead;
+    // The stage marks of the patch record against ase-plant's stage codes (usecase:101635, D2455): a stand stands
+    // from the sprout on; without a patch in focus, or with a stage none of the codes names, nothing stands.
+    const bool mature = patch != nullptr && patch->mature;
+    const bool standing = !dead && patch != nullptr && (patch->sprout || patch->grow || patch->mature);
     // The soil of the patch record; without a record in focus the mockup's S.soil (hud_bridge_sign_soil_*), its
     // port field named.
     double soil_mm = hud_sign_rules_.soil_mm;
@@ -120,7 +122,7 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     if (standing && glacix) {
         game.signs.emplace_back("rest");
     }
-    if (!dead && saltatrix && stage == GODOT_STAGE_MATURE) {
+    if (!dead && saltatrix && mature) {
         game.signs.emplace_back("catkin");
     }
     if (hud_bridge_sap_running_) {
@@ -128,7 +130,7 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
         if (hud_bridge_sap_l_ >= hud_bridge_sap_cap_l_) {
             game.marks.emplace_back(GODOT_HUD_MARK_VESSEL_FULL);
         }
-    } else if (!dead && stage == GODOT_STAGE_MATURE && hud_sign_rules_.sap_rise) {
+    } else if (!dead && mature && hud_sign_rules_.sap_rise) {
         game.signs.emplace_back("sap_rise");
     }
     if (weather == GODOT_HUD_WEATHER_RAIN || weather == GODOT_HUD_WEATHER_DRIZZLE) {
@@ -157,13 +159,8 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     if (soil_rel < hud_bridge_soil_full_) {
         game.marks.emplace_back("soil_not_full");
     }
-    // Prune is TOOLS.prune.ok's TREE.cand.some(c=>!S.cuts.has(c)): the crown's own candidates still uncut, as
-    // VivariumHandBridge::cut counts them on the organ port (hand.prune_left, the frame before), never the bridge
-    // value alone - with it the fan offered PODÃO over a crown of three shoots on the stem that marks none
-    // (run 20261114-c01-motion5: on_stem=3 chosen=0 left=0, then hud mode=prune).
-    if (hud_bridge_branch_uncut_ && hand.prune_left > 0u) {
-        game.marks.emplace_back("branch_uncut");
-    }
+    // Prune's mark branch_uncut is laid in fill_hud_world, right after VivariumHandBridge::cut counted the crown:
+    // fill_hud lays hud_now_ anew before this bridge, so hand.prune_left reads 0 here in every frame.
     if (saltatrix) {
         game.marks.emplace_back("season_saltatrix");
     }

@@ -30,7 +30,7 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @register    carrier N0448
  * @created     2026-11-12
- * @modified    2026-11-12
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -54,7 +54,10 @@ namespace ase::adp::godot {
 struct TreeShadeFrame {
     bool placed = false;          // the birch stands on the screen
     ::godot::Vector2 trunk;       // the stem place on the ground as it lies now, mockup units (TX, TY())
-    uint8_t stage = UINT8_MAX;    // the stage of the stand (GODOT_STAGE_*), UINT8_MAX without a patch record
+    uint8_t stage = UINT8_MAX;    // the position of the stand's stage in the stage record (VivariumPatchView::stage), UINT8_MAX without a patch record
+    bool seed = false;            // the stand is a seed in the soil (VivariumPatchView::seed, usecase:101635)
+    bool sprout = false;          // the stand is a seedling (VivariumPatchView::sprout)
+    bool grow = false;            // the stand is growing (VivariumPatchView::grow); a placed stand with a stage and none of the three is mature
     bool seeded = false;          // a seed lies in the open planting hole (SowHoleFrame::seeded, Q03)
     bool covered = false;         // the planting hole is closed over its seed (SowHoleFrame::covered, Q04)
 };

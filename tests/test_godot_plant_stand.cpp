@@ -40,16 +40,17 @@ constexpr uint32_t kOtherPatch = 8u;  // object id of a patch before the first r
 }  // namespace
 
 TEST_CASE("03.2: soil water and condition of a patch reach its materials as the record carried them") {
-    // a measured stand: soil water over field capacity and a wilted condition
+    // a measured stand: soil water over field capacity and the wilted mark read_snapshot set against flora.cond.v1
     VivariumPatchView patch;
     patch.object_id = kPatch;
     patch.soil_rel = 0.62;
-    patch.condition = GODOT_COND_WILTED;
-    // a stand before the first runs of the modules: no soil_rel (NaN), a condition outside the codes
+    patch.cond_known = true;
+    patch.wilted = true;
+    // a stand before the first runs of the modules: no soil_rel (NaN), a condition equal to none of the codes
     VivariumPatchView unmeasured = patch;
     unmeasured.object_id = kOtherPatch;
     unmeasured.soil_rel = std::nan("");
-    unmeasured.condition = GODOT_CODE_UNKNOWN;
+    unmeasured.cond_known = false;
     const auto stands = plant_stands({patch, unmeasured});
     REQUIRE(stands.size() == 2u);
     // as the record carried them, narrowed to the float of a shader parameter and nothing else
@@ -57,17 +58,22 @@ TEST_CASE("03.2: soil water and condition of a patch reach its materials as the 
     CHECK(wilted.soil_known);
     CHECK(wilted.soil_rel == static_cast<float>(0.62));
     CHECK(wilted.condition_known);
-    CHECK(wilted.condition == static_cast<float>(GODOT_COND_WILTED));
-    // what the record did not carry stays unknown: the shader's default draws, never a value made up
+    CHECK(wilted.wilted == 1.0f);
+    CHECK(wilted.dead == 0.0f);
+    // what the record did not carry stays unknown: the shader's default draws, never a mark made up
     const PlantStand& open = stands.at(kOtherPatch);
     CHECK_FALSE(open.soil_known);
     CHECK_FALSE(open.condition_known);
-    // every documented code passes, the first one past them does not
-    for (uint8_t code = 0u; code <= GODOT_COND_COUNT; ++code) {
-        VivariumPatchView coded = patch;
-        coded.condition = code;
-        CHECK(plant_stands({coded}).at(kPatch).condition_known == (code < GODOT_COND_COUNT));
-    }
+    CHECK(open.wilted == 0.0f);
+    CHECK(open.dead == 0.0f);
+    // a dead stand carries the dead mark alone; a mark on a condition equal to no code never reaches the shader
+    VivariumPatchView dead = patch;
+    dead.wilted = false;
+    dead.dead = true;
+    CHECK(plant_stands({dead}).at(kPatch).dead == 1.0f);
+    CHECK(plant_stands({dead}).at(kPatch).wilted == 0.0f);
+    dead.cond_known = false;
+    CHECK(plant_stands({dead}).at(kPatch).dead == 0.0f);
     // a default stand is an unknown one - the ground of a place without a record
     const PlantStand none;
     CHECK_FALSE(none.soil_known);

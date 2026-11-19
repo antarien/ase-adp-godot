@@ -23,7 +23,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-11-13
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -94,19 +94,19 @@ double share(double value) {
 
 /** The cover colour of a patch: its condition first (a dead or wilted stand), then its stage. */
 ::godot::Color cover_color(const VivariumPatchView& patch) {
-    if (patch.condition == GODOT_COND_DEAD) {
+    if (patch.dead) {
         return ::godot::Color::hex(GODOT_COLOR_DEAD);
     }
-    if (patch.condition == GODOT_COND_WILTED) {
+    if (patch.wilted) {
         return ::godot::Color::hex(GODOT_COLOR_WILTED);
     }
-    if (patch.condition == GODOT_CODE_UNKNOWN || patch.stage == GODOT_CODE_UNKNOWN) {
+    if (!patch.cond_known || patch.stage == GODOT_CODE_UNKNOWN) {
         return ::godot::Color::hex(GODOT_COLOR_UNKNOWN);
     }
-    if (patch.stage == GODOT_STAGE_MATURE) {
+    if (patch.mature) {
         return ::godot::Color::hex(GODOT_COLOR_MATURE);
     }
-    if (patch.stage == GODOT_STAGE_GROW) {
+    if (patch.grow) {
         return ::godot::Color::hex(GODOT_COLOR_GROW);
     }
     return ::godot::Color::hex(GODOT_COLOR_SPROUT);
@@ -260,17 +260,18 @@ void VivariumView::draw() {
     use_canvas();
 }
 
-::godot::String VivariumView::stage_text(uint8_t stage) const {
-    if (stage == GODOT_STAGE_MATURE) {
+::godot::String VivariumView::stage_text(const VivariumPatchView& patch) const {
+    // The word of the stage marks the snapshot set against ase-plant's stage codes (usecase:101635, D2455).
+    if (patch.mature) {
         return texts_.stage_mature;
     }
-    if (stage == GODOT_STAGE_GROW) {
+    if (patch.grow) {
         return texts_.stage_grow;
     }
-    if (stage == GODOT_STAGE_SPROUT) {
+    if (patch.sprout) {
         return texts_.stage_sprout;
     }
-    if (stage == GODOT_STAGE_SEED) {
+    if (patch.seed) {
         return texts_.stage_seed;
     }
     return texts_.unknown;
@@ -280,12 +281,12 @@ void VivariumView::draw() {
     // "área 2 · Broto" - and the condition, when the stand carries one. A String first: in a const
     // member texts_ is const, and godot-cpp's String + const char* is no const member.
     ::godot::String text = ::godot::String(texts_.area) + " " + ::godot::String::num_uint64(patch.place + 1u) +
-                           texts_.separator + stage_text(patch.stage);
-    if (patch.condition == GODOT_COND_DEAD) {
+                           texts_.separator + stage_text(patch);
+    if (patch.dead) {
         text += texts_.separator + texts_.condition_dead;
-    } else if (patch.condition == GODOT_COND_WILTED) {
+    } else if (patch.wilted) {
         text += texts_.separator + texts_.condition_wilted;
-    } else if (patch.condition == GODOT_CODE_UNKNOWN) {
+    } else if (!patch.cond_known) {
         text += texts_.separator + texts_.unknown;
     }
     return text;
@@ -319,7 +320,7 @@ void VivariumView::draw_patch(const ::godot::Rect2& rect, uint32_t place) {
             const ::godot::Vector2 cover_size = inner.size * ase::math::sqrt(static_cast<float>(cover));
             const ::godot::Rect2 cover_rect(inner.get_center() - cover_size * GODOT_HALF, cover_size);
             node_->draw_rect(cover_rect, cover_color(*patch));
-            if (patch->condition == GODOT_COND_DEAD) {
+            if (patch->dead) {
                 const ::godot::Vector2 end = cover_rect.get_end();
                 node_->draw_line(cover_rect.position, end, ::godot::Color::hex(GODOT_COLOR_SOIL),
                                  GODOT_BORDER_WIDTH);
@@ -328,7 +329,7 @@ void VivariumView::draw_patch(const ::godot::Rect2& rect, uint32_t place) {
                                  ::godot::Color::hex(GODOT_COLOR_SOIL), GODOT_BORDER_WIDTH);
             }
         }
-        if (flat && patch->stage == GODOT_STAGE_SEED) {
+        if (flat && patch->seed) {
             // Sown soil shows its seeds while nothing covers it yet.
             const float step_x = inner.size.x / static_cast<float>(GODOT_SEED_DOTS + 1);
             const float step_y = inner.size.y / static_cast<float>(GODOT_SEED_DOTS + 1);

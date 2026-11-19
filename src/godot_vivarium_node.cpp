@@ -2,7 +2,7 @@
  * ASE GODOT ADAPTER - VIVARIUM VIEW IMPLEMENTATION
  *
  * @file        godot_vivarium_node.cpp
- * @brief       VivariumView - lifecycle, host boot, the frame and the one log stream of the Vivarium frontend
+ * @brief       VivariumView - lifecycle, host boot and the frame of the Vivarium frontend
  * @design      DSGN_066
  * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.3/01.4. The view reads its configuration as data
  *              (res://config/vivarium_start.json), boots one embedded host through
@@ -10,26 +10,23 @@
  *              set of units in the order of their manifests, with the bundle's data root - hands
  *              it the real time of every frame and draws what the last snapshots reported.
  *
- *              ONE CLASS, ITS BEHAVIOUR BY RESPONSIBILITY: this file carries the lifecycle, the boot,
- *              the frame and the log; the configuration stands in godot_vivarium_config.cpp,
- *              godot_vivarium_host_config.cpp, godot_vivarium_layout.cpp and godot_vivarium_assets.cpp,
- *              the input in godot_vivarium_input.cpp, the canvas in godot_vivarium_draw.cpp, the 3D scene
- *              in godot_vivarium_scene.cpp, the explicit modes in godot_vivarium_measure.cpp, the pour and
- *              its arrival in godot_vivarium_water.cpp, the debug buttons and their pace in
- *              godot_vivarium_debug.cpp, the jumps in godot_vivarium_jump.cpp and godot_vivarium_date.cpp, the
- *              background, the foreground and the return to the garden in godot_vivarium_return.cpp.
+ *              ONE CLASS, ITS BEHAVIOUR BY RESPONSIBILITY: this file carries the lifecycle, the boot
+ *              and the frame; the log stream (the patch baseline, the events of stage and condition,
+ *              the measure, the drain) stands in godot_vivarium_log.cpp, the configuration in
+ *              godot_vivarium_config.cpp, godot_vivarium_host_config.cpp, godot_vivarium_layout.cpp and
+ *              godot_vivarium_assets.cpp, the input in godot_vivarium_input.cpp, the canvas in
+ *              godot_vivarium_draw.cpp, the 3D scene in godot_vivarium_scene.cpp, the explicit modes in
+ *              godot_vivarium_measure.cpp, the pour and its arrival in godot_vivarium_water.cpp, the debug
+ *              buttons and their pace in godot_vivarium_debug.cpp, the jumps in godot_vivarium_jump.cpp and
+ *              godot_vivarium_date.cpp, the background, the foreground and the return to the garden in
+ *              godot_vivarium_return.cpp.
  *
  *              EVERY ENGINE CALL GOES THROUGH node_: drawing, redraw requests, processing, input
  *              mapping and the viewport are those of the engine object this view is the instance
  *              data of (see godot_vivarium_node.hpp, COMPOSED, NOT DERIVED).
  *
- *              THE LOG IS ONE STREAM. The host's logger (ase-log inside the runtime library)
- *              writes the file under user://logs and hands every line to the resource manager;
- *              the view prints them once per frame (on Android the manager writes them to logcat
- *              itself). Its own lines - the boot line, every action with its target and result,
- *              every change of stage or condition, every return from the background - go through
- *              the SAME logger via KernelEmbeddedHost::note, never around it. Nothing is logged per
- *              render frame.
+ *              THE LOG IS ONE STREAM (godot_vivarium_log.cpp). This file writes the boot line, every
+ *              sowing and every restart through the same note, never around it.
  *
  *              THE ASSET SET IS BOUND WITH THE CONFIGURATION (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS
  *              03.2): every boot writes `asset missing <name>` once per missing name, after the boot
@@ -41,7 +38,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-14
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -53,6 +50,7 @@
 #include <ase/adp/godot/godot_asset_showcase.hpp>
 #include <ase/adp/godot/godot_asset_showcase_scene.hpp>
 #include <ase/adp/godot/godot_new_seed.hpp>
+#include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
@@ -64,12 +62,12 @@
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/viewport.hpp>
-#include <godot_cpp/variant/char_string.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
-#include <cstddef>
+#include <cmath>
 #include <cstdint>
 #include <string>
 
@@ -113,13 +111,23 @@ void VivariumView::ready() {
         measurement_.active = launched_with(modes_.measure_argument);
         measurement_.warmup_left = modes_.measure_warmup_seconds;
         measurement_.record_left = modes_.measure_record_seconds;
-        boot_host(true);
+        // THE START SCREEN HOLDS THE WORLD until the keeper chose how it starts (start_input, operator order
+        // 2026-11-19); a launch that takes no taps boots at once on the switches at rest.
+        if (launched_with(modes_.selftest_argument) || measurement_.active || launched_with(modes_.assets_argument)) {
+            begin_host(start_choice_.chosen());
+        }
         // PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 point 2: the care view is a 3D scene; it stands once and
         // follow_scene fills it from the ports frame by frame.
         scene_ = build_plant_scene(node_, scene_camera_);
         // 03.2: the materials and organ template files of the stage are read once, here, through the
         // loader the asset showcase shares; a missing one is drawn in the error material
         scene_look_ = bind_plant_look(assets_, asset_root_, asset_roles_);
+        // B0482: the least screen width of a bark ring (view.least_ring_px) on the shared bark material, which
+        // fill_tube duplicates per plant, so every tube holds a ring narrower than it at this width
+        const ::godot::Ref<::godot::ShaderMaterial> bark = scene_look_.bark;
+        if (bark.is_valid()) {
+            bark->set_shader_parameter(GODOT_BARK_LEAST_PIXELS, least_ring_px_);
+        }
         // 07.9: the figure file of the stage (role figure) or the error material of its stand-in body. The file
         // (169.6 MB) is parsed and packed by a task of the WorkerThreadPool, so this ready() returns and the
         // start screen draws while it loads; follow_figure takes the pack and warms it behind the screen
@@ -191,6 +199,8 @@ void VivariumView::boot_host(bool new_seeds) {
     const uint32_t sowing = run_sowing_;
     host_boots_ += 1u;
     VivariumStartConfig sown = start_;
+    // offline from the initial state: the kernel reads no file of the last state (KernelEmbeddedHost::set_start_fresh)
+    sown.start_fresh = start_mode_ == GODOT_START_MODE_OFFLINE_INITIAL;
     for (VivariumPatchSpec& patch : sown.patches) {
         patch.seed = sown_seed(patch.seed, sowing);
     }
@@ -219,8 +229,9 @@ void VivariumView::boot_host(bool new_seeds) {
 
     // Stage and condition of every place are unknown until each place's record carries them;
     // announce_patches takes them as the baseline, and later changes are the events the log carries.
+    // The condition is the raw code of ase-plant, NaN while no record carries one.
     stages_.assign(layout_.place_rects.size(), GODOT_CODE_UNKNOWN);
-    conditions_.assign(layout_.place_rects.size(), GODOT_CODE_UNKNOWN);
+    conditions_.assign(layout_.place_rects.size(), std::nan(""));
     patches_announced_ = false;
     // Every boot, a Reiniciar too, initialises the world anew under the start screen.
     initialised_ = false;
@@ -239,29 +250,6 @@ void VivariumView::boot_host(bool new_seeds) {
     drain_log();
 }
 
-void VivariumView::announce_patches() {
-    // L1: one line per patch, once every place has its record with a stage the modules published.
-    // The boot runs no tick, and ase-pl-flora writes a value only while the input row behind it
-    // stands (PLAN 01.3 point 1), so the lines come with the first frame that has them all - never
-    // a line about a patch the port does not carry yet.
-    if (patches_announced_) {
-        return;
-    }
-    for (std::size_t place = 0; place < layout_.place_rects.size(); ++place) {
-        const VivariumPatchView* patch = resources_.get_patch_at(static_cast<uint32_t>(place));
-        if (patch == nullptr || patch->stage == GODOT_CODE_UNKNOWN || patch->condition == GODOT_CODE_UNKNOWN) {
-            return;
-        }
-    }
-    patches_announced_ = true;
-    for (std::size_t place = 0; place < layout_.place_rects.size(); ++place) {
-        const VivariumPatchView* patch = resources_.get_patch_at(static_cast<uint32_t>(place));
-        stages_[place] = patch->stage;
-        conditions_[place] = patch->condition;
-        note("patch " + measure(static_cast<uint32_t>(place)));
-    }
-}
-
 void VivariumView::restart() {
     // Reiniciar: the same teardown as exit_tree, then a new host with the whole set. Selection,
     // pending pour and drawing values of the old run go with it.
@@ -274,8 +262,10 @@ void VivariumView::restart() {
     if (!configured_) {
         configured_ = load_config();
     }
-    if (configured_) {
-        boot_host(true);
+    if (configured_ && start_mode_ != GODOT_START_MODE_NONE) {
+        boot_host(true);  // the new host starts the way the keeper chose for the first one
+    } else if (configured_) {
+        failure_text_ = ::godot::String();  // no choice made yet: the start screen shows it instead of the panel
     }
     node_->queue_redraw();
 }
@@ -405,84 +395,6 @@ void VivariumView::process(double delta) {
     }
     // A refused frame with a running host only drops this frame; the host has logged why.
     node_->queue_redraw();
-}
-
-void VivariumView::follow_stages() {
-    // A change of stage or condition is an EVENT and gets one line - the acceptance reads growth,
-    // ripening and drying from these lines (L4), never from a line per frame. Before the patches
-    // were announced there is no baseline, and the first published values are no change.
-    if (!patches_announced_) {
-        return;
-    }
-    for (std::size_t place = 0; place < stages_.size() && place < conditions_.size(); ++place) {
-        const VivariumPatchView* patch = resources_.get_patch_at(static_cast<uint32_t>(place));
-        if (patch == nullptr) {
-            continue;
-        }
-        if (patch->stage != stages_[place]) {
-            note("stage " + measure(static_cast<uint32_t>(place)) + " from=" +
-                 ::godot::String::num_uint64(stages_[place]));
-            stages_[place] = patch->stage;
-        }
-        if (patch->condition != conditions_[place]) {
-            note("condition " + measure(static_cast<uint32_t>(place)) + " from=" +
-                 ::godot::String::num_uint64(conditions_[place]));
-            conditions_[place] = patch->condition;
-        }
-    }
-}
-
-// THE LOG
-
-::godot::String VivariumView::measure(uint32_t place) const {
-    const VivariumClockView& clock = resources_.get_clock();
-    ::godot::String line = "t=" + ::godot::String::num(resources_.simulation_seconds(), GODOT_LOG_DECIMALS) +
-                           " ticks=" + ::godot::String::num_uint64(resources_.tick_count());
-    // Steps are the scheduler's count of the modules' step schedule, never t divided by its
-    // interval. A host that cannot answer (none yet, stopped) gives no steps= at all instead of a
-    // false 0; the host logs its own refusal.
-    uint64_t steps = 0u;
-    if (resources_.schedule_runs(GODOT_LOG_STEP_SCHEDULE, &steps) == ase::kernel::HostStatusOk) {
-        line += " steps=" + ::godot::String::num_uint64(steps);
-    }
-    if (clock.known) {
-        line += " game_s=" + ::godot::String::num(clock.elapsed_s, GODOT_LOG_DECIMALS) +
-                " day=" + ::godot::String::num(clock.day, GODOT_LOG_DECIMALS) +
-                " hour=" + ::godot::String::num(clock.hour, GODOT_LOG_DECIMALS);
-        if (clock.shoot_known) {
-            line += " shoot_s=" + ::godot::String::num(clock.shoot_s, GODOT_LOG_DECIMALS);
-        }
-    }
-    line += " patches=" + ::godot::String::num_uint64(resources_.patch_count());
-    const VivariumPatchView* patch = place == GODOT_NO_PLACE ? nullptr : resources_.get_patch_at(place);
-    if (patch == nullptr) {
-        return line;
-    }
-    return "place=" + ::godot::String::num_uint64(place) + " object=" + ::godot::String::num_uint64(patch->object_id) +
-           " " + line + " coverage=" + ::godot::String::num(patch->coverage, GODOT_LOG_DECIMALS) +
-           " stage=" + ::godot::String::num_uint64(patch->stage) +
-           " condition=" + ::godot::String::num_uint64(patch->condition) +
-           " soil_mm=" + ::godot::String::num(patch->soil_mm, GODOT_LOG_DECIMALS) +
-           " soil_rel=" + ::godot::String::num(patch->soil_rel, GODOT_LOG_DECIMALS) +
-           " capacity_mm=" + ::godot::String::num(patch->capacity_mm, GODOT_LOG_DECIMALS);
-}
-
-void VivariumView::drain_log() {
-    log_lines_.clear();
-    if (resources_.remove_log_lines(log_lines_) == 0u) {
-        return;
-    }
-    for (const std::string& line : log_lines_) {
-        ::godot::UtilityFunctions::print(text_of(line));
-    }
-}
-
-void VivariumView::note(const ::godot::String& line) {
-    const ::godot::CharString text = line.utf8();
-    if (resources_.note(text.get_data()) != ase::kernel::HostStatusOk) {
-        // No host (before the first boot, after a failed create): Godot's own output carries it.
-        ::godot::UtilityFunctions::print(::godot::String("[") + GODOT_LOG_SOURCE + "] " + line);
-    }
 }
 
 }  // namespace ase::adp::godot

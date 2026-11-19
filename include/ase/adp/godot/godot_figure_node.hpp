@@ -39,8 +39,12 @@ inline constexpr const char* kFigureHolder = "FigureBodies";       // the node t
 inline constexpr const char* kFigurePrefix = "Figure";             // name of a figure's node: this and the object id of the figure
 inline constexpr const char* kFigureMetaHeight = "figure_height";  // meta of a figure's node: height of its level 0, metres
 inline constexpr const char* kFigureMetaEye = "figure_eye";        // meta of a figure's node: eye height above the soles from the rest pose of its rig, metres
+inline constexpr const char* kFigureMetaRadius = "figure_radius";  // meta of a figure's node: radius of the capsule around its whole body from the shoulder joints of its rig, metres
 inline constexpr const char* kFigureMetaRigTaken = "figure_rig_taken";  // meta of a figure's node: its rig was handed to the view for the rig port
 inline constexpr const char* kFigureMetaPlaceNoted = "figure_place_noted";  // meta of a figure's node: the place last handed to the view's place line
+inline constexpr const char* kFigureMetaGaitNoted = "figure_gait_noted";    // meta of a figure's node: the gait value last handed to the view's gait line
+inline constexpr const char* kFigureMetaLevelDrawn = "figure_lod_drawn";    // meta of a figure's node: the detail level its meshes are drawn on this frame
+inline constexpr const char* kFigureMetaLevelNoted = "figure_lod_noted";    // meta of a figure's node: the detail level last handed to the view's level line
 inline constexpr const char* kFigureMetaLevel = "figure_lod";      // meta of a mesh of the figure file: its detail level
 
 /** The node of `parent` with that name, cast to its class; nullptr when it has none. */

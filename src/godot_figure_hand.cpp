@@ -131,6 +131,33 @@ void merge_bounds(::godot::Node* node, const ::godot::Transform3D& placed, ::god
 }
 
 /**
+ * Whether the ray from `origin` along `normal` (world space) meets a mesh below `node`, each tested against its own
+ * box in its own space (`placed` carries the world transforms down). One box over all parts in world axes also
+ * holds the empty space between and around them: a ground tap beside the rack met that box and opened the tool
+ * place instead of digging (run 20261119-p0692-dig, the stab at 216,780 beside the toolrack place 96,799 63x59).
+ */
+bool ray_meets_part(::godot::Node* node, const ::godot::Transform3D& placed, const ::godot::Vector3& origin,
+                    const ::godot::Vector3& normal) {
+    for (int64_t i = 0; i < node->get_child_count(); ++i) {
+        auto* child = ::godot::Object::cast_to<::godot::Node3D>(node->get_child(i));
+        if (child == nullptr) {
+            continue;
+        }
+        const ::godot::Transform3D here = placed * child->get_transform();
+        if (auto* mesh = ::godot::Object::cast_to<::godot::MeshInstance3D>(child); mesh != nullptr) {
+            const ::godot::Transform3D back = here.affine_inverse();
+            if (mesh->get_aabb().intersects_ray(back.xform(origin), back.basis.xform(normal))) {
+                return true;
+            }
+        }
+        if (ray_meets_part(child, here, origin, normal)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Notes on `tool` how far it reaches below its grip and how far its back lies off its axis, measured on what it
  * draws: its file's meshes, else its block. The file hangs down along -y from the grip and is thin along z
  * (scripts/tool.py of ase-assgen), so the lowest y is its foot and the lowest z the side it lies on.
@@ -337,10 +364,8 @@ bool rack_struck(::godot::Node3D* scene, const ::godot::Camera3D* camera, const 
     if (body == nullptr || !body->is_inside_tree()) {
         return false;
     }
-    ::godot::AABB bounds;
-    bool found = false;
-    merge_bounds(body, body->get_global_transform(), bounds, found);
-    return found && bounds.intersects_ray(camera->project_ray_origin(at), camera->project_ray_normal(at));
+    return ray_meets_part(body, body->get_global_transform(), camera->project_ray_origin(at),
+                          camera->project_ray_normal(at));
 }
 
 uint32_t hand_kind(uint32_t figure, const std::vector<VivariumFigureGearView>& gear, const char* slot) {

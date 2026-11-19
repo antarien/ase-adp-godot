@@ -12,7 +12,7 @@
  *
  *              BACKEND GAPS OF THE REQUESTS (register carrier N0448): N0451 take, equip and sow;
  *              N0452 stow and send; N0456 loosen; N0457 trunk and plug;
- *              N0458 the can filled at the brook; N0464 measure.
+ *              N0458 the can filled at the brook (closed while avatar.fill.v1 takes the fill); N0464 measure.
  *
  *              THE EDGE LINES OF A TAP name the mode and the hit it answers: "hud sap trunk" for the bore,
  *              "hud plug trunk" for the peg, each "done: " or "refused: " with the bridge's reason; the window
@@ -211,7 +211,10 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
             const double litres = hud_hand_.pour_end(fill_l);
             const bool emptied = litres > 0.0 && litres >= fill_l;
             const bool taken = water(litres * hud_hand_.mm_per_l(), emptied);
-            const bool left = taken && can != nullptr && hud_carry_.poured(can->key, litres);
+            // The litres leave the can in ase-equipment (07.14): the drain port of the figure led, the level comes
+            // back on the gear port (engine_fill); the bridge subtracts nothing.
+            const bool left = taken && can != nullptr && litres > 0.0 && figure_controls_.led_known &&
+                              resources_.drain_figure(figure_controls_.led, litres) == ase::kernel::HostStatusOk;
             note("hud pour end litres=" + ::godot::String::num(litres, 0) + (left ? " from the can" : "") +
                  (left && emptied ? ", the can empty" : ""));
         } else if (kind == VivariumHudRequest::ASK_CUT) {
@@ -273,10 +276,10 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
                 return;
             }
         } else if (kind == VivariumHudRequest::ASK_BROOK) {
-            // brookTap (usecase:100399 carry brook water): flora.carry.v1 files no can fill and flora.stream.v1 takes
-            // no water from the brook yet (N0458, N0451). The bridge fills the can of the hand by the mockup's rule
-            // when the tap lies on the first brook's line; the brook's level stays the stream port's.
-            open_gap(VivariumHud::GAP_FILL, request.kind);
+            // brookTap (usecase:100399 carry brook water): the bridge checks the can of the hand and the tap on the
+            // first brook's line by the mockup's rule, the fill goes to the fill port of the figure led (07.14) and
+            // ase-equipment fills the can; ENCHEU NO RIACHO follows the risen level (engine_fill). N0458 closes
+            // while the port takes the fill; flora.stream.v1 takes no water from the brook yet (N0451).
             float x = 0.0f;
             float z = 0.0f;
             float nearest_px = -1.0f;
@@ -290,15 +293,21 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
                                                                 static_cast<float>(streams.front().end_z))
                                              : ::godot::Vector3();
             const char* toast = nullptr;
-            double litres = 0.0;
             std::string done;
             std::string failed;
-            const bool filled =
-                hud_carry_.brook(picked, ::godot::Vector3(x, 0.0f, z), laid, from, to, toast, litres, done);
-            note(::godot::String(("hud brook " + std::string(filled ? "done: " : "refused: ") + done).c_str()));
-            // The values stand named before the test (-Wdangling-pointer, as in godot_vivarium_water.cpp).
-            const std::vector<HudPortValue> held{HudPortValue{"l", hud_decimals(litres, 0)}};
-            if (toast != nullptr && !hud_.toast(toast, held, VivariumHud::COLOUR_WATER, failed)) {
+            const bool asked = hud_carry_.brook(picked, ::godot::Vector3(x, 0.0f, z), laid, from, to, toast, done);
+            const ase::kernel::HostStatus status = asked && figure_controls_.led_known
+                                                       ? resources_.fill_figure(figure_controls_.led)
+                                                       : ase::kernel::HostStatusNotFound;
+            if (asked && status == ase::kernel::HostStatusOk) {
+                close_gap(VivariumHud::GAP_FILL, request.kind);
+            } else if (asked) {
+                open_gap(VivariumHud::GAP_FILL, request.kind);
+            }
+            note(::godot::String(("hud brook " + std::string(asked ? "asked: " : "refused: ") + done + " result=" +
+                                  GodotHostResourceManager::status_name(status))
+                                     .c_str()));
+            if (toast != nullptr && !hud_.toast(toast, {}, VivariumHud::COLOUR_WATER, failed)) {
                 fail_hud(failed);
                 return;
             }

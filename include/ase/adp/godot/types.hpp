@@ -22,7 +22,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-15
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -66,6 +66,17 @@ constexpr const char* GODOT_KEY_PLACE = "place";              // patch record: w
 constexpr const char* GODOT_KEY_COVERAGE = "coverage";        // patch record: covered share of the patch, 0..1
 constexpr const char* GODOT_KEY_STAGE = "stage";              // patch record: growth stage code (PLT_STAGE)
 constexpr const char* GODOT_KEY_CONDITION = "condition";      // patch record: condition code (PLT_CONDITION)
+// The condition codes of ase-plant, one record on flora.cond.v1 (usecase:101340 - show the bed condition, D2454):
+// read_snapshot compares every patch condition against them and keeps no number of ase-plant itself.
+constexpr const char* GODOT_KEY_COND_HEALTHY = "cond_healthy";  // condition record: the healthy code (PLT_CONST_COND_HEALTHY)
+constexpr const char* GODOT_KEY_COND_WILTED = "cond_wilted";    // condition record: the wilted code (PLT_CONST_COND_WLTG)
+constexpr const char* GODOT_KEY_COND_DEAD = "cond_dead";        // condition record: the dead code (PLT_CONST_COND_DEAD)
+// The stage codes of ase-plant, one record on flora.stage.v1 (usecase:101635 - show the plant stage, D2455):
+// read_snapshot turns every patch stage into its position among them and keeps no number of ase-plant itself.
+constexpr const char* GODOT_KEY_STGE_SEED = "stage_seed";       // stage record: the seed code (PLT_CONST_STAGE_SEED)
+constexpr const char* GODOT_KEY_STGE_SPRT = "stage_sprout";     // stage record: the sprout code (PLT_CONST_STAGE_SPRT)
+constexpr const char* GODOT_KEY_STGE_GROW = "stage_grow";       // stage record: the grow code (PLT_CONST_STAGE_GROW)
+constexpr const char* GODOT_KEY_STGE_MTUR = "stage_mature";     // stage record: the mature code (PLT_CONST_STAGE_MTUR)
 constexpr const char* GODOT_KEY_SOIL_MM = "soil_mm";          // patch record: soil water, mm (HYD_SOIL_WATER)
 constexpr const char* GODOT_KEY_SOIL_REL = "soil_rel";        // patch record: soil water over field capacity, 0..1
 constexpr const char* GODOT_KEY_CAPACITY_MM = "capacity_mm";  // patch record and patch lay request: field capacity of the soil, mm
@@ -78,16 +89,16 @@ constexpr const char* GODOT_KEY_FACTOR = "factor";            // pace request: t
 constexpr const char* GODOT_KEY_GAME_HOUR = "game_hour";      // seek request: the absolute game hour (day x hours per day + hour) the host's clock moves to
 constexpr const char* GODOT_KEY_AHEAD_H = "ahead_h";          // seek request: game hours ahead of the host's clock, ase-time lays the target from its own clock
 constexpr const char* GODOT_KEY_DAY_HOUR = "day_hour";        // seek request: hour of the game day, ase-time lays its next occurrence from its own clock
-constexpr const char* GODOT_KEY_SEQ = "seq";                  // seek and date request: number of the request, given by the host, only grows (FLORA_SEEK_SEQ_FIRST on)
+constexpr const char* GODOT_KEY_SEQ = "seq";                  // seek and date request: number of the request, given by the host, only grows (TIM_CONST_SEEK_SEQ_MIN on)
 constexpr const char* GODOT_KEY_SEEK_SEQ = "seek_seq";        // clock record: number of the request ase-time last judged (TIM_SEEK_SEQ), absent while no request was judged
 constexpr const char* GODOT_KEY_SEEK_ORDER = "seek_order";    // clock record: ase-time's verdict on that request (TIM_SEEK_ORDER, GODOT_SEEK_ORDER_*)
 constexpr const char* GODOT_KEY_SEEK_TARGET_DAY = "seek_target_day";  // clock record: whole game day of the target ase-time judged the request against, -1 = none or refused (TIM_SEEK_TARGET_DAY)
 constexpr const char* GODOT_KEY_SEEK_TARGET_H = "seek_target_h";  // clock record: hour of that day, below TIM_CONST_HOURS_PER_DAY, -1 = none or refused (TIM_SEEK_TARGET_H); the absolute target is day · hours_per_day + hour
+constexpr const char* GODOT_KEY_SEEK_SEQ_MIN = "seek_seq_min";  // seek bounds record: lowest request number, the first the host gives a jump (TIM_CONST_SEEK_SEQ_MIN)
 constexpr const char* GODOT_KEY_SEEK_SEQ_MAX = "seek_seq_max";  // seek bounds record: largest request number a float slot holds exactly (TIM_CONST_SEEK_SEQ_MAX)
 constexpr const char* GODOT_KEY_SEEK_ORDER_NONE = "seek_order_none";  // seek bounds record: verdict code of no request judged yet (TIM_CONST_SEEK_ORDER_NONE)
 constexpr const char* GODOT_KEY_SEEK_ORDER_REFUSED = "seek_order_refused";  // seek bounds record: verdict code of a refused request, the largest code (TIM_CONST_SEEK_ORDER_REFUSED)
 constexpr double GODOT_SEEK_FORM_NONE = -1.0;                 // a seek form the request does not use (FLORA_SEEK_FORM_NONE)
-constexpr double GODOT_SEEK_SEQ_FIRST = 1.0;                  // number of the host's first request (FLORA_SEEK_SEQ_FIRST)
 constexpr int GODOT_SEEK_ORDER_AHEAD = 1;                     // verdict: the clock was set to the target in one write (TIME_SEEK_ORDER_AHEAD)
 constexpr int GODOT_SEEK_ORDER_AT = 2;                        // verdict: the clock already stood at the target (TIME_SEEK_ORDER_AT)
 constexpr int GODOT_SEEK_ORDER_BEHIND = 3;                    // verdict: the target lies behind the clock, which only runs forward (TIME_SEEK_ORDER_BEHIND)
@@ -119,6 +130,7 @@ constexpr const char* GODOT_KEY_DAY_SHARE = "day_share";      // day record (N04
 constexpr const char* GODOT_KEY_SUNRISE_SHARE = "sunrise_share";  // day record (N0460): the share of the day the sun rises at, 0 to 1
 constexpr const char* GODOT_KEY_SUNSET_SHARE = "sunset_share";    // day record (N0460): the share of the day the sun sets at, 0 to 1
 constexpr const char* GODOT_KEY_YEAR_SHARE = "year_share";    // day record (N0460): today's share of the year, 0 to 1 (ase-calendar)
+constexpr const char* GODOT_KEY_LUN_SHARE = "lun_share";      // day record (B0280): the share of the year a whole LUNBREX fills, ase-calendar's CAL_LUN_SHARE; the last LUNBREX is shorter, so LUN m starts at (m - 1) times it
 constexpr const char* GODOT_KEY_START_H = "start_h";          // phase record (N0460): the hour the phase begins, 0 for ASO, else TIM_CONST_PERIOD_BND_*
 constexpr const char* GODOT_KEY_START_SHARE = "start_share";  // phase record (N0460): the share of the day the phase begins at, 0 to 1
 constexpr const char* GODOT_KEY_START_LUN = "start_lun";      // season record (N0460): the first LUN of the season (CAL_CONST_SEASON_*_START)
@@ -430,6 +442,7 @@ constexpr const char* GODOT_VIEW_KEY_CALM = "calm_frames";        // view: calm 
 constexpr const char* GODOT_VIEW_KEY_OVER = "over_frames";        // view: over frames in a row that take one order back
 constexpr const char* GODOT_VIEW_KEY_PICK = "pick_px";            // view: logical pixels around a tap within which the middle of an internode is hit (cutting mode, 03.10 step 9)
 constexpr const char* GODOT_VIEW_KEY_FLATTEN = "flatten_m";       // view: radius of the disc one tap in the flatten mode levels, metres (03.8)
+constexpr const char* GODOT_VIEW_KEY_LEAST_RING = "least_ring_px"; // view: screen pixels a bark ring narrower than this is held at (plant_bark.gdshader, register B0482)
 /**
  * The exposure of the scene camera (register D1721): the eye adapts to the night, a fixed camera does not. The
  * sky port hands the light as ase-pl-sky computes it - at night the sun light 0.05 and the ambient
@@ -600,14 +613,14 @@ constexpr const char* GODOT_SOIL_WORD_MEADOW = "meadow";      // word of GODOT_S
 constexpr const char* GODOT_SOIL_WORD_FOREST = "forest";      // word of GODOT_SOIL_FOREST in the start configuration
 
 /**
- * The codes the patch record carries - those of ase-plant (PLANT_STAGE_*, PLANT_COND_*), forwarded
- * by the plugin unchanged. A code outside them is shown as unknown, never mapped onto a known one.
+ * The stage of a patch (usecase:101635 - show the plant stage, D2455). The patch record carries the stage
+ * code of ase-plant unchanged; the stage record on flora.stage.v1 carries the four codes themselves
+ * (GODOT_KEY_STGE_*). read_snapshot turns the stage of every patch into its position among those four keys,
+ * in the order the keys are read - seed, sprout, grow, mature - and sets the patch's stage marks by
+ * equality with them, as for the condition. The view holds no stage code of its own; a stage that equals
+ * none of the four codes is shown as unknown, never mapped onto a known one.
  */
-constexpr uint8_t GODOT_STAGE_SEED = 0;       // a seed in the soil
-constexpr uint8_t GODOT_STAGE_SPROUT = 1;     // a seedling
-constexpr uint8_t GODOT_STAGE_GROW = 2;       // a growing stand
-constexpr uint8_t GODOT_STAGE_MATURE = 3;     // a mature stand
-constexpr uint8_t GODOT_STAGE_COUNT = 4;      // stages the view has a word and a colour for
+constexpr uint8_t GODOT_STAGE_COUNT = 4;      // stages the view has a word and a colour for: the codes the stage record carries
 constexpr uint8_t GODOT_STAGE_NONE = UINT8_MAX;  // debug jump: no stage to jump to, the jump names an hour
 constexpr double GODOT_HOUR_NONE = -1.0;      // debug jump: no hour of the game day to jump to, the jump names a stage
 constexpr double GODOT_YEARS_NONE = 0.0;      // debug date jump: no VECTUM to jump ahead, the jump names a stage or an hour
@@ -628,11 +641,7 @@ constexpr double GODOT_DATE_YEAR_FIRST = 0.0;   // first VECTUM of a run as the 
 constexpr double GODOT_DATE_FIRST = 1.0;        // first LUNBREX and first TUMBRAE as the clock record counts them (CAL_DATE_SEEK_DATE_FIRST)
 constexpr double GODOT_DATE_HOUR_FIRST = 0.0;   // first HORAX of a TUMBRAE (CAL_DATE_SEEK_HOUR_FIRST)
 constexpr double GODOT_PACE_NONE = 0.0;       // pace request: the host's clock back on its default pace
-constexpr uint8_t GODOT_COND_HEALTHY = 0;     // a stand without a condition mark
-constexpr uint8_t GODOT_COND_WILTED = 1;      // a wilted stand
-constexpr uint8_t GODOT_COND_DEAD = 2;        // a dead stand
-constexpr uint8_t GODOT_COND_COUNT = 3;       // conditions the view has a word for
-constexpr uint8_t GODOT_CODE_UNKNOWN = 255u;  // a stage or condition outside the documented codes
+constexpr uint8_t GODOT_CODE_UNKNOWN = 255u;  // a stage outside the documented codes
 
 /**
  * The staged bundle (clients/avt-client-android/cmake/AvtRuntime.cmake, scripts/stage_native.py):

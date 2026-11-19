@@ -53,15 +53,16 @@ std::unordered_map<uint32_t, PlantOrigin> plant_origins(const std::vector<Vivari
 }
 
 std::unordered_map<uint32_t, PlantStand> plant_stands(const std::vector<VivariumPatchView>& patches) {
-    // soil water and condition as the patch record carried them; a value it did not carry is NaN or
-    // GODOT_CODE_UNKNOWN (read_snapshot) and stays unknown
+    // soil water and condition as the patch record carried them; a soil value it did not carry is NaN, a
+    // condition equal to none of the codes of flora.cond.v1 leaves cond_known false (read_snapshot), and both stay unknown
     std::unordered_map<uint32_t, PlantStand> stands;
     for (const VivariumPatchView& patch : patches) {
         PlantStand stand;
         stand.soil_known = std::isfinite(patch.soil_rel);
         stand.soil_rel = stand.soil_known ? static_cast<float>(patch.soil_rel) : 0.0f;
-        stand.condition_known = patch.condition < GODOT_COND_COUNT;
-        stand.condition = stand.condition_known ? static_cast<float>(patch.condition) : 0.0f;
+        stand.condition_known = patch.cond_known;
+        stand.wilted = patch.cond_known && patch.wilted ? 1.0f : 0.0f;
+        stand.dead = patch.cond_known && patch.dead ? 1.0f : 0.0f;
         stands[patch.object_id] = stand;
     }
     return stands;

@@ -59,6 +59,8 @@
 
 namespace ase::adp::godot {
 
+struct VivariumFigureGearView;  // godot_host_resource_manager.hpp: one piece of the gear port
+
 /** The litres or kilograms a load may stand over its room or carry and still fit (the mockup's 1e-6 in fits()). */
 constexpr double GODOT_HUD_FIT_EPSILON = 1.0e-6;
 
@@ -141,11 +143,11 @@ public:
      * brookTap (usecase:100399 carry brook water): `picked` says the tap found the ground at `point`, `laid` that a
      * brook runs from `from` to `to`. Only the can of the hand (hud_bridge_hand_can_item) within
      * hud_bridge_hand_brook_reach_m of that line acts, else `toast` stays nullptr and nothing happens; a full can
-     * names O REGADOR JÁ ESTÁ CHEIO, else the can is filled to its cap, `litres` it holds then, ENCHEU NO RIACHO.
-     * True when the can was filled.
+     * names O REGADOR JÁ ESTÁ CHEIO. True when the tap asks a fill: the caller sends it to the fill port, ase-equipment
+     * fills the can, and engine_fill names ENCHEU NO RIACHO when the level comes back risen. The bridge writes no level.
      */
     bool brook(bool picked, const ::godot::Vector3& point, bool laid, const ::godot::Vector3& from,
-               const ::godot::Vector3& to, const char*& toast, double& litres, std::string& note);
+               const ::godot::Vector3& to, const char*& toast, std::string& note);
 
     // The words of brookTap's toasts (texts.hud), both in the mockup's 'water'.
     static constexpr const char* TOAST_POT_FULL = "toast.pot_full";          // O REGADOR JÁ ESTÁ CHEIO
@@ -158,8 +160,14 @@ public:
     static constexpr const char* TOAST_SOWN = "toast.sown";            // SEMENTE NA TERRA
     static constexpr const char* COLOUR_LIFE = "DOMAIN_LIFE";          // the domain colour of the seed
 
-    /** The mockup's release of the can: `litres` leave the fill of the thing `key`; false when none was taken. */
-    bool poured(const std::string& key, double litres);
+    /**
+     * The engine's level of the can (07.14, usecase:100367 water a patch): the first vessel of the gear port whose
+     * kind is the can item (name_id of hud_bridge_hand_can_item) gives its water_l to the carried can, each time that
+     * level changes; it is the only writer of the can's fill. A fill and a pour of the player (fill and drain ports)
+     * or of the AI all show here. `rose_to` is the new level when it rose against the last snapshot, else below 0.
+     * False while no such vessel stands.
+     */
+    bool engine_fill(const std::vector<VivariumFigureGearView>& gear, double& rose_to);
 
     /**
      * trunkTap: one spout goes into the bore, the trough hangs under it (GODOT_HUD_PLACE_TRUNK, sap 0, no home) and
@@ -264,6 +272,7 @@ private:
     std::string seed_item_;         // hud_bridge_hand_seed_item: the item sowTap takes one of (findIt('sementes'))
     double sow_reach_m_ = 0.0;      // hud_bridge_hand_sow_reach_m: the farthest a sowing tap lies from the stem place
     std::string can_item_;          // hud_bridge_hand_can_item: the can brookTap fills (handItem().id === 'regador')
+    double engine_water_l_ = -1.0;  // the can's water_l of the last gear snapshot engine_fill applied; below 0 none yet
     double brook_reach_m_ = 0.0;    // hud_bridge_hand_brook_reach_m: the farthest a filling tap lies from the brook
     std::string spout_item_;        // hud_bridge_hand_spout_item: the spouts the sap mode counts (findIt('bica'))
     std::string vessel_item_;       // hud_bridge_hand_vessel_item: the trough the sap mode needs (have('cocho'))

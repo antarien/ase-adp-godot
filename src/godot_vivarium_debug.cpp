@@ -58,7 +58,7 @@
  * @usecase     usecase:6018 - derive terrain heights
  * @actor       Plant Keeper (PLNTKEEPER), Terrain Height Shaper (TERRHEISHA)
  * @created     2026-10-26
- * @modified    2026-11-09
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -118,6 +118,16 @@ bool VivariumView::load_debug(const ::godot::Dictionary& root) {
     if (!read_number(debug, "settle_s", debug_.settle_s) || !(debug_.settle_s > 0.0)) {
         return fail_config("debug.settle_s");
     }
+    // THE SEARCH ON OF AN ECLIPSE JUMP (D2256, CAUSA_ASE_EPHEMERIS EphemerisEclNextSystem): a kind without an
+    // eclipse inside ase-ephemeris' horizon carries the end of the horizon, and a reader that jumps by it
+    // searches on from there. eclipse_hops is how often the jump does so before it notes no_eclipse; whole, 1
+    // or above.
+    double eclipse_hops = 0.0;
+    if (!read_number(debug, "eclipse_hops", eclipse_hops) || !(eclipse_hops >= 1.0) ||
+        ase::math::floor(static_cast<float>(eclipse_hops)) != static_cast<float>(eclipse_hops)) {
+        return fail_config("debug.eclipse_hops");
+    }
+    debug_.eclipse_hops = static_cast<uint32_t>(eclipse_hops);
     // THE TIME LAPSE BUTTONS: a factor of the base pace, 0 or above; 0 gives the default pace back.
     const ::godot::Variant buttons_value = debug.get("buttons", ::godot::Variant());
     if (buttons_value.get_type() != ::godot::Variant::ARRAY) {

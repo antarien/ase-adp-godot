@@ -82,7 +82,10 @@ bool VivariumView::load_figure_hud(const UiTheme& theme) {
     double zone[8] = {};
     double rest[2] = {};
     double tap_ms = 0.0;
+    double edge[2] = {};
     for (const std::pair<const char*, double*>& slot : std::initializer_list<std::pair<const char*, double*>>{
+             {"hud_figure_edge_x", &edge[0]},                {"hud_figure_edge_y", &edge[1]},
+             {"hud_figure_edge_size", &controls.edge_size},
              {"hud_figure_stick_zone_x", &zone[0]},          {"hud_figure_stick_zone_y", &zone[1]},
              {"hud_figure_stick_zone_w", &zone[2]},          {"hud_figure_stick_zone_h", &zone[3]},
              {"hud_figure_orbit_zone_x", &zone[4]},          {"hud_figure_orbit_zone_y", &zone[5]},
@@ -134,6 +137,10 @@ bool VivariumView::load_figure_hud(const UiTheme& theme) {
     controls.orbit_zone = ::godot::Rect2(static_cast<float>(zone[4]), static_cast<float>(zone[5]),
                                          static_cast<float>(zone[6]), static_cast<float>(zone[7]));
     controls.stick_rest = ::godot::Vector2(static_cast<float>(rest[0]), static_cast<float>(rest[1]));
+    if (!(controls.edge_size > 0.0)) {
+        return fail_config("hud_figure_edge_size");  // a warning without a size is never read
+    }
+    controls.edge_at = ::godot::Vector2(static_cast<float>(edge[0]), static_cast<float>(edge[1]));
 
     for (const std::pair<const char*, ::godot::Color*>& slot :
          std::initializer_list<std::pair<const char*, ::godot::Color*>>{
@@ -141,11 +148,29 @@ bool VivariumView::load_figure_hud(const UiTheme& theme) {
              {"FIGURE_STICK_RING", &controls.stick_ring},
              {"FIGURE_STICK_KNOB", &controls.stick_knob},
              {"FIGURE_STICK_REST", &controls.stick_rest_ring},
-             {"FIGURE_STICK_REST_LABEL", &controls.stick_rest_word}}) {
+             {"FIGURE_STICK_REST_LABEL", &controls.stick_rest_word},
+             {"FIGURE_AREA_EDGE", &controls.edge_ink}}) {
         if (!theme.color(slot.first, *slot.second)) {
             return fail_config(slot.first);
         }
     }
+
+    // THE GLASS OF THE CHUNK EDGE (07.13, usecase:101612 keep figure in loaded area): the red pane where a walking
+    // body bumps the edge of the first own chunk; a measure not above 0 would never show the flash
+    double glass[5] = {};
+    for (const std::pair<const char*, double*>& slot : std::initializer_list<std::pair<const char*, double*>>{
+             {"hud_figure_edge_glass_width", &glass[0]}, {"hud_figure_edge_glass_height", &glass[1]},
+             {"hud_figure_edge_glass_hold", &glass[2]},  {"hud_figure_edge_glass_fade", &glass[3]},
+             {"hud_figure_edge_glass_rim", &glass[4]}}) {
+        if (!theme.measure(slot.first, *slot.second) || !std::isfinite(*slot.second) || !(*slot.second > 0.0)) {
+            return fail_config(slot.first);
+        }
+    }
+    ::godot::Color glass_ink;
+    if (!theme.color("FIGURE_EDGE_GLASS", glass_ink)) {
+        return fail_config("FIGURE_EDGE_GLASS");
+    }
+    figure_glass_ = bind_figure_glass(glass[0], glass[1], glass[2], glass[3], glass[4], glass_ink);
 
     // the resting stick's word in the label face; the arc, the rail, the focus and the switch bind their own
     std::string failed;
@@ -155,6 +180,14 @@ bool VivariumView::load_figure_hud(const UiTheme& theme) {
     }
     if (!theme.words("figure.stick_rest", runs) || !controls.stick_word.set(runs, failed)) {
         return fail_config(failed.empty() ? "figure.stick_rest" : failed.c_str());
+    }
+    // the rim warning of the head bar in the same face (07-G, RAND DES AREALS)
+    runs.clear();
+    if (!controls.edge_word.bind_label(theme, failed)) {
+        return fail_config(("hud " + failed).c_str());
+    }
+    if (!theme.words("figure.edge", runs) || !controls.edge_word.set(runs, failed)) {
+        return fail_config(failed.empty() ? "figure.edge" : failed.c_str());
     }
     if (!controls.cam_switch.bind(theme, failed) || !controls.focus.bind(theme, failed) ||
         !controls.turn.bind(theme, failed) || !controls.zoom.bind(theme, failed)) {
@@ -211,6 +244,21 @@ void VivariumView::draw_figure_hud(UiPen& pen) {
             text.opacity = controls.rest_alpha;
             controls.stick_word.draw(pen, hud_frame_, text);
         }
+    }
+
+    // RAND DES AREALS (07-G, cam.bound) at the right end of the head bar while ase-physics holds the followed figure at
+    // a chunk border of the loaded ground or ase-camera holds the player camera on the rim of the loaded area; the
+    // camera record carries both marks and follow_figure keeps them, the fixed view stands on no rim. The touch
+    // itself flashes the glass pane where the body met the border (flash_figure_edges, 07.13).
+    if (figure_edge_shown_ || figure_bound_shown_) {
+        UiTextPlace rim;
+        rim.at = controls.edge_at;
+        rim.size = controls.edge_size;
+        rim.anchor = GODOT_TEXT_ANCHOR_END;
+        rim.color = controls.edge_ink;
+        rim.opacity = 1.0;
+        rim.still = hud_still_;
+        controls.edge_word.draw(pen, hud_frame_, rim);
     }
 
     // THE FIGURE OF THIS FRAME: its place as the body port reported it, its height as the scene measured its node

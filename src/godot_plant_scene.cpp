@@ -311,8 +311,9 @@ void mark_plant_stands(::godot::Node3D* scene, const std::unordered_map<uint32_t
         if (plant == nullptr) {
             continue;
         }
-        hand_on(part_of<::godot::MultiMeshInstance3D>(plant, GODOT_PLANT_LEAVES), GODOT_SHADER_CONDITION,
-                stand.second.condition_known, stand.second.condition);
+        ::godot::MultiMeshInstance3D* leaves = part_of<::godot::MultiMeshInstance3D>(plant, GODOT_PLANT_LEAVES);
+        hand_on(leaves, GODOT_SHADER_WILTED, stand.second.condition_known, stand.second.wilted);
+        hand_on(leaves, GODOT_SHADER_DEAD, stand.second.condition_known, stand.second.dead);
     }
 }
 

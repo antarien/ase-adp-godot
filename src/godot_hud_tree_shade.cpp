@@ -16,7 +16,7 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @register    carrier N0448
  * @created     2026-11-12
- * @modified    2026-11-12
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -78,7 +78,7 @@ void TreeShade::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Tre
     if (!now.placed || now.stage >= GODOT_STAGE_COUNT) {
         return;  // the birch stands off the screen, or no patch record names its stage
     }
-    if (now.stage == GODOT_STAGE_SEED) {
+    if (now.seed) {
         // THE SEED SHOWS ONLY IN THE OPEN HOLE (operator 2026-11-13, before the mockup's m.html 488, which draws the
         // mound and the seed on the soil at stage 0): a seed the keeper laid in the hole lies there visible, a
         // covered hole leaves the mound alone, and a stand nobody sowed leaves the soil bare.
@@ -92,9 +92,9 @@ void TreeShade::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Tre
         return;
     }
     double scale = scale_mature_;
-    if (now.stage == GODOT_STAGE_SPROUT) {
+    if (now.sprout) {
         scale = scale_shoot_;
-    } else if (now.stage == GODOT_STAGE_GROW) {
+    } else if (now.grow) {
         scale = scale_growing_;
     }
     const ::godot::Vector2 at =

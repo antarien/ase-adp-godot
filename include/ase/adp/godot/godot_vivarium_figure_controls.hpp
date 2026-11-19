@@ -92,6 +92,10 @@ struct VivariumFigureControls {
     ::godot::Color   stick_rest_ring;            // FIGURE_STICK_REST: the dashed ring where the stick rests
     ::godot::Color   stick_rest_word;            // FIGURE_STICK_REST_LABEL: the word inside the resting ring
     UiTextBlock      stick_word;                 // figure.stick_rest: under the resting ring
+    ::godot::Vector2 edge_at;                    // hud_figure_edge_x/_y: the right end of the rim warning's baseline
+    double           edge_size = 0.0;            // hud_figure_edge_size: its font size, mockup units
+    ::godot::Color   edge_ink;                   // FIGURE_AREA_EDGE: the warning that the figure stands on the rim
+    UiTextBlock      edge_word;                  // figure.edge: RAND DES AREALS in the head bar, while the rim holds it
     int64_t          stick_finger = NO_FINGER;   // the finger on the stick
     ::godot::Vector2 stick_origin;               // where it came down, the stick's centre, mockup units
     ::godot::Vector2 stick_at;                   // where it is, at most stick_radius off the origin

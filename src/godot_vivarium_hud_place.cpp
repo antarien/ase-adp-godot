@@ -138,8 +138,9 @@ void VivariumView::note_hud_places() {
     // (`rail index=<sign>`), which opens that sign; in the mode arrive each event row of the trail (`event
     // index=<sign>`, no index where the row rests the view); and while the mode lays the world's hits, the padded
     // box of each thing on the ground (`ground key=<item>`), which a tap picks up; in the mode water the middle of
-    // the brook's line (`brook`), which a tap fills the can of the hand at. The view is the one source of
-    // these places; the window acceptance taps and holds where these lines name them.
+    // the brook's line (`brook`), which a tap fills the can of the hand at; and the figure's controls of Phase 07
+    // (`cam_mode`, `stick`, `orbit`, `zoom`, `figure index=<object>`, `soul index=<object> key=self|ai`). The view
+    // is the one source of these places; the window acceptance taps and holds where these lines name them.
     ::godot::Rect2 debug_switch;
     std::vector<DebugLayerChip> chips;
     std::string failed;
@@ -250,6 +251,26 @@ void VivariumView::note_hud_places() {
     }
     if (!focus_hidden) {
         lines.push_back(place_line("focus", UINT32_MAX, none, hud_frame_, ring_focus));  // a tap here goes to rest
+    }
+    // The figure (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07-G), in the mockup's units of the same frame: cam.mode in every
+    // camera (`cam_mode`); while the player camera stands the left half a finger takes the stick in (`stick`) and
+    // the right half a drag turns the camera in (`orbit`), since the fixed view takes neither; while the seat's
+    // figure stands the square round its reach (`figure`), whose middle opens and closes its focus; while that
+    // focus is open the square round the comb soul.mode (`soul`), whose middle hands the figure to the AI or back.
+    const VivariumFigureControls& figure = figure_controls_;
+    lines.push_back(place_line("cam_mode", UINT32_MAX, none, hud_frame_, figure.cam_switch.place()));
+    if (figure_view_shown_) {
+        lines.push_back(place_line("stick", UINT32_MAX, none, hud_frame_, figure.stick_zone));
+        lines.push_back(place_line("orbit", UINT32_MAX, none, hud_frame_, figure.orbit_zone));
+        lines.push_back(place_line("zoom", UINT32_MAX, none, hud_frame_, figure.zoom.place()));  // cam.zoom's rail
+    }
+    ::godot::Rect2 reach;
+    if (figure.led_known && figure.focus.reach_place(reach)) {
+        lines.push_back(place_line("figure", figure.led, none, hud_frame_, reach));
+    }
+    ::godot::Rect2 comb;
+    if (figure.focus_open && figure.focus.comb_place(comb)) {
+        lines.push_back(place_line("soul", figure.led, figure.led_self ? "self" : "ai", hud_frame_, comb));
     }
     for (const PruneMarkPlace& cut : cuts) {
         lines.push_back(place_line("cut", cut.internode, none, hud_frame_, cut.rect));  // a tap here cuts it

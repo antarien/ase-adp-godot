@@ -107,14 +107,15 @@ bool figure_height(::godot::Node3D* scene, uint32_t object_id, double& height) {
     return true;
 }
 
-bool take_figure_rig(::godot::Node3D* scene, uint32_t object_id, double& eye_height, double& height) {
+bool take_figure_rig(::godot::Node3D* scene, uint32_t object_id, double& eye_height, double& height, double& radius) {
     ::godot::Node3D* body = figure_body(scene, object_id);
     if (body == nullptr || !body->has_meta(kFigureMetaEye) || !body->has_meta(kFigureMetaHeight) ||
-        body->has_meta(kFigureMetaRigTaken)) {
+        !body->has_meta(kFigureMetaRadius) || body->has_meta(kFigureMetaRigTaken)) {
         return false;
     }
     eye_height = static_cast<double>(body->get_meta(kFigureMetaEye));
     height = static_cast<double>(body->get_meta(kFigureMetaHeight));
+    radius = static_cast<double>(body->get_meta(kFigureMetaRadius));
     body->set_meta(kFigureMetaRigTaken, true);  // reported once per node: a node built anew is measured anew
     return true;
 }
@@ -136,6 +137,36 @@ bool take_figure_place(::godot::Node3D* scene, uint32_t object_id, double step_m
     x = static_cast<double>(place.x);
     y = static_cast<double>(place.y);
     z = static_cast<double>(place.z);
+    return true;
+}
+
+bool take_figure_gait(::godot::Node3D* scene, uint32_t object_id, double gait) {
+    ::godot::Node3D* body = figure_body(scene, object_id);
+    if (body == nullptr) {
+        return false;
+    }
+    // the body port writes the gait as one of the codes of the code port, so a change is any other value than the
+    // one noted; a node built anew carries no noted value and its first gait is noted
+    if (body->has_meta(kFigureMetaGaitNoted) && static_cast<double>(body->get_meta(kFigureMetaGaitNoted)) == gait) {
+        return false;
+    }
+    body->set_meta(kFigureMetaGaitNoted, gait);
+    return true;
+}
+
+bool take_figure_level(::godot::Node3D* scene, uint32_t object_id, int32_t& level) {
+    ::godot::Node3D* body = figure_body(scene, object_id);
+    if (body == nullptr || !body->has_meta(kFigureMetaLevelDrawn)) {
+        return false;
+    }
+    // the scene notes the level it drew this frame; a change is any other level than the one noted, and a node built
+    // anew carries no noted level, so its first drawn level is noted
+    const auto drawn = static_cast<int32_t>(body->get_meta(kFigureMetaLevelDrawn));
+    if (body->has_meta(kFigureMetaLevelNoted) && static_cast<int32_t>(body->get_meta(kFigureMetaLevelNoted)) == drawn) {
+        return false;
+    }
+    body->set_meta(kFigureMetaLevelNoted, drawn);
+    level = drawn;
     return true;
 }
 

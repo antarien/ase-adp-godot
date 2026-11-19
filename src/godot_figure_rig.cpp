@@ -2,11 +2,13 @@
  * ASE GODOT ADAPTER - FIGURE RIG IMPLEMENTATION
  *
  * @file        godot_figure_rig.cpp
- * @brief       Mixes the four clips of the figure file by one AnimationTree and measures the eyes of its rig
+ * @brief       Mixes the clips of the figure file by one AnimationTree and measures the eyes of its rig
  * @description See godot_figure_rig.hpp. The AnimationTree stands beside the AnimationPlayer of the instance, so
  *              both resolve the tracks from the same root; its blend space mixes idle, walk and run by the gait,
- *              a Blend2 lays the turn clip over them. The eyes are measured once from the rest pose of the
- *              skeleton, never from the posed bones of a clip.
+ *              a Blend2 lays the turn clip over them, and a OneShot plays the bend clip once over the whole
+ *              mix when the figure draws water at the brook (07.14): the body bends through the joints of its
+ *              rig, hips, knees and spine as ase-assgen keyed them. The eyes are measured once from the rest
+ *              pose of the skeleton, never from the posed bones of a clip.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -15,8 +17,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-14
- * @modified    2026-11-14
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-18
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -31,6 +33,7 @@
 #include <godot_cpp/classes/animation_node_blend2.hpp>
 #include <godot_cpp/classes/animation_node_blend_space1_d.hpp>
 #include <godot_cpp/classes/animation_node_blend_tree.hpp>
+#include <godot_cpp/classes/animation_node_one_shot.hpp>
 #include <godot_cpp/classes/animation_player.hpp>
 #include <godot_cpp/classes/animation_tree.hpp>
 #include <godot_cpp/classes/skeleton3d.hpp>
@@ -54,11 +57,42 @@ constexpr const char* kFigureClipIdle = "idle";             // the clips of vill
 constexpr const char* kFigureClipWalk = "walk";
 constexpr const char* kFigureClipRun = "run";
 constexpr const char* kFigureClipTurn = "turn";
+constexpr const char* kFigureClipBend = "bend";             // the bend at the brook, played once, never looped (villager_body version 2)
 constexpr const char* kFigureParamMove = "parameters/move/blend_position";  // gait of the clip mix, at the points of the code port
 constexpr const char* kFigureParamTurn = "parameters/mix/blend_amount";     // share of the turn clip in the mix
+constexpr const char* kFigureParamBend = "parameters/bend/request";         // fires the bend once over the mix
+constexpr const char* kFigureParamBendActive = "parameters/bend/active";    // true while the bend plays
+constexpr float kFigureBendFadeIn = 0.15f;                  // seconds the bend takes to lay over the mix
+constexpr float kFigureBendFadeOut = 0.2f;                  // seconds the mix takes to return after the bend
 constexpr const char* kFigureBoneEyeLeft = "L_Eye";         // the eye bones of the rig of villager_body (Character Creator skeleton)
 constexpr const char* kFigureBoneEyeRight = "R_Eye";
 constexpr float kFigureEyeMean = 0.5f;                      // the eyes stand at the mean of both eye bones
+constexpr const char* kFigureBoneShoulderLeft = "L_Upperarm";   // the shoulder joints of the rig of villager_body (Character Creator skeleton)
+constexpr const char* kFigureBoneShoulderRight = "R_Upperarm";
+constexpr double kFigureRadiusShare = 0.5;                  // the capsule's radius is half the span between both shoulder joints
+
+/** The first Skeleton3D below the figure file `model`; nullptr when the file carries none. */
+::godot::Skeleton3D* rig_skeleton(::godot::Node* model) {
+    const ::godot::TypedArray<::godot::Node> skeletons = model->find_children("*", "Skeleton3D", true, false);
+    if (skeletons.is_empty()) {
+        return nullptr;
+    }
+    return ::godot::Object::cast_to<::godot::Skeleton3D>(skeletons[0]);
+}
+
+/** Every Node3D from `skeleton` up to `model`, the model's own transform included: the frame of the model's parent. */
+::godot::Transform3D rig_frame(::godot::Skeleton3D* skeleton, ::godot::Node* model) {
+    ::godot::Transform3D frame;
+    for (::godot::Node* node = skeleton; node != nullptr; node = node->get_parent()) {
+        if (auto* spatial = ::godot::Object::cast_to<::godot::Node3D>(node)) {
+            frame = spatial->get_transform() * frame;
+        }
+        if (node == model) {
+            break;
+        }
+    }
+    return frame;
+}
 
 /** One clip node of the mix. */
 ::godot::Ref<::godot::AnimationNodeAnimation> clip_node(const char* clip) {
@@ -100,7 +134,22 @@ bool add_figure_motion(::godot::Node* model, double gait_stand, double gait_walk
     root->add_node("mix", mix);
     root->connect_node("mix", 0, "move");
     root->connect_node("mix", 1, "turn");
-    root->connect_node("output", 0, "mix");
+    // the bend lies over the whole mix once per draw; a file of version 1 carries no bend clip, and its figure
+    // keeps the four looping clips without the node, so the approved stage asset still moves
+    if (player->has_animation(::godot::StringName(kFigureClipBend))) {
+        player->get_animation(::godot::StringName(kFigureClipBend))->set_loop_mode(::godot::Animation::LOOP_NONE);
+        ::godot::Ref<::godot::AnimationNodeOneShot> bend;
+        bend.instantiate();
+        bend->set_fadein_time(kFigureBendFadeIn);
+        bend->set_fadeout_time(kFigureBendFadeOut);
+        root->add_node("bend", bend);
+        root->add_node("bend_clip", clip_node(kFigureClipBend));
+        root->connect_node("bend", 0, "mix");
+        root->connect_node("bend", 1, "bend_clip");
+        root->connect_node("output", 0, "bend");
+    } else {
+        root->connect_node("output", 0, "mix");
+    }
 
     // beside the player, so both resolve the tracks from the same root (their default root node "..")
     ::godot::AnimationTree* motion = memnew(::godot::AnimationTree);
@@ -112,7 +161,8 @@ bool add_figure_motion(::godot::Node* model, double gait_stand, double gait_walk
     return true;
 }
 
-void drive_figure_motion(::godot::Node3D* body, double gait, double gait_stand, double gait_run, double turning) {
+void drive_figure_motion(::godot::Node3D* body, double gait, double gait_stand, double gait_run, double turning,
+                         bool bend) {
     const ::godot::TypedArray<::godot::Node> trees = body->find_children(kFigureMotion, "AnimationTree", true, false);
     if (trees.is_empty()) {
         return;
@@ -123,14 +173,15 @@ void drive_figure_motion(::godot::Node3D* body, double gait, double gait_stand, 
     }
     motion->set(kFigureParamMove, ase::math::clamp(gait, gait_stand, gait_run));
     motion->set(kFigureParamTurn, turning);
+    // a draw while the bend still plays adds no second bend: the figure is already down at the water
+    if (bend && motion->get(kFigureParamBendActive).get_type() == ::godot::Variant::BOOL &&
+        !static_cast<bool>(motion->get(kFigureParamBendActive))) {
+        motion->set(kFigureParamBend, static_cast<int64_t>(::godot::AnimationNodeOneShot::ONE_SHOT_REQUEST_FIRE));
+    }
 }
 
 bool figure_eye_level(::godot::Node* model, double& eye) {
-    const ::godot::TypedArray<::godot::Node> skeletons = model->find_children("*", "Skeleton3D", true, false);
-    if (skeletons.is_empty()) {
-        return false;
-    }
-    auto* skeleton = ::godot::Object::cast_to<::godot::Skeleton3D>(skeletons[0]);
+    ::godot::Skeleton3D* skeleton = rig_skeleton(model);
     if (skeleton == nullptr) {
         return false;
     }
@@ -139,19 +190,28 @@ bool figure_eye_level(::godot::Node* model, double& eye) {
     if (left < 0 || right < 0) {
         return false;
     }
-    // every Node3D from the skeleton up to the model, the model's own transform included: the frame of its parent
-    ::godot::Transform3D frame;
-    for (::godot::Node* node = skeleton; node != nullptr; node = node->get_parent()) {
-        if (auto* spatial = ::godot::Object::cast_to<::godot::Node3D>(node)) {
-            frame = spatial->get_transform() * frame;
-        }
-        if (node == model) {
-            break;
-        }
-    }
+    const ::godot::Transform3D frame = rig_frame(skeleton, model);
     const ::godot::Vector3 eyes =
         (skeleton->get_bone_global_rest(left).origin + skeleton->get_bone_global_rest(right).origin) * kFigureEyeMean;
     eye = static_cast<double>(frame.xform(eyes).y);
+    return true;
+}
+
+bool figure_body_radius(::godot::Node* model, double& radius) {
+    ::godot::Skeleton3D* skeleton = rig_skeleton(model);
+    if (skeleton == nullptr) {
+        return false;
+    }
+    const int32_t left = skeleton->find_bone(kFigureBoneShoulderLeft);
+    const int32_t right = skeleton->find_bone(kFigureBoneShoulderRight);
+    if (left < 0 || right < 0) {
+        return false;
+    }
+    // both joints in the frame of the model's parent; only the horizontal span counts, the capsule stands upright
+    const ::godot::Transform3D frame = rig_frame(skeleton, model);
+    const ::godot::Vector3 span = frame.xform(skeleton->get_bone_global_rest(left).origin) -
+                                  frame.xform(skeleton->get_bone_global_rest(right).origin);
+    radius = kFigureRadiusShare * static_cast<double>(ase::math::sqrt(span.x * span.x + span.z * span.z));
     return true;
 }
 

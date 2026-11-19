@@ -70,8 +70,6 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
                                    ::godot::Color::hex(asset_color(binding, name, GODOT_COLOR_ASSET_MISSING)));
     material->set_shader_parameter(GODOT_STAND_IN_WILTED, ::godot::Color::hex(GODOT_COLOR_WILTED));
     material->set_shader_parameter(GODOT_STAND_IN_DEAD, ::godot::Color::hex(GODOT_COLOR_DEAD));
-    material->set_shader_parameter(GODOT_STAND_IN_WILTED_CODE, static_cast<int32_t>(GODOT_COND_WILTED));
-    material->set_shader_parameter(GODOT_STAND_IN_DEAD_CODE, static_cast<int32_t>(GODOT_COND_DEAD));
     material->set_shader_parameter(GODOT_STAND_IN_WET, GODOT_STAND_IN_WET_SHADE);
     material->set_shader_parameter(GODOT_STAND_IN_ROUGH, GODOT_STAND_IN_ROUGHNESS);
     return material;
@@ -117,8 +115,6 @@ std::string asset_of(const std::unordered_map<std::string, std::string>& roles, 
     if (pbr->get_transparency() == ::godot::BaseMaterial3D::TRANSPARENCY_ALPHA_SCISSOR) {
         organ->set_shader_parameter(GODOT_ORGAN_CUT, pbr->get_alpha_scissor_threshold());
     }
-    // the condition a wilting leaf turns toward the dry olive at, the same code the stand-in shader compares
-    organ->set_shader_parameter(GODOT_STAND_IN_WILTED_CODE, static_cast<int32_t>(GODOT_COND_WILTED));
     return organ;
 }
 

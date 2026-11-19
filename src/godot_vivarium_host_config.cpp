@@ -16,7 +16,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-11-15
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -54,6 +54,20 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.forecast");
     }
     start_.forecast_port = utf8_of(text);
+    // The condition codes of ase-plant (usecase:101340 - show the bed condition): one record with the healthy,
+    // the wilted and the dead code, so the view compares the condition of a patch against them and holds no
+    // number of ase-plant of its own (D2454).
+    if (!read_text(ports, "cond", text)) {
+        return fail_config("ports.cond");
+    }
+    start_.cond_port = utf8_of(text);
+    // The stage codes of ase-plant (usecase:101635 - show the plant stage): one record with the seed, the sprout,
+    // the grow and the mature code, so the view turns the stage of a patch into its position among them and holds
+    // no number of ase-plant of its own (D2455).
+    if (!read_text(ports, "stage", text)) {
+        return fail_config("ports.stage");
+    }
+    start_.stage_port = utf8_of(text);
     // The stem feet ase-physics holds (usecase:100708 land the dispersed seeds, N0487): a port of their own,
     // one record per patch whose stem stands, its value the height of the foot over the level of the patch.
     if (!read_text(ports, "stem", text)) {

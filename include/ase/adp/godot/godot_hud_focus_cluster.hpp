@@ -26,7 +26,7 @@
  *              texts.hud.focus_loose_share with its bar, DOMAIN_GROUND. Sap while a tap runs: words.flowing,
  *              from levels[1] texts.hud.focus_sap_fill with the vessel's fill over its capacity, DOMAIN_FLOW.
  *              Condition: words.wilted or words.dead in DOMAIN_ALERT while ase-plant marks the stand so
- *              (GODOT_COND_*). In the debug view each row carries texts.hud.focus_source.<row>.
+ *              (the marks wilted and dead, set against the codes of flora.cond.v1). In the debug view each row carries texts.hud.focus_source.<row>.
  *
  *              THE FORECAST. From levels[1] on, while the stand lives and has a stage after this one: a leader
  *              line from the ring's lower right to hud_focus_next_from_dx right of the ring and
@@ -84,7 +84,9 @@ struct FocusClusterFrame {
     bool debug = false;          // the debug view: each row names its source
 
     uint8_t stage = 0;           // GODOT_STAGE_* of flora.patch.v1
-    uint8_t condition = 0;       // GODOT_COND_* of flora.patch.v1
+    bool cond_known = true;      // the patch condition equals a code of flora.cond.v1; a frame without a patch shows a stand without a mark
+    bool wilted = false;         // ase-plant marks the stand wilted (VivariumPatchView::wilted)
+    bool dead = false;           // ase-plant marks the stand dead (VivariumPatchView::dead)
     double soil_mm = 0.0;        // soil water, mm
     double soil_rel = 0.0;       // soil water over field capacity, 0..1
     double coverage = 0.0;       // covered share, 0..1

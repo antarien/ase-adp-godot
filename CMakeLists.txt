@@ -148,7 +148,8 @@ endif()
 # ── GDExtension library loaded by Godot ─────────────────────────────────────
 add_library(ase-adp-godot SHARED
     src/godot_registration.cpp   # GDExtension entry vivarium_library_init + class binding
-    src/godot_vivarium_node.cpp  # VivariumView: lifecycle, host boot, frame, log
+    src/godot_vivarium_node.cpp  # VivariumView: lifecycle, host boot, frame
+    src/godot_vivarium_log.cpp          # VivariumView: the one log stream, patch baseline, stage and condition events
     src/godot_vivarium_config.cpp       # VivariumView: start configuration, stage, modes, view section
     src/godot_vivarium_host_config.cpp  # VivariumView: ports, operations, patches, ground, brooks
     src/godot_vivarium_layout.cpp       # VivariumView: logical surface, bands, places, buttons, texts
@@ -170,7 +171,8 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_start.cpp       # VivariumView: the start screen, its progress bar and the versions from build.identity (B0357, usecase:100387)
     src/godot_vivarium_scene.cpp        # VivariumView: what a frame fills of the 3D scene (03.1)
     src/godot_vivarium_scene_counts.cpp # VivariumView: the scene's count line for the window acceptance (D1647)
-    src/godot_vivarium_figure.cpp       # VivariumView: the figure's configuration, its body in the scene, the player camera and the keys that lead it (usecase:101554 receive player input, 07.4 to 07.9)
+    src/godot_vivarium_figure.cpp       # VivariumView::follow_figure: the figure's body in the scene, the player camera, its two rims and the keys that lead it (usecase:101554 receive player input, 07.4 to 07.9, 07-G)
+    src/godot_vivarium_figure_config.cpp # VivariumView::load_figure_config: the ports, operations and spawn place of the figure of the seat (usecase:101554 receive player input, 07.8)
     src/godot_vivarium_figure_controls.cpp # VivariumView: the phone's stick, orbit drag and the figure's focus with cam.mode and soul.mode (usecase:101554 receive player input, 07.9, 07.11)
     src/godot_vivarium_figure_input.cpp  # VivariumView::figure_input: the phone's fingers on stick, orbit half, arc, rail, pinch and taps through the ports of ase-pl-avatar (usecase:101554 receive player input, 07.6, 07.7, 07.9, 07.11)
     src/godot_vivarium_measure.cpp      # VivariumView: self-test and measurement modes (02.3)
@@ -311,6 +313,7 @@ add_library(ase-adp-godot SHARED
     src/godot_figure_load.cpp   # the figure file parsed and packed by a task of the WorkerThreadPool (usecase:101611 animate character motion, 07.9)
     src/godot_figure_rig.cpp    # the clip mix of the figure file and the eye height of its skeleton (usecase:101611 animate character motion, 07.6)
     src/godot_figure_hand.cpp   # the tool a figure carries below its hand socket, from the gear port (usecase:101625 carry a tool in hand, 07.10)
+    src/godot_figure_glass.cpp  # the red glass pane where a walking body bumps the chunk edge, from the boundary port (usecase:101612 keep figure in loaded area, 07.13)
     src/godot_plant_shader.cpp  # every shader of that scene, loaded from its file under shaders/ (usecase:100387 view the plant)
 
     include/ase/adp/godot/godot_registration.hpp
@@ -326,6 +329,8 @@ add_library(ase-adp-godot SHARED
     include/ase/adp/godot/godot_vivarium_debug.hpp
     include/ase/adp/godot/godot_vivarium_watch.hpp  # VivariumMeasurement, VivariumGroundWatch (usecase:100387 view the plant)
     include/ase/adp/godot/godot_vivarium_scene_counts.hpp  # scene_counts, the scene's count line (usecase:100387 view the plant)
+    include/ase/adp/godot/godot_vivarium_start_choice.hpp  # VivariumStartChoice: online/offline and new world/last state on the start screen (usecase:100387 view the plant)
+    include/ase/adp/godot/godot_vivarium_start_mode.hpp    # GODOT_START_MODE_*, the four values of VivariumView::start_mode_ (usecase:100387 view the plant)
     include/ase/adp/godot/godot_asset_loader.hpp
     include/ase/adp/godot/godot_asset_showcase_scene.hpp
     include/ase/adp/godot/godot_plant_scene.hpp
@@ -347,6 +352,7 @@ add_library(ase-adp-godot SHARED
     include/ase/adp/godot/godot_figure_load.hpp   # FigureSceneLoad, start_figure_load, take_figure_load (usecase:101611 animate character motion)
     include/ase/adp/godot/godot_figure_rig.hpp    # add_figure_motion, drive_figure_motion, figure_eye_level (usecase:101611 animate character motion)
     include/ase/adp/godot/godot_figure_hand.hpp   # hand_kind, carry_tool (usecase:101625 carry a tool in hand)
+    include/ase/adp/godot/godot_figure_glass.hpp  # FigureSceneGlass, bind_figure_glass, flash_figure_edges (usecase:101612 keep figure in loaded area)
     include/ase/adp/godot/godot_figure_node.hpp   # holder, name prefix and metas of a figure's node, shared by figure scene and figure queries (usecase:101611 animate character motion)
     include/ase/adp/godot/godot_plant_shader.hpp
     include/ase/adp/godot/godot_config_read.hpp

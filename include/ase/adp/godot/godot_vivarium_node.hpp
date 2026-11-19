@@ -89,7 +89,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-14
+ * @modified    2026-11-19
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -98,6 +98,7 @@
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
+#include <ase/adp/godot/godot_figure_glass.hpp>
 #include <ase/adp/godot/godot_figure_scene.hpp>
 #include <ase/adp/godot/godot_garden_return.hpp>
 #include <ase/adp/godot/godot_host_resource_manager.hpp>
@@ -119,6 +120,8 @@
 #include <ase/adp/godot/godot_vivarium_hud_loose.hpp>
 #include <ase/adp/godot/godot_vivarium_hud_sign_rules.hpp>
 #include <ase/adp/godot/godot_vivarium_hud_trail.hpp>
+#include <ase/adp/godot/godot_vivarium_start_choice.hpp>
+#include <ase/adp/godot/godot_vivarium_start_mode.hpp>
 #include <ase/adp/godot/godot_vivarium_view_config.hpp>
 #include <ase/adp/godot/godot_vivarium_watch.hpp>
 #include <ase/adp/godot/types.hpp>
@@ -209,6 +212,8 @@ private:
     void report_measurement();
 
     void boot_host(bool new_seeds);        // a host with the whole set; new_seeds: the next sowing, else the seeds of this run
+    void begin_host(uint8_t mode);         // the start screen's choice: start_mode_ takes `mode`, then the first boot
+    bool start_input(const ::godot::Ref<::godot::InputEvent>& local);  // a tap on the start screen's choice; true when taken
     void restart();
     void rewind_host(const VivariumJump& jump);  // ase-time judged a date behind its clock: the host anew with this run's seeds and pace, the date sent again once its clock stands
     void follow_rewind(const VivariumClockView& clock);  // a rewound host's clock stands: the date sent again with a new number, ase-time judges it
@@ -271,7 +276,7 @@ private:
     [[nodiscard]] bool can_flatten() const;
     // the terrain sample under a tap: its world place east and north; false when none lies within pick_px
     [[nodiscard]] bool pick_ground(const ::godot::Vector2& at, float& x, float& z, float& nearest_px) const;
-    [[nodiscard]] ::godot::String stage_text(uint8_t stage) const;
+    [[nodiscard]] ::godot::String stage_text(const VivariumPatchView& patch) const;
     [[nodiscard]] ::godot::String patch_text(const VivariumPatchView& patch) const;
     [[nodiscard]] ::godot::String boot_line() const;
     [[nodiscard]] ::godot::String measure(uint32_t place) const;
@@ -322,7 +327,7 @@ private:
     void send_hud(const std::vector<VivariumHudRequest>& requests);  // each request of the HUD through its port, or its gap named
     void send_hud_verb(const VivariumHudRequest& request);  // a ground verb under the brush through the port of its operation
     void send_hud_debug(const DebugLayerHit& part);         // a part of the HUD's debug layer: pace, jump, date step, go, now, relief
-    void open_gap(const char* gap, const char* act);        // a value or request no port carries yet: logged once per id on the edge of the bridge, the request (act) named in the line; never shown
+    void open_gap(const char* gap, const char* act);        // a value or request no port carries yet (carrier task N0448): logged once per id on the edge of the bridge, the request (act) named in the line; never shown
     void close_gap(const char* gap, const char* act);       // the port now carries it: the closing edge logged once, the gap armed again for the next opening
     void fail_hud(const std::string& failed);               // the HUD stopped: the error panel names why
 
@@ -352,7 +357,11 @@ private:
     float                    zoom_ = GODOT_ZOOM_START;  // the near view's zoom, moved by the mouse wheel or a pinch
     PlantSceneLook           scene_look_;         // materials and organ templates of the scene, bound once at the start (03.2)
     FigureSceneLook          figure_look_;        // the figure file of the stage or its stand-in material, bound once at the start (07.9)
+    FigureSceneGlass         figure_glass_;       // the red glass pane of the chunk edge, SHA's measures and colour, bound with the HUD (07.13, usecase:101612)
     bool                     figure_view_shown_ = false;   // the scene's camera stood at the player camera's eye last frame (07.6)
+    bool                     figure_edge_shown_ = false;   // ase-physics held the followed figure at a chunk border last frame (07-G, RAND DES AREALS)
+    bool                     figure_bound_shown_ = false;  // ase-camera held the player camera on the rim of the area last frame (07-G, cam.bound, usecase:101612)
+    std::vector<uint32_t>    figure_area_bound_;           // the figures bound to the area plate they first stood on (07.7), each once
     bool                     figure_switch_held_ = false;  // the key of cam.mode was held last frame: one switch per press
     bool                     figure_steered_ = false;      // the stick was off its rest last frame: a released stick is sent once at rest
     bool                     figure_zoomed_ = false;       // a zoom key was held last frame: the eye the rail settled at is noted once on release (07.6)
@@ -372,6 +381,7 @@ private:
     uint64_t                 scene_templates_ = 0; // template generation the plant was last filled from (usecase:101011 tessellate the organ templates)
     uint32_t                 scene_focus_ = GODOT_NO_PLACE;  // the place the camera last looked at
     float                    pick_px_ = 0.0f;      // logical pixels around a tap that hit an internode's middle (view.pick_px)
+    float                    least_ring_px_ = 0.0f;  // screen pixels a bark ring narrower than this is held at (view.least_ring_px)
     bool                     pruning_ = false;     // the cutting mode is on: a tap in the scene cuts, it selects no place
     bool                     bedding_ = false;     // the bed mode is on: a tap in the scene marks a bed's end, it selects no place
     bool                     bed_started_ = false; // the first end of the bed is marked
@@ -385,6 +395,9 @@ private:
     uint32_t                 selftest_errors_ = 0;
     bool                     selftest_ran_ = false;
     uint32_t                 host_boots_ = 0;   // boot_host calls of this view: restarts = boots - 1
+    uint8_t                  start_mode_ = GODOT_START_MODE_NONE;  // the start screen's choice (godot_vivarium_start_mode.hpp)
+    VivariumStartChoice      start_choice_;     // the switches of the start screen, bound with the HUD's theme
+    ::godot::Transform2D     start_frame_;      // mockup units onto the canvas while the start screen stands
     uint32_t                 run_sowing_ = 0;   // the sowing the running host's seeds came from (sown_seed); a rewind keeps it
     ::godot::Dictionary      identity_;        // build.identity of the staged bundle
     ::godot::String          build_line_;      // drawn under the title
@@ -392,7 +405,7 @@ private:
     ::godot::String          failure_text_;    // not empty: the error panel stands instead of the patches
     std::vector<std::string> log_lines_;       // drained once per frame and printed
     std::vector<uint8_t>     stages_;          // last logged stage per place
-    std::vector<uint8_t>     conditions_;      // last logged condition per place
+    std::vector<double>      conditions_;      // last logged raw condition code of ase-plant per place, NaN while none came
     bool                     patches_announced_ = false;  // every place's record stood once and got its line
     bool                     initialised_ = false;        // the world stands complete and rendered: the start screen lifted
     uint32_t                 init_render_frames_ = 0;     // frames rendered in a row under the start screen with the world complete and no new pipeline

@@ -27,6 +27,10 @@ The same form as plugins/ase-pl-vegetation/tests.
                               (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.8, 07.10, usecase:101625 carry a tool
                               in hand): the figure of the seat at its spawn place, hold and drop filed as
                               put-on and put-down requests, every gear piece at the right hand of a figure.
+  ase-adp-godot-camera-test   The camera ports of ase-pl-avatar on a game host of its own
+                              (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.5, 07.6, 07-A, 07-G, usecase:101588 move
+                              player figure over ground): cam.mode there and back to the fixed view, the drag
+                              and the zoom of the player camera, the rim of the area on the camera record.
   ase-adp-godot-layout-test   place_view, band_offset and in_one_band on the surfaces of the Android
                               market (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3): logical size, a 9:20
                               handset, camera and gesture bar insets, a 3:4 tablet, a safe area too
@@ -82,7 +86,7 @@ endif()
 # manager it drives: a .cpp whose name carries resource_manager is a resource manager implementation
 # (file_types.json, resource_mgr_impl). Each target writes its own log file - ABSOLUTE, like the
 # user:// path the node hands over - so no run rotates the file of another.
-foreach(_adp_godot_bundle_test host refusal scene tree figure)
+foreach(_adp_godot_bundle_test host refusal scene tree figure camera)
     if(_adp_godot_bundle_test STREQUAL "host")
         set(_adp_godot_bundle_source test_godot_host.cpp)
     else()

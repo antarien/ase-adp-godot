@@ -83,10 +83,11 @@ void VivariumView::bridge_clock(VivariumClockView& clock) {
     }
     const double hours = clock.hours_per_day > 0.0 ? clock.hours_per_day : mock.hours_per_day;
     if (!clock.day_known) {
-        // ase-pl-flora flora.day.v1: sunrise_h, sunset_h, daylight_h, season, day_share, year_share and year_day,
-        // the day of the VECTUM from 1 (CAL_YEAR_DAY).
+        // ase-pl-flora flora.day.v1: sunrise_h, sunset_h, daylight_h, season, day_share, year_share, year_day,
+        // the day of the VECTUM from 1 (CAL_YEAR_DAY), and lun_share, the share of a whole LUNBREX (CAL_LUN_SHARE).
         open_gap(GODOT_HUD_GAP_CLOCK, "flora.day.v1");
         clock.year_day = mock.year_day;
+        clock.lun_share = mock.lun_share;
         clock.sunrise_h = mock.sunrise_h;
         clock.sunset_h = mock.sunset_h;
         clock.daylight_h = mock.daylight_h;

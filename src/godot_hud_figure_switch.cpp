@@ -77,4 +77,9 @@ bool FigureSwitch::hit(const ::godot::Vector2& point) const {
            ase::math::abs(static_cast<double>(point.y) - y_) <= hit_;
 }
 
+::godot::Rect2 FigureSwitch::place() const {
+    return ::godot::Rect2(static_cast<float>(x_ - hit_), static_cast<float>(y_ - hit_), static_cast<float>(hit_ * 2.0),
+                          static_cast<float>(hit_ * 2.0));
+}
+
 }  // namespace ase::adp::godot

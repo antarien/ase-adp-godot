@@ -211,6 +211,11 @@ bool FigureZoom::hit(const ::godot::Vector2& point) const {
     return static_cast<double>(point.x) >= hit_x_ && y >= top_ - hit_pad_ && y <= top_ + length_ + hit_pad_;
 }
 
+::godot::Rect2 FigureZoom::place() const {
+    return ::godot::Rect2(static_cast<float>(hit_x_), static_cast<float>(top_), static_cast<float>((x_ - hit_x_) * 2.0),
+                          static_cast<float>(length_));
+}
+
 bool FigureZoom::pinch(double from, double spread_from, double spread, double& out) const {
     // pinch: zoomT = clampZ(dist0 * d0 / d), only while the fingers stand further apart than the minimum
     if (!(spread > pinch_min_) || !(spread_from > pinch_min_)) {

@@ -43,7 +43,7 @@
  * @usecase     usecase:100390 - return to the garden
  * @actor       Growth Clock Controller (GROWCLOCON), Plant Keeper (PLNTKEEPER)
  * @created     2026-11-08
- * @modified    2026-11-12
+ * @modified    2026-11-18
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -285,15 +285,19 @@ bool VivariumView::take_seq(VivariumJump& jump) {
     // THE REQUEST NUMBER: every seek and date request of this run carries the next number, and the numbers
     // only grow - across a rewind too, so a verdict of the host before the rewind never answers a request
     // after it. ase-time answers the newest number; the jump ends on the verdict for its own. A float slot
-    // holds whole numbers exactly up to ase-time's TIM_CONST_SEEK_SEQ_MAX, read from the seek bounds record
-    // (VivariumClockView::seek_seq_max); past it, or while that record has not come, the jump is refused,
-    // never left waiting.
+    // holds whole numbers exactly up to ase-time's TIM_CONST_SEEK_SEQ_MAX, and the first number is its
+    // TIM_CONST_SEEK_SEQ_MIN, both read from the seek bounds record (VivariumClockView::seek_seq_min and
+    // seek_seq_max); past the largest, or while that record has not come, the jump is refused, never left waiting.
     const VivariumClockView& clock = resources_.get_clock();
-    if (!clock.seek_bounds_known || debug_.seq + 1.0 > clock.seek_seq_max) {
+    if (!clock.seek_bounds_known) {
         return false;
     }
-    debug_.seq += 1.0;
-    jump.seq = debug_.seq;
+    const double next = ase::math::max(debug_.seq + 1.0, clock.seek_seq_min);
+    if (next > clock.seek_seq_max) {
+        return false;
+    }
+    debug_.seq = next;
+    jump.seq = next;
     return true;
 }
 

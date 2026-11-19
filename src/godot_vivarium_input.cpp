@@ -42,8 +42,12 @@ void VivariumView::unhandled_input(const ::godot::Ref<::godot::InputEvent>& even
     if (in_editor() || !node_->is_visible_in_tree()) {
         return;
     }
-    // Under the start screen nothing is tapped: the world is still being initialised (follow_initialisation).
+    // Under the start screen only the choice how the world starts is tapped (start_input); once chosen, nothing
+    // is tapped while the world is initialised (follow_initialisation).
     if (!initialised_ && failure_text_.is_empty()) {
+        if (configured_ && start_mode_ == GODOT_START_MODE_NONE) {
+            start_input(node_->make_input_local(event));
+        }
         return;
     }
     // ONE PATH PER PHYSICAL TAP: touch arrives as ScreenTouch, a mouse as MouseButton - the

@@ -28,7 +28,9 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_hud_carry.hpp>
+#include <ase/adp/godot/godot_host_resource_manager.hpp>
 #include <ase/adp/godot/types.hpp>
+#include <ase/kernel/kernel_embedded_host.hpp>
 
 #include <ase/math/math.hpp>
 #include <ase/math/random.hpp>
@@ -320,8 +322,8 @@ bool VivariumCarryBridge::apply(const VivariumHudRequest& request, std::string& 
 }
 
 bool VivariumCarryBridge::brook(bool picked, const ::godot::Vector3& point, bool laid, const ::godot::Vector3& from,
-                                const ::godot::Vector3& to, const char*& toast, double& litres, std::string& note) {
-    // brookTap (m.html 968 to 970): only the can of the hand, only on the brook's line, then the fill.
+                                const ::godot::Vector3& to, const char*& toast, std::string& note) {
+    // brookTap (m.html 968 to 970): only the can of the hand, only on the brook's line, then the fill is asked.
     Carried* can = nullptr;
     for (Carried& thing : carried_) {
         if (same_place(thing.place, GODOT_HUD_PLACE_HAND) && facts_[thing.facts].id == can_item_) {
@@ -351,28 +353,40 @@ bool VivariumCarryBridge::brook(bool picked, const ::godot::Vector3& point, bool
                std::to_string(from.z + run_z * share);
         return false;
     }
+    // The level is ase-equipment's (engine_fill): a full can is refused here, the fill itself the caller asks.
     const double cap = facts_[can->facts].cap_l;
-    litres = can->fill_l;
     if (can->fill_l >= cap) {
         toast = TOAST_POT_FULL;
         note = "the can is full";
         return false;
     }
-    can->fill_l = cap;
-    litres = cap;
-    toast = TOAST_FILLED_BROOK;
-    note = "filled " + can->key + " to " + std::to_string(cap) + " L";
+    note = "asks a fill of " + can->key + " at " + std::to_string(can->fill_l) + " of " + std::to_string(cap) + " L";
     return true;
 }
 
-bool VivariumCarryBridge::poured(const std::string& key, double litres) {
-    // The mockup's release: it.fill = max(0, it.fill - round(mm / 25)), the litres the pour held.
-    Carried* can = find(key);
-    if (can == nullptr || !(litres > 0.0) || !(can->fill_l > 0.0)) {
-        return false;
+bool VivariumCarryBridge::engine_fill(const std::vector<VivariumFigureGearView>& gear, double& rose_to) {
+    // The can of the engine: the first vessel whose kind is the can item; its level moves the carried can on change,
+    // and a rise against the last snapshot is the fill at the brook (ENCHEU NO RIACHO), whoever asked it.
+    rose_to = -1.0;
+    const uint32_t can_kind = ase::kernel::KernelEmbeddedHost::name_id(can_item_.c_str());
+    for (const VivariumFigureGearView& piece : gear) {
+        if (!piece.vessel || piece.kind != can_kind) {
+            continue;
+        }
+        Carried* can = find(can_item_);
+        if (can == nullptr) {
+            return false;
+        }
+        if (piece.water_l != engine_water_l_) {
+            if (engine_water_l_ >= 0.0 && piece.water_l > engine_water_l_) {
+                rose_to = piece.water_l;
+            }
+            engine_water_l_ = piece.water_l;
+            can->fill_l = piece.water_l;
+        }
+        return true;
     }
-    can->fill_l = ase::math::max(0.0, can->fill_l - litres);
-    return true;
+    return false;
 }
 
 bool VivariumCarryBridge::tap(const char*& toast, std::string& note) {

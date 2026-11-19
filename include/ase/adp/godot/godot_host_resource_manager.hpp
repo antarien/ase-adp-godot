@@ -18,7 +18,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-15
+ * @modified    2026-11-19
  * @version     00.00.04.00022 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -152,8 +152,13 @@ struct VivariumStartConfig {
                                      // desktop, the directory its data files are placed in where the
                                      // stage is a package)
     std::string log_file;            // ABSOLUTE log file under user://, empty = callback only
+    bool        start_fresh = false; // the start screen chose "offline, from the initial state": the
+                                     // host starts without the last state of the owners
+                                     // (KernelEmbeddedHost::set_start_fresh); false = resume from it
     std::string patch_port;          // host port of the patches (ase-pl-flora: flora.patch.v1)
     std::string forecast_port;       // host port of the stage forecasts, one record per forecast patch (ase-pl-flora: flora.forecast.v1)
+    std::string cond_port;           // host port of the condition codes of ase-plant, one record (ase-pl-flora: flora.cond.v1, usecase:101340 - show the bed condition)
+    std::string stage_port;          // host port of the stage codes of ase-plant, one record (ase-pl-flora: flora.stage.v1, usecase:101635 - show the plant stage)
     std::string stem_port;           // host port of the stem feet ase-physics holds, one record per standing stem (ase-pl-flora: flora.stem.v1)
     std::string clock_port;          // host port of the game clock (ase-pl-flora: flora.clock.v1)
     std::string scene_port;          // host port the patches are laid through (ase-pl-flora: flora.scene.v1)
@@ -197,11 +202,16 @@ struct VivariumStartConfig {
     std::string figure_seize_port;   // host port soul.mode takes the figure back from the AI through (ase-pl-avatar: avatar.seize.v1)
     std::string figure_hold_port;    // host port the hand of Phase 06 puts its thing into the figure's hand through (ase-pl-avatar: avatar.hold.v1)
     std::string figure_drop_port;    // host port the hand of Phase 06 empties the figure's hand through (ase-pl-avatar: avatar.drop.v1)
-    std::string figure_gear_port;    // host port of the pieces every figure carries (ase-pl-avatar: avatar.gear.v1)
+    std::string figure_fill_port;    // host port brookTap fills the vessel of the figure's hand through (ase-pl-avatar: avatar.fill.v1)
+    std::string figure_drain_port;   // host port the release of the can lets its litres go through (ase-pl-avatar: avatar.drain.v1)
+    std::string figure_gear_port;   // host port of the pieces every figure carries (ase-pl-avatar: avatar.gear.v1)
     std::string figure_code_port;    // host port of the codes gait, soul and camera of the body record are compared against (ase-pl-avatar: avatar.code.v1)
     std::string figure_rig_port;     // host port the scene reports the measured skeleton of a figure through (ase-pl-avatar: avatar.rig.v1)
     std::string figure_turn_port;    // host port the drag of the right half turns the figure itself through (ase-pl-avatar: avatar.turn.v1)
-    std::string op_measure;          // submit operation that reports eye height and height of a figure's skeleton
+    std::string figure_area_port;    // host port the view binds a figure to the area plate it stands on through (ase-pl-avatar: avatar.area.v1)
+    std::string figure_boundary_port;  // host port of the bumps of walking bodies against the chunk edge (ase-pl-avatar: avatar.boundary.v1)
+    std::string op_measure;         // submit operation that reports eye height and height of a figure's skeleton
+    std::string op_bind;             // submit operation that binds a figure to the area plate it stands on (07.7, usecase:101612)
     std::string op_spawn;           // submit operation that asks for the figure of a seat at a place
     std::string op_steer;            // submit operation that leads the figure with the stick
     std::string op_turn;             // submit operation that turns the player camera by a drag
@@ -210,9 +220,12 @@ struct VivariumStartConfig {
     std::string op_seize;            // submit operation that takes the soul of the figure back (AI/PC to SS/PC)
     std::string op_hold;             // submit operation that puts an item into the right hand of the figure (07.10)
     std::string op_drop;             // submit operation that empties the right hand of the figure (07.10)
+    std::string op_fill;             // submit operation that fills the vessel in the figure's hand at the brook (07.14)
+    std::string op_drain;            // submit operation that lets litres of the vessel in the figure's hand go (07.14)
     uint32_t    figure_seat = 0;     // the seat of this view: ase-player names the figure it spawns after it
     double      figure_x = 0.0;      // spawn place of the figure, world metres east
     double      figure_z = 0.0;      // spawn place of the figure, world metres north
+    std::string figure_character;    // key of the character the figure of this seat plays, as data/creation_characters.json of ase-creation names it; the spawn request carries its hash
     std::string op_irrigate;        // submit operation that pours on one patch
     std::string op_prune;            // submit operation that cuts the branch an internode sits on (03.10 step 9)
     std::string op_level;            // submit operation that levels the ground of one patch (03.8 point 2)
@@ -431,8 +444,15 @@ struct VivariumPatchView {
     uint32_t object_id = 0;     // the patch, as the plugin names it on its port
     uint32_t place = 0;         // where the view draws it
     double   coverage = 0.0;    // covered share, 0..1
-    uint8_t  stage = 0;         // GODOT_STAGE_* or GODOT_CODE_UNKNOWN
-    uint8_t  condition = 0;     // GODOT_COND_* or GODOT_CODE_UNKNOWN
+    uint8_t  stage = 0;         // position of the stage among the four codes of the stage record (seed, sprout, grow, mature; below GODOT_STAGE_COUNT) or GODOT_CODE_UNKNOWN - never a code of ase-plant (usecase:101635, D2455)
+    bool     seed = false;      // stage equals stage_seed of the stage record: a seed lies in the soil
+    bool     sprout = false;    // stage equals stage_sprout: ase-plant marks a seedling
+    bool     grow = false;      // stage equals stage_grow: ase-plant marks a growing stand
+    bool     mature = false;    // stage equals stage_mature: ase-plant marks a mature stand
+    double   condition = 0.0;   // PLT_CONDITION as the patch record carried it, NaN unmeasured - a number of ase-plant, never compared against one of the view's own
+    bool     cond_known = false; // the condition record came and condition equals one of its three codes (usecase:101340, D2454)
+    bool     wilted = false;    // condition equals cond_wilted: ase-plant marks the stand wilted
+    bool     dead = false;      // condition equals cond_dead: ase-plant marks the stand dead
     uint8_t  soil = 0;          // GODOT_SOIL_* ground or GODOT_CODE_UNKNOWN
     double   soil_mm = 0.0;     // soil water, mm
     double   soil_rel = 0.0;    // soil water over field capacity, 0..1
@@ -462,6 +482,7 @@ struct VivariumClockView {
     double seek_target_day = 0.0;  // whole game day of the target ase-time judged it against (TIM_SEEK_TARGET_DAY), GODOT_SEEK_FORM_NONE when refused
     double seek_target_h = 0.0;    // hour of that day (TIM_SEEK_TARGET_H), GODOT_SEEK_FORM_NONE when refused; absolute = day · hours_per_day + hour
     bool   seek_bounds_known = false;  // false while the seek port carries no bounds record of ase-time (ase-pl-flora: flora.seek.v1)
+    double seek_seq_min = 0.0;         // lowest request number, the first the host gives a jump, ase-time's own constant (TIM_CONST_SEEK_SEQ_MIN)
     double seek_seq_max = 0.0;         // largest request number a float slot holds exactly, ase-time's own constant (TIM_CONST_SEEK_SEQ_MAX)
     double seek_order_none = 0.0;      // verdict code: no request judged yet, ase-time's own constant (TIM_CONST_SEEK_ORDER_NONE)
     double seek_order_refused = 0.0;   // verdict code: the request named no target the clock can reach, the largest code (TIM_CONST_SEEK_ORDER_REFUSED)
@@ -489,6 +510,7 @@ struct VivariumClockView {
     double sunrise_share = 0.0; // the share of the day the sun rises at
     double sunset_share = 0.0;  // the share of the day the sun sets at
     double year_share = 0.0;    // today's share of the year, 0 to 1 (ase-calendar)
+    double lun_share = 0.0;     // the share of the year a whole LUNBREX fills (CAL_LUN_SHARE): the year ring places LUN m at (m - 1) times it (B0280)
     bool   phases_known = false;  // N0460: false while the phase port carries no full set of phase records (flora.phase.v1)
     std::vector<double> phase_start_h;      // the hour each phase begins, in the order of GODOT_PERIOD_*
     std::vector<double> phase_start_share;  // the share of the day each phase begins at, in the same order
@@ -771,18 +793,40 @@ struct VivariumFigureCameraView {
     double   aim_x = 0.0;     // look-at, world metres east
     double   aim_y = 0.0;     // look-at, world metres up
     double   aim_z = 0.0;     // look-at, world metres north
+    bool     bound = false;   // true while ase-camera holds the camera on the rim of the loaded area (07-G, cam.bound)
+    bool     edge = false;    // true while ase-physics holds the followed figure at a chunk border (HUB_PHYS_STAND_BNDY, RAND DES AREALS)
 };
 
 /**
  * One piece a figure carries as the last snapshot of the gear port showed it (07.10, usecase:101625 carry a
  * tool in hand): a row of ase-equipment, its bearer, its slot and its kind as catalog ids
- * (KernelEmbeddedHost::name_id). The view hangs the tool of the kind under the socket the slot names.
+ * (KernelEmbeddedHost::name_id). The view hangs the tool of the kind under the socket the slot names. A vessel
+ * (07.14, usecase:100367 water a patch) closes its record with the litres ase-equipment holds in it
+ * (HUB_EQP_ITEM_WATER_L); the HUD's can draws that level, so a pour of the AI empties the can the player sees.
  */
 struct VivariumFigureGearView {
     uint32_t object_id = 0;  // the piece, as the plugin names it on its port
     uint32_t bearer = 0;     // the figure that carries it, the object id of its body record
     uint32_t slot = 0;       // the slot it sits in: name_id of the socket (socket_hand_r)
     uint32_t kind = 0;       // what it is: name_id of the item key of Phase 06 (pa, enxada, faca)
+    bool     vessel = false; // true while the record carried water_l: the piece is a vessel of ase-equipment
+    double   water_l = 0.0;  // litres the vessel holds, HUB_EQP_ITEM_WATER_L (AVATAR_HOST_KEY_WATER)
+};
+
+/**
+ * The last bump of one walking body against the edge of the first own chunk as the last snapshot of the boundary
+ * port showed it (07.13, usecase:101612 keep figure in loaded area). ase-physics holds the body inside the chunk
+ * borders and files the bump (HUB_PHYS_BNDY_HIT); ase-pl-avatar lays it out every Production run
+ * (AvatarHostBndyExptSystem). The view flashes the red glass pane whenever bumps rises over the count it saw last;
+ * the edge belongs to the terrain, so a body the record names that the view draws no figure for still bumps.
+ */
+struct VivariumFigureBumpView {
+    uint32_t object_id = 0;  // the walking body, the object id of its body record when it is a figure
+    double   normal_x = 0.0; // east share of the outward normal of the edge: -1 west edge, 1 east edge, 0 neither (AVTR_HOST_KEY_NORMAL_X)
+    double   normal_z = 0.0; // north share of the outward normal of the edge: -1 south edge, 1 north edge, 0 neither (AVTR_HOST_KEY_NORMAL_Z)
+    double   touch_x = 0.0;  // the touched point on the edge, world metres east, Godot's x (AVTR_HOST_KEY_TOUCH_X)
+    double   touch_z = 0.0;  // the touched point on the edge, world metres north, Godot's z (AVTR_HOST_KEY_TOUCH_Z)
+    uint32_t bumps = 0;      // bumps of this body against the edge since it walks (AVTR_HOST_KEY_BUMPS)
 };
 
 /**
@@ -1021,16 +1065,37 @@ public:
     /** The hand of Phase 06 let its thing go (07.10): a drop request on the drop port, object id the figure. */
     ase::kernel::HostStatus drop_figure(uint32_t figure);
     /**
-     * Report the skeleton of a figure as the scene built it (07.6): a measure request on the rig port, object id
-     * the figure, with the eye height and the height of its body above the soles, metres. ase-pl-avatar files them
-     * for ase-camera, whose face landing lifts its aim to that eye height. Which values are valid is the plugin's.
+     * brookTap under SS/PC (07.14, usecase:100399 carry brook water): a fill request on the fill port, object id the
+     * figure, no value. ase-pl-avatar files it as HUB_EQP_WATR_REQ under HUB_EQP_WATR_DRAW, ase-equipment fills the
+     * vessel in the hand to its room; the level comes back on the gear port as water_l.
      */
-    ase::kernel::HostStatus measure_figure(uint32_t figure, double eye_height, double height);
+    ase::kernel::HostStatus fill_figure(uint32_t figure);
+    /**
+     * The release of the can under SS/PC (07.14): a drain request on the drain port, object id the figure, with the
+     * litres the pour let go. ase-pl-avatar files it under HUB_EQP_WATR_POUR, ase-equipment lets go no more than the
+     * vessel holds; which litres are valid is the plugin's to check.
+     */
+    ase::kernel::HostStatus drain_figure(uint32_t figure, double litres);
+    /**
+     * Report the skeleton of a figure as the scene built it (07.6): a measure request on the rig port, object id
+     * the figure, with the eye height and the height of its body above the soles and the radius of the capsule
+     * around its whole body, metres. ase-pl-avatar files them for ase-camera, whose face landing lifts its aim to
+     * that eye height, and for ase-physics, which collides the walking body as that capsule. Which values are valid
+     * is the plugin's.
+     */
+    ase::kernel::HostStatus measure_figure(uint32_t figure, double eye_height, double height, double radius);
     /**
      * fig.turn (07.7): turn the figure itself on the spot by `yaw_delta` radians, a turn request on the turn port.
      * ase-pl-avatar lays it down as NET_INP_TURN; ase-player turns the figure and shows the gait of turning.
      */
     ase::kernel::HostStatus turn_figure(uint32_t figure, double yaw_delta);
+    /**
+     * Bind the figure to the area plate it stands on (07.7, usecase:101612 keep figure in loaded area): a bind
+     * request on the area port, object id the figure, with the plate - the patch whose anchor ase-terrain filed
+     * (TRN_FLAT_HGT, TRN_FLAT_X, TRN_FLAT_Z). ase-pl-avatar files it as HUB_PLR_AREA_PLATE; ase-player bounds the
+     * figure to the chunk borders of the loaded ase-gis raster (HUB_GIS_GRND) and marks the rim when it reaches one.
+     */
+    ase::kernel::HostStatus bind_figure_area(uint32_t figure, uint32_t plate);
     /** One line of the view itself (boot line, action, measurement) through the host's logger. */
     ase::kernel::HostStatus note(const char* text);
 
@@ -1042,6 +1107,10 @@ public:
      */
     [[nodiscard]] const VivariumPatchView* get_patch(uint32_t object_id) const;
     [[nodiscard]] const VivariumPatchView* get_patch_at(uint32_t place) const;
+    // The game hour ase-plant forecasts the patch to reach the stage at a position of the stage record
+    // (usecase:101635, D2455): the grow position takes grow_at_h, the mature position mtur_at_h, by the key
+    // the position is read under; every other position and an unknown one have no forecast (GODOT_HOUR_NONE).
+    [[nodiscard]] double stage_due_h(const VivariumPatchView& patch, uint8_t position) const;
     [[nodiscard]] bool has_patch(uint32_t object_id) const;
     [[nodiscard]] uint32_t patch_count() const;
     [[nodiscard]] const VivariumClockView& get_clock() const;
@@ -1132,6 +1201,12 @@ public:
      * plugin files the one code record every Production run. known false without figures.
      */
     [[nodiscard]] const VivariumFigureCodeView& get_figure_code() const;
+    /**
+     * The bumps of the walking bodies against the chunk edge as the boundary port showed them, read with every
+     * snapshot (07.13, usecase:101612): the plugin closes the set every Production run, so a body without a
+     * record has never bumped. Empty without figures.
+     */
+    [[nodiscard]] const std::vector<VivariumFigureBumpView>& get_figure_bumps() const;
     /** true when the running host offers every figure port of the start configuration. */
     [[nodiscard]] bool figure_offered() const;
 
@@ -1271,7 +1346,8 @@ private:
     VivariumFigureCameraView                         figure_camera_;  // the player camera of the camera port, last read
     std::vector<VivariumFigureGearView>              figure_gear_;    // the pieces of the gear port, last read
     VivariumFigureCodeView                           figure_code_;    // the codes of the code port, last read
-    const char*                                      failure_step_;
+    std::vector<VivariumFigureBumpView>              figure_bumps_;   // the bumps of the boundary port, last read
+    const char*                                     failure_step_;
     ase::kernel::HostStatus                          failure_status_;
     double                                           elapsed_in_s_ = 0.0;
     double                                           backlog_s_ = 0.0;   // filed real seconds of a return not laid yet

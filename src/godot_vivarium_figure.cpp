@@ -2,23 +2,23 @@
  * ASE GODOT ADAPTER - VIVARIUM VIEW FIGURE
  *
  * @file        godot_vivarium_figure.cpp
- * @brief       VivariumView - the figure of the seat: its configuration, its body in the scene and the input that leads it
- * @description PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.4 to 07.9: the start configuration names the six ports of
- *              ase-pl-avatar, the four operations the view submits through them and the seat and place the
- *              figure is spawned at; GodotHostResourceManager::boot asks for it once the host stands.
- *              follow_figure runs every frame after follow_scene: it lays every figure of the body port into
- *              the scene (godot_figure_scene.hpp), stands the scene's camera at the player camera's eye while
- *              the camera port carries one, and hands the fixed view of Phase 06 its camera back the frame the
- *              port carries none. The keys of the desktop lead the figure of this seat: W A S D the stick (07.4),
- *              Shift and Space sprint and jump, the arrow keys turn the player camera (07.5), C is cam.mode,
- *              Q and E turn the figure itself on the spot (fig.turn, 07.7). Once per figure node the rig the
- *              scene measured (eye height and height, godot_figure_rig.hpp) goes to the rig port (07.6).
- *              A thumb on the phone's stick (godot_vivarium_figure_controls.cpp, 07.9) leads over the keys: its
- *              deflection is sent through the same stick port in their place, running from run_share on.
+ * @brief       VivariumView::follow_figure - the figure of the seat: its body in the scene and the input that leads it
+ * @description PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.4 to 07.9: follow_figure runs every frame after follow_scene: it
+ *              lays every figure of the body port into the scene (godot_figure_scene.hpp), stands the scene's camera
+ *              at the player camera's eye while the camera port carries one, and hands the fixed view of Phase 06 its
+ *              camera back the frame the port carries none. The keys of the desktop lead the figure of this seat:
+ *              W A S D the stick (07.4), Shift and Space sprint and jump, the arrow keys turn the player camera
+ *              (07.5), C is cam.mode, Q and E turn the figure itself on the spot (fig.turn, 07.7). Once per figure
+ *              node the rig the scene measured (eye height and height, godot_figure_rig.hpp) goes to the rig port
+ *              (07.6). A thumb on the phone's stick (godot_vivarium_figure_controls.cpp, 07.9) leads over the keys:
+ *              its deflection is sent through the same stick port in their place, running from run_share on.
  *              Nothing about the figure is computed here; ase-player moves it, ase-camera places its camera.
  *              The hand of Phase 06 (07.10): whenever the thing in the hand changes, a hold request with its
  *              catalog id or a drop request goes out for the figure led; ase-equipment puts it on at
  *              socket_hand_r, and the gear port brings the piece back for the scene to hang under the socket.
+ *              The two rims of 07-G are written as lines on each edge: the figure held on the circle of its area
+ *              (figure edge, RAND DES AREALS) and the player camera held on it (figure bound, cam.bound).
+ *              The start configuration the view reads once stands in godot_vivarium_figure_config.cpp.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -27,7 +27,7 @@
  * @usecase     usecase:101554 - receive player input
  * @actor       Player Input Warden (PLAYINPWAR)
  * @created     2026-11-13
- * @modified    2026-11-15
+ * @modified    2026-11-17
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -36,7 +36,6 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_figure_scene.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/types.hpp>
@@ -46,7 +45,7 @@
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/classes/input.hpp>
 
-#include <cmath>
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -62,7 +61,6 @@ namespace {
  */
 constexpr double kFigureAxisFull = 1.0;          // a pressed key moves its stick axis to the end of its range
 constexpr double kFigureLevelOn = 1.0;           // sprint and jump: the level of a pressed key
-constexpr double kFigureSeatMax = 4294967295.0;  // the largest seat a uint32_t holds
 constexpr double kFigurePlaceStepM = 0.25;       // metres the led figure moves before its place line is written again
 
 /** The level of one key: kFigureAxisFull while it is held, else 0. */
@@ -71,132 +69,6 @@ double held(const ::godot::Input* input, ::godot::Key key) {
 }
 
 }  // namespace
-
-bool VivariumView::load_figure_config(const ::godot::Dictionary& root) {
-    // THE FIGURE OF THE SEAT (07.8): the ports of ase-pl-avatar, the operations through them and where the
-    // figure of this view's seat is spawned. Every key is required; the manager names the ports it misses
-    // once the host stands, so a unit set without the plugin boots and draws no figure.
-    ::godot::String text;
-    ::godot::Dictionary ports;
-    if (!read_section(root, "ports", ports)) {
-        return fail_config("ports");
-    }
-    if (!read_text(ports, "figure_body", text)) {
-        return fail_config("ports.figure_body");
-    }
-    start_.figure_body_port = utf8_of(text);
-    if (!read_text(ports, "figure_camera", text)) {
-        return fail_config("ports.figure_camera");
-    }
-    start_.figure_camera_port = utf8_of(text);
-    if (!read_text(ports, "figure_spawn", text)) {
-        return fail_config("ports.figure_spawn");
-    }
-    start_.figure_spawn_port = utf8_of(text);
-    if (!read_text(ports, "figure_stick", text)) {
-        return fail_config("ports.figure_stick");
-    }
-    start_.figure_stick_port = utf8_of(text);
-    if (!read_text(ports, "figure_orbit", text)) {
-        return fail_config("ports.figure_orbit");
-    }
-    start_.figure_orbit_port = utf8_of(text);
-    if (!read_text(ports, "figure_switch", text)) {
-        return fail_config("ports.figure_switch");
-    }
-    start_.figure_switch_port = utf8_of(text);
-    if (!read_text(ports, "figure_release", text)) {
-        return fail_config("ports.figure_release");
-    }
-    start_.figure_release_port = utf8_of(text);
-    if (!read_text(ports, "figure_seize", text)) {
-        return fail_config("ports.figure_seize");
-    }
-    start_.figure_seize_port = utf8_of(text);
-    if (!read_text(ports, "figure_hold", text)) {
-        return fail_config("ports.figure_hold");
-    }
-    start_.figure_hold_port = utf8_of(text);
-    if (!read_text(ports, "figure_drop", text)) {
-        return fail_config("ports.figure_drop");
-    }
-    start_.figure_drop_port = utf8_of(text);
-    if (!read_text(ports, "figure_gear", text)) {
-        return fail_config("ports.figure_gear");
-    }
-    start_.figure_gear_port = utf8_of(text);
-    if (!read_text(ports, "figure_code", text)) {
-        return fail_config("ports.figure_code");
-    }
-    start_.figure_code_port = utf8_of(text);
-    if (!read_text(ports, "figure_rig", text)) {
-        return fail_config("ports.figure_rig");
-    }
-    start_.figure_rig_port = utf8_of(text);
-    if (!read_text(ports, "figure_turn", text)) {
-        return fail_config("ports.figure_turn");
-    }
-    start_.figure_turn_port = utf8_of(text);
-
-    ::godot::Dictionary operations;
-    if (!read_section(root, "operations", operations)) {
-        return fail_config("operations");
-    }
-    if (!read_text(operations, "spawn", text)) {
-        return fail_config("operations.spawn");
-    }
-    start_.op_spawn = utf8_of(text);
-    if (!read_text(operations, "steer", text)) {
-        return fail_config("operations.steer");
-    }
-    start_.op_steer = utf8_of(text);
-    if (!read_text(operations, "turn", text)) {
-        return fail_config("operations.turn");
-    }
-    start_.op_turn = utf8_of(text);
-    if (!read_text(operations, "switch", text)) {
-        return fail_config("operations.switch");
-    }
-    start_.op_switch = utf8_of(text);
-    if (!read_text(operations, "release", text)) {
-        return fail_config("operations.release");
-    }
-    start_.op_release = utf8_of(text);
-    if (!read_text(operations, "seize", text)) {
-        return fail_config("operations.seize");
-    }
-    start_.op_seize = utf8_of(text);
-    if (!read_text(operations, "hold", text)) {
-        return fail_config("operations.hold");
-    }
-    start_.op_hold = utf8_of(text);
-    if (!read_text(operations, "drop", text)) {
-        return fail_config("operations.drop");
-    }
-    start_.op_drop = utf8_of(text);
-    if (!read_text(operations, "measure", text)) {
-        return fail_config("operations.measure");
-    }
-    start_.op_measure = utf8_of(text);
-
-    ::godot::Dictionary figure;
-    if (!read_section(root, "figure", figure)) {
-        return fail_config("figure");
-    }
-    double seat = 0.0;
-    if (!read_number(figure, "seat", seat) || !(seat >= 0.0) || seat > kFigureSeatMax ||
-        static_cast<double>(static_cast<uint32_t>(seat)) != seat) {
-        return fail_config("figure.seat");
-    }
-    start_.figure_seat = static_cast<uint32_t>(seat);
-    if (!read_number(figure, "x", start_.figure_x) || !std::isfinite(start_.figure_x)) {
-        return fail_config("figure.x");
-    }
-    if (!read_number(figure, "z", start_.figure_z) || !std::isfinite(start_.figure_z)) {
-        return fail_config("figure.z");
-    }
-    return true;
-}
 
 void VivariumView::follow_figure(double elapsed_s) {
     if (scene_ == nullptr) {
@@ -224,17 +96,51 @@ void VivariumView::follow_figure(double elapsed_s) {
     const std::vector<VivariumFigureView>& figures = resources_.get_figures();
     const VivariumFigureCodeView& codes = resources_.get_figure_code();
     fill_figures(scene_, figures, resources_.get_figure_gear(), figure_look_, codes);
+    // 07.13: the red glass pane where a walking body bumped the chunk edge, from the boundary port, no message with it
+    flash_figure_edges(scene_, resources_.get_figure_bumps(), figures, figure_glass_, elapsed_s);
 
-    // the rig of every figure node, once per node (07.6): eye height and height of the skeleton the scene built go
-    // to the rig port, so the face landing of ase-camera aims at the eyes of this file and not at a guessed height
+    // the rig of every figure node, once per node (07.6): eye height, height and body radius of the skeleton the
+    // scene built go to the rig port, so the face landing of ase-camera aims at the eyes of this file and the capsule
+    // ase-physics collides the walking body as has the measure of this file, not a guessed one
     for (const VivariumFigureView& figure : figures) {
         double eye_height = 0.0;
         double height = 0.0;
-        if (take_figure_rig(scene_, figure.object_id, eye_height, height)) {
-            const ase::kernel::HostStatus measured = resources_.measure_figure(figure.object_id, eye_height, height);
+        double radius = 0.0;
+        if (take_figure_rig(scene_, figure.object_id, eye_height, height, radius)) {
+            const ase::kernel::HostStatus measured =
+                resources_.measure_figure(figure.object_id, eye_height, height, radius);
             note(::godot::String("figure rig figure=") + ::godot::String::num_uint64(figure.object_id) + " eye " +
-                 ::godot::String::num(eye_height, 3) + " height " + ::godot::String::num(height, 3) + " status " +
-                 ::godot::String::num_int64(measured));
+                 ::godot::String::num(eye_height, 3) + " height " + ::godot::String::num(height, 3) + " radius " +
+                 ::godot::String::num(radius, 3) + " status " + ::godot::String::num_int64(measured));
+        }
+    }
+
+    // the area of every figure, once per figure (07.7, usecase:101612 keep figure in loaded area): the patch whose
+    // levelled disc the figure first stands on becomes its plate. ase-player bounds the figure to that disc and
+    // marks its rim, which the camera record carries back as edge. A figure on no disc is bound to none.
+    for (const VivariumFigureView& figure : figures) {
+        if (std::find(figure_area_bound_.begin(), figure_area_bound_.end(), figure.object_id) !=
+            figure_area_bound_.end()) {
+            continue;
+        }
+        for (const VivariumPatchSpec& spec : start_.patches) {
+            const VivariumPatchView* patch = resources_.get_patch_at(spec.place);
+            if (patch == nullptr) {
+                continue;
+            }
+            const double dx = figure.x - patch->x;
+            const double dz = figure.z - patch->z;
+            if (dx * dx + dz * dz > spec.half_m * spec.half_m) {
+                continue;
+            }
+            const ase::kernel::HostStatus bound = resources_.bind_figure_area(figure.object_id, patch->object_id);
+            note(::godot::String("figure area figure=") + ::godot::String::num_uint64(figure.object_id) + " plate " +
+                 ::godot::String::num_uint64(patch->object_id) + " place " + ::godot::String::num_uint64(spec.place) +
+                 " status " + ::godot::String::num_int64(bound));
+            if (bound == ase::kernel::HostStatusOk) {
+                figure_area_bound_.push_back(figure.object_id);
+            }
+            break;
         }
     }
 
@@ -252,6 +158,27 @@ void VivariumView::follow_figure(double elapsed_s) {
              ::godot::String::num_uint64(camera.figure) + " eye " + ::godot::String::num(camera.eye_x, 2) + " " +
              ::godot::String::num(camera.eye_y, 2) + " " + ::godot::String::num(camera.eye_z, 2));
         figure_view_shown_ = shown;
+    }
+
+    // the rim of the area (07-G, RAND DES AREALS): ase-physics holds the followed figure at a chunk border of the
+    // loaded ground (HUB_PHYS_STAND_BNDY, 07.13) and the camera record carries that mark; the line is written on each
+    // edge, never per frame. The fixed view follows no figure and stands on no rim.
+    const bool edge = shown && camera.edge;
+    if (edge != figure_edge_shown_) {
+        note(::godot::String("figure edge figure=") + ::godot::String::num_uint64(camera.figure) + " value " +
+             (edge ? "1" : "0"));
+        figure_edge_shown_ = edge;
+    }
+
+    // the rim of the camera (07-G, cam.bound): ase-camera holds the player camera on the circle of the loaded area
+    // (HUB_CAM_OWNR_BNDY, usecase:101612 keep figure in loaded area) and ase-pl-avatar hands that mark over as the
+    // key bound of the camera record; the line is written on each edge, never per frame. The fixed view of
+    // Phase 06 is no player camera and stands on no rim.
+    const bool bound = shown && camera.bound;
+    if (bound != figure_bound_shown_) {
+        note(::godot::String("figure bound figure=") + ::godot::String::num_uint64(camera.figure) + " value " +
+             (bound ? "1" : "0"));
+        figure_bound_shown_ = bound;
     }
 
     // the figure of this seat: the one it held last frame while that still stands, else the first of this frame
@@ -291,6 +218,22 @@ void VivariumView::follow_figure(double elapsed_s) {
         note(::godot::String("figure place figure=") + ::godot::String::num_uint64(led->object_id) + " x " +
              ::godot::String::num(place_x, 2) + " y " + ::godot::String::num(place_y, 2) + " z " +
              ::godot::String::num(place_z, 2));
+    }
+
+    // the gait of the figure led, at its first stand and then per change (07-F): the value of the body port beside
+    // the three codes of the code port, so the acceptance names stand, walk and run from the log and never guesses
+    if (led != nullptr && codes.known && take_figure_gait(scene_, led->object_id, led->gait)) {
+        note(::godot::String("figure gait figure=") + ::godot::String::num_uint64(led->object_id) + " value " +
+             ::godot::String::num(led->gait, 3) + " stand " + ::godot::String::num(codes.gait_stand, 3) + " walk " +
+             ::godot::String::num(codes.gait_walk, 3) + " run " + ::godot::String::num(codes.gait_run, 3));
+    }
+
+    // the detail level the figure led is drawn on, at its first frame and then per change (07-G, each detail level):
+    // the scene picks it by the figure's share of the frame height against the bands of the body port
+    int32_t drawn_level = 0;
+    if (led != nullptr && take_figure_level(scene_, led->object_id, drawn_level)) {
+        note(::godot::String("figure lod figure=") + ::godot::String::num_uint64(led->object_id) + " level " +
+             ::godot::String::num_int64(drawn_level));
     }
 
     // the hand of Phase 06 (07.10): what it holds the figure carries at socket_hand_r. One request per change of
