@@ -7,7 +7,7 @@
  * @brief       The thresholds and values of the mockup's signs() the bridge reports by while no port reports a sign
  * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.10, design decision 2026-11-10: the HUD draws every element from
  *              its frame and never asks whether a port delivered. While the patch set reports no state of a sign
- *              case (N0461) and flora.weather.v1 no weather signature (N0449), VivariumView::bridge_signs
+ *              case (N0461) and sky.weather.v1 no weather signature (N0449), VivariumView::bridge_signs
  *              (godot_vivarium_hud_signs.cpp) applies the mockup's signs() to the values the frame carries; the
  *              rules it applies are these, every one a hud_bridge_sign_* token of SHA (theme.css
  *              --ase-hud-bridge-sign-*).
@@ -27,7 +27,7 @@
  * @actor       Hänge-Birke (Betula pendula)
  * @register    N0461 (the state fields of each sign case), N0449 (the weather signatures), carrier N0448
  * @created     2026-11-11
- * @modified    2026-11-11
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.

@@ -45,6 +45,7 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/classes/input.hpp>

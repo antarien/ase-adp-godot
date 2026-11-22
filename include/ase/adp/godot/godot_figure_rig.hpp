@@ -13,6 +13,15 @@
  *              eyes of the rig are measured, and every frame, so the mix follows the gait of the body port and
  *              the open course of the turn on the spot.
  *
+ *              THE POSES AT THE CAMP FIRE (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP T.11, usecase:2157 - go to Sleep):
+ *              from version 3 on the file also carries sit_ground, sit_stone, sit_down, sit_down_stone,
+ *              sleep_back, sleep_side and lie_down (villager_body.json build.clips, scripts/figure.py:clip_pose).
+ *              The root of the mix is a state machine whose state stand holds the gait mix; a resting figure
+ *              sits down onto the ground or a ring stone and back up by the same clip played backward, a
+ *              sleeping one lies down from the seat and wakes back into it. The pose is chosen from what
+ *              ase-metabolism writes (MTB_IS_RESTING, MTB_IS_SLEEPING), never by the adapter: a figure that
+ *              sleeps always lies, none sleeps standing.
+ *
  *              THE EYES COME FROM THE REST POSE OF THE SKELETON. The bones of the Character Creator rig are
  *              turned against each other, so the sum of the file's bone offsets puts the feet a metre above the
  *              soles; only the global rest of L_Eye and R_Eye in the skeleton's space, carried through the
@@ -25,7 +34,7 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-14
- * @modified    2026-11-18
+ * @modified    2026-11-22
  * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -33,8 +42,12 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
+#include <ase/adp/godot/godot_figure_pose.hpp>
+
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/node3d.hpp>
+
+#include <cstdint>
 
 namespace ase::adp::godot {
 
@@ -42,8 +55,10 @@ namespace ase::adp::godot {
  * The motion of the figure file: its four clips loop, and an AnimationTree beside its AnimationPlayer mixes
  * them - idle, walk and run at the gait points the code port names (`gait_stand`, `gait_walk`, `gait_run`, a
  * blend space from the stand point to the run point), the turn clip over them by the open course on the spot,
- * and, where the file carries the bend clip, a OneShot that plays it once over all of them. false when the
- * file carries no AnimationPlayer or not all four looping clips.
+ * and, where the file carries the bend clip, a OneShot that plays it once over all of them. All of it is the
+ * state stand of a state machine; where the file carries the seven clips of the camp fire, the states of the
+ * seat and the sleep stand beside it (T.11). false when the file carries no AnimationPlayer or not all four
+ * looping clips.
  */
 bool add_figure_motion(::godot::Node* model, double gait_stand, double gait_walk, double gait_run);
 
@@ -51,11 +66,12 @@ bool add_figure_motion(::godot::Node* model, double gait_stand, double gait_walk
  * Drives the mix of the figure node `body` in this frame: `gait` as the body port carries it, bounded to the
  * range from `gait_stand` to `gait_run` the code port names, `turning` the share of the turn clip. `bend` true
  * fires the bend clip once over the mix (07.14, the figure draws water at the brook); a bend still playing is
- * not fired again, and a mix built from a file without the bend clip ignores it. Nothing when the node carries
- * no mix.
+ * not fired again, and a mix built from a file without the bend clip ignores it. `pose` (FIGURE_POSE_*) is the
+ * state the machine travels to, through sitting down, lying down, waking and standing up; a mix without the
+ * camp clips stays in stand. Nothing when the node carries no mix.
  */
 void drive_figure_motion(::godot::Node3D* body, double gait, double gait_stand, double gait_run, double turning,
-                         bool bend);
+                         bool bend, uint8_t pose);
 
 /**
  * The height of the eyes of the figure file `model` in the frame of its parent, metres: the mean of the rest

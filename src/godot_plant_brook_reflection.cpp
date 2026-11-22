@@ -25,7 +25,7 @@
  */
 
 #include <ase/adp/godot/godot_plant_brook_reflection.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/math.hpp>

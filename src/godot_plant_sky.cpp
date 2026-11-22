@@ -44,6 +44,7 @@
 #include <ase/adp/godot/godot_plant_stars.hpp>
 #include <ase/adp/godot/godot_plant_sun_halo.hpp>
 #include <ase/adp/godot/godot_plant_horizon_ridge.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
 

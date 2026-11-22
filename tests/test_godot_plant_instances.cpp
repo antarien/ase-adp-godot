@@ -27,7 +27,8 @@
 #include <doctest/doctest.h>
 
 #include <ase/adp/godot/godot_plant_instances.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <vector>
 

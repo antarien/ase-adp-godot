@@ -34,7 +34,7 @@
  *              The fades are .fade with hud_anim_fade; .still and reduced motion hold every one at its end.
  *
  *              BRIDGE GAP N0449. The kind of weather, the temperature and the rain of each coming phase, and
- *              whether its middle lies in the night, are flora.weather.v1. The head and every column are always
+ *              whether its middle lies in the night, are sky.weather.v1. The head and every column are always
  *              drawn in full from the frame: while the port files no record the bridge writes the mockup's
  *              forecast from hud_bridge_forecast_<n>_* of SHA and logs the gap once on its edge (godot_vivarium_hud_bridge.cpp,
  *              bridge_weather); the strip never asks whether a port delivered.
@@ -45,9 +45,9 @@
  * @category    ecs/module
  * @usecase     usecase:5606 - observe the sky
  * @actor       Sky Watch Guide (SKYWATGUI)
- * @register    N0449 (flora.weather.v1: the forecast of the next phases), carrier N0448
+ * @register    N0449 (sky.weather.v1: the forecast of the next phases), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-10
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -71,7 +71,7 @@
 
 namespace ase::adp::godot {
 
-/** One coming phase as flora.weather.v1 forecasts it. */
+/** One coming phase as sky.weather.v1 forecasts it. */
 struct ForecastPhase {
     int32_t period = 0;           // the phase, GODOT_PERIOD_FIRST .. GODOT_PERIOD_LAST
     const char* kind = nullptr;   // the weather key of the port (GODOT_HUD_WEATHER_*)

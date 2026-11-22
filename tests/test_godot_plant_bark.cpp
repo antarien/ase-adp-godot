@@ -3,10 +3,14 @@
  *
  * @file        test_godot_plant_bark.cpp
  * @design      DSGN_024
- * @brief       Pins the bark share and the bark tiling every internode instance carries as custom data
- * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2: rows_by_body puts beside each instance record
- *              the bark share of its organ (white bark against stem-base bark) and the tiling of its section,
- *              which the bark shader mixes by (godot_plant_geometry.hpp, GODOT_BARK_SHADER_FILE).
+ * @brief       Pins that the bark share and the bark tiling of an internode stay off the custom data of its instance
+ * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2 and usecase:101613: the bark share of an internode
+ *              (white bark against stem-base bark) and the tiling of its section reach the bark shader on CUSTOM0
+ *              of every vertex of its tube (godot_tube_ring.cpp lay_tube_ring, pinned by
+ *              test_godot_plant_tubes.cpp). The custom data beside an instance record carry the bend of a leaf card
+ *              (PLAN_ASE_VIVARIUM_TREEGEN T.6, test_godot_plant_bend.cpp); an organ without a bend record, an
+ *              internode among them, carries GODOT_BEND_NONE there, whatever its bark, so no shader of an instance
+ *              reads a bark value as a bend.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -14,7 +18,7 @@
  * @usecase     usecase:100395 - age the bark
  * @actor       Birkenborke (Betula pendula)
  * @created     2026-10-26
- * @modified    2026-10-26
+ * @modified    2026-11-21
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -27,6 +31,7 @@
 #include <doctest/doctest.h>
 
 #include <ase/adp/godot/godot_plant_instances.hpp>
+#include <ase/adp/godot/leaf/types.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <cstdint>
@@ -38,7 +43,7 @@ using test_records::instance;
 using test_records::kPatch;
 using test_records::organ;
 
-TEST_CASE("usecase:100395 age the bark: every instance carries the bark share of its organ as custom data, slot for slot") {
+TEST_CASE("usecase:100395 age the bark: the bark share of an internode stays off its instance, slot for slot flat") {
     VivariumOrganView stem = organ(11u, kPatch, 0.0);
     stem.bark = 0.75;  // the stem base, mostly stem-base bark
     VivariumOrganView band = organ(13u, kPatch, 0.0);
@@ -47,16 +52,13 @@ TEST_CASE("usecase:100395 age the bark: every instance carries the bark share of
     const auto split = rows_by_body({instance(11u), instance(12u), instance(13u)}, {stem, twig, band}, 2.0);
     const PlantBodyRows& plant = split.at(kPatch);
 
-    // one custom slot per record, beside it in the same order: the share first, then the tiling - here none
+    // one custom slot per record, beside it in the same order, and no bark in any of them: no bend record, flat
     REQUIRE(plant.up_to_custom.size() == 2u * GODOT_INSTANCE_CUSTOM_VALUES);
     REQUIRE(plant.above_custom.size() == GODOT_INSTANCE_CUSTOM_VALUES);
-    CHECK(plant.up_to_custom[0] == doctest::Approx(0.75));
-    CHECK(plant.up_to_custom[GODOT_INSTANCE_CUSTOM_VALUES] == doctest::Approx(0.25));
-    CHECK(plant.above_custom[0] == doctest::Approx(GODOT_BARK_WHITE));
-    for (uint32_t v = 1u; v < GODOT_INSTANCE_CUSTOM_VALUES; ++v) {
-        CHECK(plant.up_to_custom[v] == doctest::Approx(GODOT_TILE_NONE));
-        CHECK(plant.up_to_custom[GODOT_INSTANCE_CUSTOM_VALUES + v] == doctest::Approx(GODOT_TILE_NONE));
-        CHECK(plant.above_custom[v] == doctest::Approx(GODOT_TILE_NONE));
+    for (uint32_t v = 0u; v < GODOT_INSTANCE_CUSTOM_VALUES; ++v) {
+        CHECK(plant.up_to_custom[v] == static_cast<float>(GODOT_BEND_NONE));
+        CHECK(plant.up_to_custom[GODOT_INSTANCE_CUSTOM_VALUES + v] == static_cast<float>(GODOT_BEND_NONE));
+        CHECK(plant.above_custom[v] == static_cast<float>(GODOT_BEND_NONE));
     }
     // the records themselves stay as the port carried them
     check_carries(plant.up_to, 0u, instance(11u));
@@ -64,7 +66,7 @@ TEST_CASE("usecase:100395 age the bark: every instance carries the bark share of
     check_carries(plant.above, 0u, instance(12u));
 }
 
-TEST_CASE("03.11 step 2: every instance carries the bark tiling of its section after the bark share, unchanged") {
+TEST_CASE("03.11 step 2: the bark tiling of an internode stays off its instance, whatever its section carries") {
     VivariumOrganView stem = organ(11u, kPatch, 0.0);
     stem.bark = 0.5;
     stem.tile_around = 2.5;   // tiles of the white bark around the tube
@@ -74,10 +76,13 @@ TEST_CASE("03.11 step 2: every instance carries the bark tiling of its section a
     const PlantBodyRows& plant = split.at(kPatch);
 
     REQUIRE(plant.up_to_custom.size() == GODOT_INSTANCE_CUSTOM_VALUES);
-    CHECK(plant.up_to_custom[0] == doctest::Approx(0.5));
-    CHECK(plant.up_to_custom[1] == doctest::Approx(2.5));
-    CHECK(plant.up_to_custom[2] == doctest::Approx(0.75));
-    CHECK(plant.up_to_custom[3] == doctest::Approx(0.4));
+    for (uint32_t v = 0u; v < GODOT_INSTANCE_CUSTOM_VALUES; ++v) {
+        CHECK(plant.up_to_custom[v] == static_cast<float>(GODOT_BEND_NONE));
+    }
+    // the view of the internode keeps its tiling for the tube, unchanged
+    CHECK(stem.tile_around == doctest::Approx(2.5));
+    CHECK(stem.tile_along == doctest::Approx(0.75));
+    CHECK(stem.tile_base == doctest::Approx(0.4));
 }
 
 }  // namespace ase::adp::godot

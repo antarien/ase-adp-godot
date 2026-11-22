@@ -34,7 +34,8 @@
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_garden_return.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/classes/node.hpp>
 

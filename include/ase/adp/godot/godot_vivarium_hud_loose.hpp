@@ -27,6 +27,17 @@
  *              THE PATCH'S SHARE (patchLoose, m.html 372). The mean of the points within hud_bridge_loose_patch_m
  *              of the patch's centre; a centre without a point in reach keeps the start share.
  *
+ *              THE GAP THIS BRIDGE HOLDS (D2473 and D2475 under N0456, carrier N0448). The grid above is a raster
+ *              beside ase-gis and the settling a computation of soil state in the adapter; both stand only while no
+ *              owner writes the soil. The raster layer is designed, not built: CAUSA_ASE_GIS names
+ *              LYR_LITHO_COMPACTION (soil compaction 0 to 1) among the soil layers, and ase-gis carries no
+ *              GIS_LYR_LTH_ identifier for it (measured 2026-11-20). GisStatLthSoilPrflWorkComponent::compaction is
+ *              a field of a soil profile, not a cell of a raster, and has no writer in modules, plugins or adapter.
+ *              The way: the owner of the soil writes compaction per cell of that layer at 1 Hz, only changed cells;
+ *              the loosen verb is a request to that owner; rain settles it from GIS_LYR_ATMO_PRCP_MM_H at the
+ *              owner; the patch reads the looseness of its cell through flora.patch.v1 loose. Then this class goes,
+ *              migrated to that owner.
+ *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @design      DSGN_066
@@ -43,7 +54,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_start_config.hpp>
 #include <ase/adp/godot/godot_hud_ground_crumbs.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 

@@ -41,7 +41,10 @@
 #include <ase/adp/godot/godot_plant_sky.hpp>
 #include <ase/adp/godot/godot_plant_templates.hpp>
 #include <ase/adp/godot/godot_plant_tubes.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/tube/godot_knot_resource_manager.hpp>
+#include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/array_mesh.hpp>
@@ -109,8 +112,8 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
 
 /**
  * The node of the plant on `body` under `bodies`, made when it has none yet with its bark node (GODOT_PLANT_BARK,
- * usecase:101613) holding the empty fine and coarse tube (GODOT_PLANT_TUBES, GODOT_PLANT_TWIGS) and its four
- * empty instance nodes.
+ * usecase:101613) holding the empty fine and coarse tube (GODOT_PLANT_TUBES, GODOT_PLANT_TWIGS), the empty fine and
+ * coarse wood disks of its cut stubs (GODOT_PLANT_SCARS, GODOT_PLANT_SCAR_TWIGS) and its four empty instance nodes.
  */
 ::godot::Node3D* plant_node(::godot::Node3D* bodies, uint32_t body) {
     const ::godot::String name = body_name(body);
@@ -125,6 +128,8 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
     ::godot::Node3D* bark = add_part<::godot::Node3D>(plant, GODOT_PLANT_BARK);
     (void)add_part<::godot::MeshInstance3D>(bark, GODOT_PLANT_TUBES);
     (void)add_part<::godot::MeshInstance3D>(bark, GODOT_PLANT_TWIGS);
+    (void)add_part<::godot::MeshInstance3D>(bark, GODOT_PLANT_SCARS);
+    (void)add_part<::godot::MeshInstance3D>(bark, GODOT_PLANT_SCAR_TWIGS);
     for (const char* part : {GODOT_PLANT_LEAVES, GODOT_PLANT_MALE, GODOT_PLANT_FEMALE, GODOT_PLANT_FRUIT}) {
         (void)add_part<::godot::MultiMeshInstance3D>(plant, part);
     }
@@ -227,7 +232,8 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
 
     // the instanced classes: which half of its records a bundle draws, with which custom data and sway. The
     // internodes are no bundle any more - their bark is one tube per axis (usecase:101613), the shown orders reach
-    // its shader - so every bundle draws all its records, the half above GODOT_ORDER_EVERY.
+    // its shader - so every bundle draws all its records, the half above GODOT_ORDER_EVERY. The leaves carry the
+    // bend of their cards as custom data (PLAN_ASE_VIVARIUM_TREEGEN T.6); the vertex shader lifts the lattice by it.
     struct Bundle {
         const char* node;
         uint32_t organ_class;
@@ -238,8 +244,8 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
         const ::godot::Ref<::godot::Material>* material;
     };
     const Bundle bundles[] = {
-        {GODOT_PLANT_LEAVES, GODOT_ORGAN_LEAF, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &leaf,
-         &look.leaf.material},
+        {GODOT_PLANT_LEAVES, GODOT_ORGAN_LEAF, &PlantBodyRows::above, &PlantBodyRows::above_custom,
+         &PlantBodyRows::above_sway, &leaf, &look.leaf.material},
         {GODOT_PLANT_MALE, GODOT_ORGAN_MALE, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &male,
          &look.male.material},
         {GODOT_PLANT_FEMALE, GODOT_ORGAN_FEMALE, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &female,
@@ -253,9 +259,12 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
         rows[bundle.organ_class] = rows_by_body(resources.get_instances(bundle.organ_class),
                                                 resources.get_organs(bundle.organ_class), GODOT_ORDER_EVERY);
     }
-    // the bark of every body: one continuous tube per axis from the vertices of the bark port (usecase:101613)
+    // the bark of every body: one continuous tube per axis, its rings laid around every knot of the knot and foot
+    // ports from radius, quaternion and v, the cut face of every stub closed on its knot (usecase:101613, B0677)
+    const GodotKnotResourceManager& knot_store = resources.knots();
     const std::unordered_map<uint32_t, PlantBodyTube> tubes =
-        tubes_by_body(resources.get_bark(), resources.get_organs(GODOT_ORGAN_SEGMENT));
+        tubes_by_body(knot_store.get_knots(), knot_store.get_feet(), knot_store.get_scars(),
+                      resources.get_organs(GODOT_ORGAN_SEGMENT));
 
     // the view the plants are seen in: its render height in pixels and the tangent of half the vertical field of
     // view, which set from where the widest ring of a body is thinner than a pixel and its card takes over
@@ -282,6 +291,13 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
                       look.bark, shown_orders, false);
             fill_tube(part_of<::godot::MeshInstance3D>(bark, GODOT_PLANT_TWIGS), body_tube, body_tube.twig_indices,
                       look.bark, shown_orders, true);
+            // the cut face of every stub (PHASE_09_TREEGEN Schnittfläche): the fan of its wood disk over the same
+            // vertices in the cut wood, the fine pass up to the shown orders and the coarse pass above them, so each
+            // disk shows once, on the pass that draws the stub it closes
+            fill_tube(part_of<::godot::MeshInstance3D>(bark, GODOT_PLANT_SCARS), body_tube, body_tube.scar_indices,
+                      look.wood, shown_orders, false);
+            fill_tube(part_of<::godot::MeshInstance3D>(bark, GODOT_PLANT_SCAR_TWIGS), body_tube,
+                      body_tube.scar_indices, look.wood, shown_orders, true);
         }
         std::vector<const std::vector<float>*> drawn_rows;
         for (const Bundle& bundle : bundles) {
@@ -314,6 +330,8 @@ void mark_plant_stands(::godot::Node3D* scene, const std::unordered_map<uint32_t
         ::godot::MultiMeshInstance3D* leaves = part_of<::godot::MultiMeshInstance3D>(plant, GODOT_PLANT_LEAVES);
         hand_on(leaves, GODOT_SHADER_WILTED, stand.second.condition_known, stand.second.wilted);
         hand_on(leaves, GODOT_SHADER_DEAD, stand.second.condition_known, stand.second.dead);
+        // its own autumn colour (usecase:101646 colour the leaves in autumn): unknown hands the default back, the green
+        hand_on(leaves, GODOT_SHADER_AUTUMN, stand.second.autumn_known, stand.second.autumn);
     }
 }
 

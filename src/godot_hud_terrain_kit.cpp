@@ -11,9 +11,9 @@
  * @category    ecs/module
  * @usecase     usecase:100389 - level the ground
  * @actor       Plant Keeper (PLNTKEEPER)
- * @register    N0463 (flora.root.v1: the radius of the root zone, the bridge fills it), carrier N0448
+ * @register    N0463 (flora.patch.v1 root_m: the radius of the root zone, ase-radix RDX_SPREAD), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
+ * @modified    2026-11-20
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -271,10 +271,12 @@ bool TerrainKit::draw_flow(UiPen& canvas, const UiAnchor& anchor, const UiGround
 }
 
 bool TerrainKit::draw_roots(UiPen& canvas, const TerrainKitFrame& now, std::string& failed) {
-    // The ring always stands: root_m is flora.root.v1's radius, the hand bridge's while the port is silent (N0463).
+    // root_m is the patch record's reach of the root (ase-radix RDX_SPREAD over ase-pl-flora, N0463): a body
+    // without a living tip, or a record that carries no reach (NaN), holds no ground, and no ring stands. The
+    // frame is whole without it; the mesh, the brook and the reticle draw on.
+    (void)failed;
     if (!(now.root_m > 0.0)) {
-        failed = "TerrainKit: the frame carries no root zone radius";
-        return false;
+        return true;
     }
     ::godot::PackedVector2Array ring;
     if (now.ground->ring(*now.anchor, now.origin.x, now.origin.z, now.root_m, static_cast<int64_t>(root_steps_),

@@ -39,7 +39,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_sky_view.hpp>
 #include <ase/adp/godot/godot_plant_environment.hpp>  // SkyOvercastShade, the factor on the stars' opacity
 
 #include <godot_cpp/classes/node3d.hpp>

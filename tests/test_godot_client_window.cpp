@@ -26,7 +26,7 @@
 #include <doctest/doctest.h>
 
 #include <ase/adp/godot/godot_client_window.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <cstdint>
 #include <string>

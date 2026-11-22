@@ -32,7 +32,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>    // VivariumStreamView, the course the strokes follow
+#include <ase/adp/godot/godot_host_stream_view.hpp>        // VivariumStreamView, the course the strokes follow
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 #include <ase/adp/godot/godot_plant_brook_reflection.hpp>  // BrookReflectionShade, the shade the scene hands the water
 

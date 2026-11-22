@@ -22,7 +22,8 @@
  */
 
 #include <ase/adp/godot/godot_hud_figure_turn.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <cstdint>
@@ -31,32 +32,6 @@
 #include <vector>
 
 namespace ase::adp::godot {
-
-namespace {
-
-/**
- * The round end of a stroke of `width` at `end`, leaving it toward `outward`: the half disc beyond the stroke's last
- * point, as stroke-linecap round draws it in the mockup.
- */
-void draw_round_end(UiPen& canvas, const ::godot::Vector2& end, const ::godot::Vector2& outward, double width,
-                    const ::godot::Color& color) {
-    const float length = outward.length();
-    if (!(length > 0.0f)) {
-        return;
-    }
-    const float facing = ase::math::atan2(outward.y, outward.x);
-    const int32_t steps = static_cast<int32_t>(GODOT_RING_POINTS_PER_TURN) / 2;
-    const float reach = static_cast<float>(width) * 0.5f;
-    ::godot::PackedVector2Array half;
-    for (int32_t index = 0; index <= steps; ++index) {
-        const float angle = facing - ase::math::PI * 0.5f + ase::math::PI * static_cast<float>(index) /
-                                                                 static_cast<float>(steps);
-        half.push_back(end + ::godot::Vector2(ase::math::cos(angle), ase::math::sin(angle)) * reach);
-    }
-    canvas.draw_colored_polygon(half, color);
-}
-
-}  // namespace
 
 bool FigureTurn::bind(const UiTheme& theme, std::string& failed) {
     for (const std::pair<const char*, double*>& slot : std::initializer_list<std::pair<const char*, double*>>{
@@ -138,9 +113,8 @@ void FigureTurn::draw(UiPen& canvas, const ::godot::Transform2D& frame, bool lit
     stroke.a *= static_cast<float>(alpha);
     const int64_t last = points_.size() - 1;
     canvas.draw_set_transform_matrix(frame);
-    canvas.draw_polyline(points_, stroke, static_cast<float>(line_), true);
-    draw_round_end(canvas, points_[0], points_[0] - points_[1], line_, stroke);
-    draw_round_end(canvas, points_[last], points_[last] - points_[last - 1], line_, stroke);
+    // stroke-linecap round on both ends of the arc, the one round stroke of the HUD (godot_hud_ui_stroke).
+    svg_polyline_round(canvas, frame, points_, stroke, line_);
     canvas.draw_set_transform_matrix(::godot::Transform2D());
 
     // the chevrons: ‹ ends dx left of the first point, › starts dx right of the last, both dy under them

@@ -23,7 +23,7 @@
 
 #include <ase/adp/godot/godot_hud_sign_marker.hpp>
 #include <ase/adp/godot/godot_plant_water.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/variant/string.hpp>
 

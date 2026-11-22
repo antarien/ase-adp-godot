@@ -39,6 +39,7 @@ namespace ase::adp::godot {
 // which nearly every unit of the adapter includes.
 constexpr const char* GODOT_LEAF_SEASON_COLOR = "leaf_season_color";  // global: the season's colour, its alpha the share it takes of the leaf
 constexpr const char* GODOT_LEAF_DRY_COLOR = "leaf_dry_color";        // global: the dry olive, its alpha the share a wilting leaf turns toward it
+constexpr const char* GODOT_LEAF_SEASON_AUTUMN = "leaf_season_autumn"; // global: 1 while the season is autumn, then a leaf whose body carries its own autumn colour turns by it (usecase:101646 colour the leaves in autumn), else 0
 constexpr float GODOT_LEAF_NOTE_STEP = 0.01f;                         // a channel that moves less than this since the frame before writes no new log line
 constexpr const char* GODOT_LEAF_NOTE_META = "ase_leaf_noted";        // meta of the RenderingServer: the values the last log line named; Godot answers global_shader_parameter_get only in the editor
 
@@ -50,6 +51,7 @@ struct LeafSeasonShade {
     bool shown = false;                                            // false before the HUD stands: the leaf keeps its own colour
     ::godot::Color season = ::godot::Color(0.0f, 0.0f, 0.0f, 0.0f);  // LEAF_SEASON_* of the season; alpha 0 lays no colour over the leaf
     ::godot::Color dry = ::godot::Color(0.0f, 0.0f, 0.0f, 0.0f);     // LEAF_DRY with leaf_dry_share as alpha; alpha 0 leaves a wilting leaf in the wilted colour
+    float autumn = 0.0f;                                           // 1 while the season is autumn (LeafSeasonFrame::autumn): each body's own autumn colour sets how far its leaves turn (usecase:101646)
 };
 
 /**

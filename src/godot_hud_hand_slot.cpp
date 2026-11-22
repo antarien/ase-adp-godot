@@ -25,7 +25,7 @@
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_vivarium_watch.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
 

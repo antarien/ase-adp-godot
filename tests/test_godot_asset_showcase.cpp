@@ -25,7 +25,7 @@
  */
 
 #include <ase/adp/godot/godot_asset_showcase.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/asset/types.hpp>
 
 #include <doctest/doctest.h>
 

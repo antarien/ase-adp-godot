@@ -21,7 +21,8 @@
  */
 
 #include <ase/adp/godot/godot_hud_focus_cluster.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <godot_cpp/core/math.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>

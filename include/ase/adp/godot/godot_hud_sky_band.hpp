@@ -52,7 +52,7 @@
  *              mockup's values from hud_bridge_clock_* of SHA and logs the gap once on its edge
  *              (godot_vivarium_hud_bridge.cpp, bridge_clock); the band never asks whether a port delivered.
  *
- *              BRIDGE GAP N0449. The kind of weather, the temperature and the wind come from flora.weather.v1.
+ *              BRIDGE GAP N0449. The kind of weather, the temperature and the wind come from sky.weather.v1.
  *              The glyph, the temperature and the wind are always drawn in full from weather_kind, temperature
  *              and wind: while the port files no record the bridge writes the mockup's weather from
  *              hud_bridge_weather_* of SHA and logs the gap once on its edge (godot_vivarium_hud_bridge.cpp,
@@ -64,9 +64,9 @@
  * @category    ecs/module
  * @usecase     usecase:5606 - observe the sky
  * @actor       Sky Watch Guide (SKYWATGUI)
- * @register    N0460 (flora.day.v1: light hours, season; flora.phase.v1: phase starts), N0449 (flora.weather.v1), carrier N0448
+ * @register    N0460 (flora.day.v1: light hours, season; flora.phase.v1: phase starts), N0449 (sky.weather.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-11
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.

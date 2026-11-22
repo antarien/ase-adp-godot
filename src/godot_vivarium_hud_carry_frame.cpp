@@ -22,8 +22,8 @@
  * @register    N0451 (flora.carry.v1), N0452 (flora.stow.v1), N0487 (physics.body.v1 bodies of the tool place and
  *              the ground things), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-20
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -31,7 +31,7 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_hud_carry.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -393,7 +393,8 @@ void VivariumCarryBridge::fill(VivariumHudFrame& now, const ::godot::Vector3& pa
             second = true;
         } else if (same_place(thing.place, GODOT_HUD_PLACE_HAND)) {
             hand_ = HandThing{thing.key, facts.id, facts.id, facts.stack, static_cast<uint32_t>(thing.count),
-                              weight(thing), thing.fill_l + thing.sap_l, facts.cap_l, facts.verbs, level};
+                              weight(thing), thing.fill_l + thing.sap_l, facts.cap_l, facts.verbs, level,
+                              thing.mm_per_l};
             held = true;
         } else if (same_place(thing.place, GODOT_HUD_PLACE_GROUND)) {
             // A tool at the place leans at its slot along the place, at the height of the place; any other lies

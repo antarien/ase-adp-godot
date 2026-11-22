@@ -11,10 +11,10 @@
  * @category    ecs/module
  * @usecase     usecase:100367 - water a patch
  * @actor       Plant Keeper (PLNTKEEPER)
- * @register    N0454 (flora.patch.v1), N0449 (flora.weather.v1), N0462, N0461, N0463 (flora.root.v1), N0457,
+ * @register    N0454 (flora.patch.v1), N0449 (sky.weather.v1), N0462, N0461, N0463 (flora.root.v1), N0457,
  *              N0464 (height and slope under the brush), carrier N0448: gaps of the bridge, never of this unit
  * @created     2026-11-10
- * @modified    2026-11-10
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -23,7 +23,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_hand_mode.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/core/math.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -249,7 +249,7 @@ bool HandMode::water(UiPen& canvas, const ::godot::Transform2D& frame, const Han
         }
     }
 
-    // The rain the forecast brings: flora.weather.v1's, or the mockup's the bridge writes while the port is
+    // The rain the forecast brings: sky.weather.v1's, or the mockup's the bridge writes while the port is
     // silent (bridge_weather). A forecast without rain draws no warning, as the mockup's rainIn() returns none.
     if (!now.rain_coming) {
         return true;

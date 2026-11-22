@@ -48,6 +48,12 @@ The same form as plugins/ase-pl-vegetation/tests.
   ase-adp-godot-binding-test  bind_assets against a test manifest, stand-in colours (03.2). Pure.
   ase-adp-godot-ground-test   build_ground, mark_ground (levelled disc, brook bed) and the uniforms of
                               the ground shader (03.8, 03.11). Pure computation.
+  ase-adp-godot-figlayout-test The tap square of cam.mode against the band of Phase 06: sky field, season
+                              word, debug switch, read from SHA's theme.css (07.1, B0352). Pure computation.
+  ase-adp-godot-hold-test     start_hold_step: the one order in which the steps hold the start screen,
+                              the figure file before a jump (07.9, B0357). Pure computation.
+  ase-adp-godot-water-test    build_water, build_water_table and build_water_line in the beds (03.11, B0285).
+  ase-adp-godot-waterpit-test The water of the pits ase-hydro fills, pit_water_levels (D2506). Pure computation.
   ase-adp-godot-keeper-test   The return to the garden of the Plant Keeper (03.1, 03.6, V6). Pure computation.
   ase-adp-godot-focus-test    The selected patch: the place the camera looks at, its near view and the
                               zoom (03.1, V2). Pure computation.
@@ -117,7 +123,7 @@ foreach(_adp_godot_bundle_test host refusal scene tree figure camera)
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant instances bark tubes impostor templates stand binding ground water keeper focus seed exposure window context signs chips showcase)
+foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring knots impostor templates stand binding ground figlayout hold water waterpit keeper focus seed exposure window context signs chips pose showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
@@ -126,8 +132,14 @@ foreach(_adp_godot_pure_test layout plant instances bark tubes impostor template
         set(_adp_godot_pure_source test_godot_plant_instances.cpp)
     elseif(_adp_godot_pure_test STREQUAL "bark")
         set(_adp_godot_pure_source test_godot_plant_bark.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "bend")
+        set(_adp_godot_pure_source test_godot_plant_bend.cpp)  # usecase:6540 generate plant organs, TREEGEN T.6
     elseif(_adp_godot_pure_test STREQUAL "tubes")
         set(_adp_godot_pure_source test_godot_plant_tubes.cpp)  # usecase:101613 show the plant bark tubes
+    elseif(_adp_godot_pure_test STREQUAL "ring")
+        set(_adp_godot_pure_source test_godot_tube_ring.cpp)  # usecase:101644 count ring corners by size
+    elseif(_adp_godot_pure_test STREQUAL "knots")
+        set(_adp_godot_pure_source test_godot_knot_store.cpp)  # usecase:101613 show the plant bark tubes, N0543
     elseif(_adp_godot_pure_test STREQUAL "impostor")
         set(_adp_godot_pure_source test_godot_plant_impostor.cpp)  # usecase:101613, the card of a far body
     elseif(_adp_godot_pure_test STREQUAL "templates")
@@ -138,8 +150,14 @@ foreach(_adp_godot_pure_test layout plant instances bark tubes impostor template
         set(_adp_godot_pure_source test_godot_asset_binding.cpp)
     elseif(_adp_godot_pure_test STREQUAL "ground")
         set(_adp_godot_pure_source test_godot_plant_ground.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "figlayout")
+        set(_adp_godot_pure_source test_godot_hud_figure_layout.cpp)  # usecase:101554 receive player input
+    elseif(_adp_godot_pure_test STREQUAL "hold")
+        set(_adp_godot_pure_source test_godot_start_hold.cpp)  # usecase:100387 view the plant
     elseif(_adp_godot_pure_test STREQUAL "water")
         set(_adp_godot_pure_source test_godot_plant_water.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "waterpit")
+        set(_adp_godot_pure_source test_godot_plant_water_pit.cpp)  # usecase:101339, the water of the pits (D2506)
     elseif(_adp_godot_pure_test STREQUAL "keeper")
         set(_adp_godot_pure_source test_godot_keeper_flow.cpp)
     elseif(_adp_godot_pure_test STREQUAL "focus")
@@ -156,6 +174,8 @@ foreach(_adp_godot_pure_test layout plant instances bark tubes impostor template
         set(_adp_godot_pure_source test_godot_hud_context_signs.cpp)  # usecase:101440 grow the interface with skills
     elseif(_adp_godot_pure_test STREQUAL "chips")
         set(_adp_godot_pure_source test_godot_hud_context.cpp)  # usecase:101440 grow the interface with skills
+    elseif(_adp_godot_pure_test STREQUAL "pose")
+        set(_adp_godot_pure_source test_godot_figure_pose.cpp)  # usecase:2157 go to Sleep, FIRECAMP T.11: no figure sleeps standing
     else()
         set(_adp_godot_pure_source test_godot_asset_showcase.cpp)
     endif()
@@ -168,9 +188,10 @@ foreach(_adp_godot_pure_test layout plant instances bark tubes impostor template
             ase::adp::godot-host
             doctest::doctest
     )
-    if(_adp_godot_pure_test STREQUAL "ground")
-        # the ground test reads shaders/plant_ground.gdshader from the tree; only this target takes ase-fileio,
-        # so no other unit's command line changes (usecase:101339 show the ground around plant)
+    if(_adp_godot_pure_test STREQUAL "ground" OR _adp_godot_pure_test STREQUAL "figlayout")
+        # the ground test reads shaders/plant_ground.gdshader, the figlayout test SHA's theme.css from the tree;
+        # only these targets take ase-fileio, so no other unit's command line changes (usecase:101339 show the
+        # ground around plant, usecase:101554 receive player input)
         target_link_libraries(${_adp_godot_pure_target} PRIVATE ase::fileio)
     endif()
     add_test(NAME ${_adp_godot_pure_target} COMMAND ${_adp_godot_pure_target})

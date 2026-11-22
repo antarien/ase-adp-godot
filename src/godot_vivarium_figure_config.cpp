@@ -34,6 +34,7 @@
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/types.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -58,6 +59,51 @@ bool VivariumView::load_figure_config(const ::godot::Dictionary& root) {
         return fail_config("ports.figure_body");
     }
     start_.figure_body_port = utf8_of(text);
+    // The body of each figure for the rail CORPO (usecase:101440, U01, U03, N0530): the key is required, the port
+    // optional; a host without it draws the SHA defaults of the bridge (VivariumView::bridge_body).
+    if (!read_text(ports, "survival_body", text)) {
+        return fail_config("ports.survival_body");
+    }
+    start_.survival_body_port = utf8_of(text);
+    // The rest and sleep of each figure for the rest card (usecase:101440, U05, N0555): the key is required, the
+    // port optional; a host without it keeps the mockup's pose of the bridge (VivariumView::bridge_rest).
+    if (!read_text(ports, "survival_rest", text)) {
+        return fail_config("ports.survival_rest");
+    }
+    start_.survival_rest_port = utf8_of(text);
+    // Every fire cell for the card FOGUEIRA (usecase:101440, U04, B0657): the key is required, the port optional; a
+    // host without it draws the SHA defaults of the bridge (VivariumView::bridge_fire).
+    if (!read_text(ports, "survival_fire", text)) {
+        return fail_config("ports.survival_fire");
+    }
+    start_.survival_fire_port = utf8_of(text);
+    // The ash and the burn time of every fire cell for the same card (T.8, E0257): a port of its own, because the
+    // fire record is full at the width of the host; the key is required, the port optional, and a host without it
+    // leaves the ash heap and the burn time of the card on the SHA defaults of the bridge (VivariumView::bridge_fire).
+    if (!read_text(ports, "survival_left", text)) {
+        return fail_config("ports.survival_left");
+    }
+    start_.survival_left_port = utf8_of(text);
+    // The spoil of the food each figure carries for the ring ESTRAGO (usecase:101440, U07, N0530) and the port the
+    // start stock of its bag goes in through (T.8, usecase:5378): both keys required, both ports optional; a host
+    // without the first draws the mockup's ring of the bridge (VivariumView::bridge_food), a host without the
+    // second lays no stock and notes it once.
+    if (!read_text(ports, "survival_food", text)) {
+        return fail_config("ports.survival_food");
+    }
+    start_.survival_food_port = utf8_of(text);
+    // The soot in the air of the cell each figure stands in for the smoke plume of the air mark (usecase:101440, U06,
+    // D2500): ase-fire lays the soot of every fire cell on the raster cell of its fuel body, ase-gis sums it per cell
+    // as GIS_LOCAL_SOOT and SurvivalHostSmokExptSystem files it. The key is required, the port optional; a host
+    // without it leaves the plume on the owner's grade of the air alone (VivariumView::bridge_air).
+    if (!read_text(ports, "survival_smoke", text)) {
+        return fail_config("ports.survival_smoke");
+    }
+    start_.survival_smoke_port = utf8_of(text);
+    if (!read_text(ports, "survival_stock", text)) {
+        return fail_config("ports.survival_stock");
+    }
+    start_.survival_stock_port = utf8_of(text);
     if (!read_text(ports, "figure_camera", text)) {
         return fail_config("ports.figure_camera");
     }
@@ -172,6 +218,10 @@ bool VivariumView::load_figure_config(const ::godot::Dictionary& root) {
         return fail_config("operations.drain");
     }
     start_.op_drain = utf8_of(text);
+    if (!read_text(operations, "stock", text)) {
+        return fail_config("operations.stock");
+    }
+    start_.op_stock = utf8_of(text);
     if (!read_text(operations, "measure", text)) {
         return fail_config("operations.measure");
     }
@@ -197,11 +247,47 @@ bool VivariumView::load_figure_config(const ::godot::Dictionary& root) {
     if (!read_number(figure, "z", start_.figure_z) || !std::isfinite(start_.figure_z)) {
         return fail_config("figure.z");
     }
+    // The plate of the figure is a relation the product names (07.7, B0447): the place of one patch of "patches",
+    // never the patch the figure happens to stand on. load_patches ran before, so the place is held against them.
+    double place = 0.0;
+    if (!read_number(figure, "place", place) || !(place >= 0.0) || place > kFigureSeatMax ||
+        static_cast<double>(static_cast<uint32_t>(place)) != place) {
+        return fail_config("figure.place");
+    }
+    start_.figure_place = static_cast<uint32_t>(place);
+    if (std::none_of(start_.patches.begin(), start_.patches.end(),
+                     [&](const VivariumPatchSpec& patch) { return patch.place == start_.figure_place; })) {
+        return fail_config("figure.place");
+    }
     // The character the figure plays is the product's to name; the engine carries no name of its own.
     if (!read_text(figure, "character", text)) {
         return fail_config("figure.character");
     }
     start_.figure_character = utf8_of(text);
+    // The start stock of the bag (T.8, usecase:5378): what the figure carries when it first stands, each piece
+    // with its item key and its fresh mass. The list may be empty; a piece without a key or a mass above zero is a
+    // broken product and refuses the configuration.
+    const ::godot::Variant stock_value = figure.get("stock", ::godot::Variant());
+    if (stock_value.get_type() != ::godot::Variant::ARRAY) {
+        return fail_config("figure.stock");
+    }
+    const ::godot::Array stock = stock_value;
+    start_.stock.clear();
+    for (int64_t i = 0; i < stock.size(); ++i) {
+        if (stock[i].get_type() != ::godot::Variant::DICTIONARY) {
+            return fail_config("figure.stock[]");
+        }
+        const ::godot::Dictionary entry = stock[i];
+        VivariumStockSpec piece;
+        if (!read_text(entry, "item", text) || text.is_empty()) {
+            return fail_config("figure.stock[].item");
+        }
+        piece.item = utf8_of(text);
+        if (!read_number(entry, "kg", piece.kg) || !std::isfinite(piece.kg) || !(piece.kg > 0.0)) {
+            return fail_config("figure.stock[].kg");
+        }
+        start_.stock.push_back(piece);
+    }
     return true;
 }
 

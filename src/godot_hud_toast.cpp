@@ -21,7 +21,8 @@
  */
 
 #include <ase/adp/godot/godot_hud_toast.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/variant/vector2.hpp>
 

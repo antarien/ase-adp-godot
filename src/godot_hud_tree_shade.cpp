@@ -25,7 +25,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_tree_shade.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <godot_cpp/variant/vector2.hpp>
 

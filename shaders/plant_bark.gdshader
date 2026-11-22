@@ -21,6 +21,26 @@
  *              spaced corners) closes a ring up to it. It takes the swing of the branch by its two includes,
  *              sway_uniforms.gdshaderinc and sway_swing.gdshaderinc, with the slot and share of the vertex.
  *
+ *              THE KNOT FORM (PLAN_ASE_VIVARIUM_TREEGEN T.6, knot_form = true, set by fill_tube when the tube
+ *              carries CUSTOM2): every vertex stands at the centre of its knot with the template direction
+ *              (cos a, 0, -sin a) as its normal; the shader turns normal, tangent and binormal by the knot frame on
+ *              CUSTOM2 and sets the corner out by the ring radius on CUSTOM1.b, so the corners stand where
+ *              ase-render-data laid them. In the vertex form every vertex already stands at its corner.
+ *
+ *              THE BARK NOISE ("Rindenrauschen", plan T.6): d = wobble_amp * radius * fbm3(P * freq + o_axis), along
+ *              the normal of the own tube, pure view. wobble_amp is GODOT_BARK_WOBBLE_MOST, the 0.15 the plan bounds
+ *              the displacement at, and the fractal sum is held in [-1, 1]. freq, rough, the octaves and whether an
+ *              order is noised are the noise columns of the Houdini generator per order (PLAN_ASE_VIVARIUM_TREEGEN_REF,
+ *              freq<i>, rough<i>, maxoctave<i>, use_noise<i>; the plan takes them twice, for the growth and for the
+ *              bark). o_axis is spread from the noise key of the axis on CUSTOM3.r as the generator spreads its
+ *              per-branch offset ((random - 0.5) * 250 per axis of the field). P is the corner in the space of the
+ *              plant, so the closing vertex of a ring and the rim of a cut face move with the ring they close.
+ *
+ *              THE CUT FACE (PHASE_09_TREEGEN Schnittfläche, cut_face = true on the wood material of the scene):
+ *              the wood disk on the tip knot of a cut stub lies in the same arrays and carries the tiling of its
+ *              rim, but its UV is turned around the pith in the middle of the wood texture, so it is sampled once
+ *              over the disk instead of by the tiles of the bark.
+ *
  * @module     ase-adp-godot
  * @layer      5 (Adapter)
  * @design     DSGN_066
@@ -28,8 +48,8 @@
  * @usecase    usecase:101613 - show the plant bark tubes
  * @actor      Worldkeeper Perception Relay (WORLPERREL)
  * @created     2026-11-11
- * @modified    2026-11-14
- * @version     00.00.02.00000
+ * @modified    2026-11-21
+ * @version     00.00.03.00000
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -52,11 +72,93 @@ uniform vec2 base_uv = vec2(1.0);
 uniform float shown_orders = 0.0;
 uniform bool coarse = false;
 uniform float least_pixels = 0.0;
+uniform bool knot_form = false;
+uniform bool cut_face = false;
+uniform float wobble_amp = 0.0;
 varying float base_share;
 varying vec3 tiles;
+// the noise columns of the Houdini generator per axis order 0 to 5 (PLAN_ASE_VIVARIUM_TREEGEN_REF): freq<i>, rough<i>,
+// use_noise<i>, and maxoctave<i>, 8 in every order; each octave doubles the frequency (lacunarity 2)
+const float WOBBLE_FREQ[6] = {1.0, 1.0, 2.0, 1.0, 1.0, 1.0};
+const float WOBBLE_ROUGH[6] = {0.2, 0.1, 0.1, 0.1, 0.1, 0.1};
+const float WOBBLE_ON[6] = {1.0, 1.0, 1.0, 1.0, 1.0, 0.0};
+const float WOBBLE_ORDER_MOST = 5.0;
+const int WOBBLE_OCTAVES = 8;
+const float WOBBLE_LACUNARITY = 2.0;
+// the spread of the per-branch offset of the generator: (random - 0.5) * 250 per axis of the field
+const float WOBBLE_CENTRE = 0.5;
+const float WOBBLE_SPAN = 250.0;
+const float WOBBLE_SHARE_STEPS = 65536.0;
+const uint WOBBLE_SHARE_MASK = 0xffffu;
+// the twelve edge directions of the gradient noise
+const vec3 WOBBLE_GRADIENTS[12] = {
+    vec3(1.0, 1.0, 0.0), vec3(-1.0, 1.0, 0.0), vec3(1.0, -1.0, 0.0), vec3(-1.0, -1.0, 0.0),
+    vec3(1.0, 0.0, 1.0), vec3(-1.0, 0.0, 1.0), vec3(1.0, 0.0, -1.0), vec3(-1.0, 0.0, -1.0),
+    vec3(0.0, 1.0, 1.0), vec3(0.0, -1.0, 1.0), vec3(0.0, 1.0, -1.0), vec3(0.0, -1.0, -1.0)};
+// an integer hash: the noise rests on whole numbers, never on sin, so a handset and a desktop draw the same field
+uint wobble_hash(uint h) {
+    h ^= h >> 16u;
+    h *= 0x7feb352du;
+    h ^= h >> 15u;
+    h *= 0x846ca68bu;
+    h ^= h >> 16u;
+    return h;
+}
+float wobble_slope(ivec3 corner, vec3 from) {
+    uint h = wobble_hash(uint(corner.x) * 0x8da6b343u ^ uint(corner.y) * 0xd8163841u ^ uint(corner.z) * 0xcb1ab31fu);
+    return dot(WOBBLE_GRADIENTS[int(h % 12u)], from);
+}
+// gradient noise of one octave, about [-1, 1], 0 at every whole point
+float wobble_perlin(vec3 p) {
+    ivec3 i = ivec3(floor(p));
+    vec3 f = fract(p);
+    vec3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float x00 = mix(wobble_slope(i, f), wobble_slope(i + ivec3(1, 0, 0), f - vec3(1.0, 0.0, 0.0)), u.x);
+    float x10 = mix(wobble_slope(i + ivec3(0, 1, 0), f - vec3(0.0, 1.0, 0.0)),
+                    wobble_slope(i + ivec3(1, 1, 0), f - vec3(1.0, 1.0, 0.0)), u.x);
+    float x01 = mix(wobble_slope(i + ivec3(0, 0, 1), f - vec3(0.0, 0.0, 1.0)),
+                    wobble_slope(i + ivec3(1, 0, 1), f - vec3(1.0, 0.0, 1.0)), u.x);
+    float x11 = mix(wobble_slope(i + ivec3(0, 1, 1), f - vec3(0.0, 1.0, 1.0)),
+                    wobble_slope(i + ivec3(1, 1, 1), f - vec3(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+// the fractal sum fbm3: each octave weighs rough times the one below, the sum is divided by its weights and held in
+// [-1, 1], so the displacement never passes wobble_amp * radius
+float wobble_fbm(vec3 p, float rough) {
+    float sum = 0.0;
+    float weight = 1.0;
+    float weights = 0.0;
+    float scale = 1.0;
+    for (int k = 0; k < WOBBLE_OCTAVES; k++) {
+        sum += weight * wobble_perlin(p * scale);
+        weights += weight;
+        weight *= rough;
+        scale *= WOBBLE_LACUNARITY;
+    }
+    return clamp(sum / weights, -1.0, 1.0);
+}
+// o_axis from the noise key of the axis: three shares of its hash chain, each centred and spread
+vec3 wobble_place(float key) {
+    uint hx = wobble_hash(floatBitsToUint(key));
+    uint hy = wobble_hash(hx);
+    uint hz = wobble_hash(hy);
+    vec3 share = vec3(float(hx & WOBBLE_SHARE_MASK), float(hy & WOBBLE_SHARE_MASK), float(hz & WOBBLE_SHARE_MASK));
+    return (share / WOBBLE_SHARE_STEPS - WOBBLE_CENTRE) * WOBBLE_SPAN;
+}
+// a direction of the template turned by the unit quaternion of its knot
+vec3 knot_turn(vec4 q, vec3 v) {
+    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
 void vertex() {
     base_share = clamp(CUSTOM0.r, 0.0, 1.0);
     tiles = CUSTOM0.gba;
+    // the knot form: the template corner turned by the knot frame and set out by the ring radius (THE KNOT FORM)
+    if (knot_form) {
+        NORMAL = knot_turn(CUSTOM2, NORMAL);
+        TANGENT = knot_turn(CUSTOM2, TANGENT);
+        BINORMAL = knot_turn(CUSTOM2, BINORMAL);
+        VERTEX += NORMAL * CUSTOM1.b;
+    }
     // a ring the other tube draws closes onto its axis: the fine tube the orders up to shown_orders, the coarse
     // tube of the twigs the orders above them. Its quads fall to nothing, a quad between a drawn and a closed ring
     // tapers to the axis
@@ -73,16 +175,26 @@ void vertex() {
     // r * least_pixels / ring_pixels
     if (other_tube) {
         VERTEX -= NORMAL * CUSTOM1.b;
-    } else if (ring_pixels < least_pixels && ring_pixels > 0.0) {
-        VERTEX += NORMAL * CUSTOM1.b * (least_pixels / ring_pixels - 1.0);
+    } else {
+        // the bark noise of the own tube along the normal (THE BARK NOISE); the vertex form carries no noise key
+        int order = int(clamp(CUSTOM1.a, 0.0, WOBBLE_ORDER_MOST) + 0.5);
+        vec3 place = wobble_place(knot_form ? CUSTOM3.r : 0.0);
+        float wobble = wobble_fbm(VERTEX * WOBBLE_FREQ[order] + place, WOBBLE_ROUGH[order]);
+        VERTEX += NORMAL * wobble_amp * WOBBLE_ON[order] * CUSTOM1.b * wobble;
+        if (ring_pixels < least_pixels && ring_pixels > 0.0) {
+            VERTEX += NORMAL * CUSTOM1.b * (least_pixels / ring_pixels - 1.0);
+        }
     }
 #define SWAY_SLOT int(CUSTOM1.r + 0.5)
 #define SWAY_SHARE CUSTOM1.g
 #include "res://shaders/sway_swing.gdshaderinc"
 }
 void fragment() {
-    vec2 uw = UV * tiles.xy * white_uv;
-    vec2 ub = UV * tiles.xy * tiles.z * base_uv;
+    // the bark tiles around the ring and along the axis; the wood of a cut face is one picture over its disk
+    vec2 tiling = cut_face ? vec2(1.0) : tiles.xy;
+    float base_tiling = cut_face ? 1.0 : tiles.z;
+    vec2 uw = UV * tiling * white_uv;
+    vec2 ub = UV * tiling * base_tiling * base_uv;
     vec3 white = texture(white_albedo, uw).rgb * white_color.rgb;
     vec3 base = texture(base_albedo, ub).rgb * base_color.rgb;
     ALBEDO = mix(white, base, base_share);

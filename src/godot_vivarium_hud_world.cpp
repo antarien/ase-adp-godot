@@ -12,8 +12,9 @@
  *              the edge (open_gap), never shown: the picture stands whole (design decision 2026-11-10).
  *
  *              THE CUT UNDER THE TRUNK (usecase:100367 water a patch). The soil now and the share a planned pour
- *              adds are the hand's readings; the roots are the hand bridge's drawRootCut tree while flora.root.v1
- *              grows no segment (N0463), laid under the stem base of the plant in focus.
+ *              adds are the hand's readings; the roots are the segments of the focused body on
+ *              flora.organ.root.v1 (N0463), laid under the stem base of the plant in focus, and the hand
+ *              bridge's drawRootCut tree with the gap open on the edge while that port carries no record.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -22,10 +23,10 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0451 (flora.carry.v1), N0454 (flora.patch.v1 preview), N0462 (flora.scene.v1 cuttable), N0463
- *              (flora.root.v1 zone and segments), N0465 (the things as asset rows), N0487 (physics.body.v1 bodies
+ *              (root zone, flora.organ.root.v1 segments), N0465 (the things as asset rows), N0487 (physics.body.v1 bodies
  *              of the tool place and the ground things), carrier N0448
  * @created     2026-11-11
- * @modified    2026-11-15
+ * @modified    2026-11-20
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -35,7 +36,9 @@
 
 #include <ase/adp/godot/godot_figure_hand.hpp>
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/viewport.hpp>
@@ -112,12 +115,24 @@ void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOri
     reticle.patch_z = spec.z;
     reticle.patch_m = spec.half_m;
 
-    // The crumbs of loosened soil in every mode (row N08): the loose bridge's points (N0456) in the light of the
-    // hour, the mockup's light() under the sky as SkyOvercast keeps it (land_light, the one source of it).
+    // The crumbs of loosened soil in every mode (row N08): the cells of the owner's looseness raster (terrain.loose.v1,
+    // N0456) once it stands, the loose bridge's points before, in the light of the hour, the mockup's light() under
+    // the sky as SkyOvercast keeps it (land_light, the one source of it).
     GroundCrumbsFrame& crumbs = terrain.crumbs;
     crumbs.anchor = &hud_anchor_;
     crumbs.ground = &hud_ground_;
-    hud_loose_.frame(crumbs);
+    const VivariumLooseView& owner_loose = resources_.get_loose();
+    if (owner_loose.known) {
+        crumbs.loose = &owner_loose.loose;
+        crumbs.columns = owner_loose.columns;
+        crumbs.rows = owner_loose.rows;
+        crumbs.west_x = owner_loose.west_x;
+        crumbs.south_z = owner_loose.south_z;
+        crumbs.step_x_m = owner_loose.cell_m;
+        crumbs.step_z_m = owner_loose.cell_m;
+    } else {
+        hud_loose_.frame(crumbs);
+    }
     SkyOvercastShade overcast;
     hud_.overcast().shade(hud_now_.sky, overcast);
     crumbs.light = hud_.overcast().land_light(resources_.get_sky().sun_y, overcast.light);
@@ -216,27 +231,34 @@ void VivariumView::fill_hud_world(const VivariumPatchView* patch, const PlantOri
     hud_now_.rack_world.bodied = lay_tools(scene_, hud_now_.world.rack, hud_carry_.rack_along(), figure_look_.rack,
                                            hud_carry_.ground_things(), figure_look_.tools);
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.after_rel");  // the preview after the pour (N0454)
-    open_gap(GODOT_HUD_GAP_ROOT, "flora.root.v1.zone_m");       // the root zone under the brush (N0463)
     hud_hand_.frame(hand, patch, reticle, hud_bridge_sap_l_, hud_.pouring());  // the hold as the HUD keeps it, before compose
-    terrain.root_m = hud_hand_.zone_m();                         // the ring of the ground mode, the same zone
+    terrain.root_m = hud_hand_.zone_m();  // the ring of the ground mode: the patch record's root_m (RDX_SPREAD, N0463)
 
-    // The cut under the trunk in the mode water: the soil now, the share the planned pour adds, and the roots;
-    // flora.root.v1 grows no segment yet (N0463), the hand bridge lays drawRootCut's tree in their place.
+    // The cut under the trunk in the mode water: the soil now, the share the planned pour adds, and the roots
+    // ase-radix grows for the patch's body, as ase-pl-flora files them on flora.organ.root.v1 (N0463). While the
+    // port carries no root record at all, the hand bridge lays drawRootCut's tree in their place and the gap
+    // stands on the edge; the first record closes it.
     RootCutFrame& cut = hud_now_.root_cut;
     cut.anchor = &hud_anchor_;
     cut.origin = origin != nullptr ? *origin : cut.origin;
     cut.soil_rel = hand.soil_rel;
     cut.pour_rel = hand.poured_l > 0.0 ? hand.after_rel - hand.soil_rel : 0.0;
-    open_gap(GODOT_HUD_GAP_ROOT, "flora.root.v1.segments");
-    cut.roots = &hud_hand_.roots(patch, hud_anchor_, cut.origin);
+    const std::vector<VivariumOrganView>& grown = resources_.get_organs(GODOT_ORGAN_ROOT);
+    if (grown.empty()) {
+        open_gap(GODOT_HUD_GAP_ROOT, "flora.organ.root.v1");
+    } else {
+        close_gap(GODOT_HUD_GAP_ROOT, "flora.organ.root.v1");
+    }
+    cut.roots = &hud_hand_.roots(patch, grown, hud_anchor_, cut.origin);
 
-    // The tap hole in the birch: flora.sap.v1 states no tap yet (N0457), the bridge's tap from
-    // hud_bridge_patch_sap_* stands in its place; the bark vessel hangs at the trunk while the tap runs.
+    // The tap hole in the birch: the owner's tap of flora.sap.v1 once its record stands (N0457), the bridge's tap from
+    // hud_bridge_patch_sap_* before; the bark vessel hangs at the trunk while the tap runs.
     bool dead = false;
     for (const std::string& sign : hud_now_.game.signs) {
         dead = dead || sign == "dead";
     }
-    open_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1(running,held_l,cap_l)");
+    // VivariumView::bridge_patch took the owner's tap from flora.sap.v1 above once its record stands (N0457) and
+    // logged the gap's edge there; the bridge's members carry whichever state stands.
     TapHoleFrame& tap = hud_now_.tap;
     tap.running = hud_bridge_sap_running_ && !dead;
     tap.placed = hud_now_.tree_placed;

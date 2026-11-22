@@ -30,7 +30,8 @@
 
 #include "test_godot_host_support.hpp"
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
+#include <ase/adp/godot/port/types.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
 
@@ -201,7 +202,7 @@ TEST_CASE("D2293: the wind record reaches the sky view - a drift on the world gr
     GodotHostResourceManager& resources = env.resources;
 
     // usecase:101530 tint the sky by weather: ase-pl-sky files its wind record (GODOT_SKY_RECORD_WIND) only once
-    // ase-weather handed wind over and SkyAtspWthrSystem derived the drift; the haze and the clouds move by it
+    // ase-atmosphere handed wind over and SkyAtspWthrSystem derived the drift; the haze and the clouds move by it
     constexpr uint32_t kBoundFrames = 128u;
     for (uint32_t frame = 0u; frame < kBoundFrames && !resources.get_sky().wind_known; ++frame) {
         advance_frames(resources, 1u);

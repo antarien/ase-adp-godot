@@ -27,7 +27,8 @@
  */
 
 #include <ase/adp/godot/godot_plant_instances.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/leaf/types.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -56,12 +57,14 @@ std::unordered_map<uint32_t, PlantBodyRows> rows_by_body(const std::vector<Vivar
         const bool above = organ.order > split_order;
         std::vector<float>& side = above ? rows.above : rows.up_to;
         side.insert(side.end(), instance.rows, instance.rows + GODOT_INSTANCE_VALUES);
-        // the custom data of the same instance: the bark share, then the bark tiling of its section
+        // the custom data of the same instance: the bend of its leaf card across and along, its colour offset, then its
+        // atlas cell and cells packed into the fourth value Godot carries as cell * GODOT_ATLS_PACK + (cells - 1), 0
+        // for an organ without an atlas record (the bark and its tiling reach the tube on CUSTOM0 of its vertices)
         std::vector<float>& custom = above ? rows.above_custom : rows.up_to_custom;
-        custom.push_back(static_cast<float>(organ.bark));
-        custom.push_back(static_cast<float>(organ.tile_around));
-        custom.push_back(static_cast<float>(organ.tile_along));
-        custom.push_back(static_cast<float>(organ.tile_base));
+        custom.push_back(static_cast<float>(organ.bend_across));
+        custom.push_back(static_cast<float>(organ.bend_along));
+        custom.push_back(static_cast<float>(organ.tint_offset));
+        custom.push_back(static_cast<float>(organ.atlas_cell * GODOT_ATLS_PACK + (organ.atlas_cells - GODOT_ATLS_CELLS_NONE)));
         // the sway of the same instance, as the port carried it: the texels of the sway data texture
         std::vector<float>& sway = above ? rows.above_sway : rows.up_to_sway;
         sway.push_back(static_cast<float>(organ.sway_freq));

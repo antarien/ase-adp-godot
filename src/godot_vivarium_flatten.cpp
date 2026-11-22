@@ -28,7 +28,7 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
 
 #include <godot_cpp/classes/performance.hpp>
@@ -123,6 +123,20 @@ bool VivariumView::raise(float x, float z, float radius_m, float height_m) {
     watch_ground_act("raise", clock->get_ticks_usec() - act_start_usec);
     note("raise x=" + ::godot::String::num(x, 2) + " z=" + ::godot::String::num(z, 2) +
          " radius=" + ::godot::String::num(radius_m, 2) + " height=" + ::godot::String::num(height_m, 2) +
+         " result=" + GodotHostResourceManager::status_name(status));
+    node_->queue_redraw();
+    return status == ase::kernel::HostStatusOk;
+}
+
+bool VivariumView::loosen(float x, float z, float half_m, float depth_m) {
+    // The hoe stroke goes to the owner of the ground (B0649): ase-pl-flora files it as a cultivation order, ase-terrain
+    // loosens the topsoil and moves no height. NotFound names a plugin set without flora.loosen.v1 in the log line.
+    ::godot::Time* clock = ::godot::Time::get_singleton();
+    const uint64_t act_start_usec = clock->get_ticks_usec();
+    const HostStatus status = resources_.loosen(x, z, half_m, depth_m);
+    watch_ground_act("loosen", clock->get_ticks_usec() - act_start_usec);
+    note("loosen x=" + ::godot::String::num(x, 2) + " z=" + ::godot::String::num(z, 2) +
+         " half=" + ::godot::String::num(half_m, 2) + " depth=" + ::godot::String::num(depth_m, 2) +
          " result=" + GodotHostResourceManager::status_name(status));
     node_->queue_redraw();
     return status == ase::kernel::HostStatusOk;

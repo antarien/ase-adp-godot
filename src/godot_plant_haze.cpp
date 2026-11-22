@@ -26,7 +26,7 @@
 
 #include <ase/adp/godot/godot_plant_haze.hpp>
 #include <ase/adp/godot/godot_plant_shader.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>

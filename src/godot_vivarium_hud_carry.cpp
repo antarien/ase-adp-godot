@@ -19,8 +19,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0451 (flora.carry.v1), N0452 (flora.stow.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-20
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -28,8 +28,8 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_hud_carry.hpp>
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/godot_host_figure_view.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 #include <ase/kernel/kernel_embedded_host.hpp>
 
 #include <ase/math/math.hpp>
@@ -384,6 +384,8 @@ bool VivariumCarryBridge::engine_fill(const std::vector<VivariumFigureGearView>&
             engine_water_l_ = piece.water_l;
             can->fill_l = piece.water_l;
         }
+        // the column one litre lays in this bearer's hand is ase-equipment's too (N0517), carried every snapshot
+        can->mm_per_l = piece.mm_per_l;
         return true;
     }
     return false;

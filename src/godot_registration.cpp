@@ -48,7 +48,7 @@
 #include <ase/adp/godot/godot_asset_loader.hpp>
 #include <ase/adp/godot/godot_registration.hpp>
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 
 #include <gdextension_interface.h>
 #include <godot_cpp/classes/input_event.hpp>

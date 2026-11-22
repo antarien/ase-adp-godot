@@ -52,7 +52,9 @@
 #include <ase/adp/godot/godot_new_seed.hpp>
 #include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
 #include <ase/utils/boot_clock.hpp>
 #include <ase/utils/clock.hpp>
@@ -166,6 +168,7 @@ void VivariumView::exit_tree() {
     for (auto& [kind, tool] : figure_look_.tools) {
         end_figure_load(tool.load);
     }
+    end_camp(camp_);  // the camp exports load the same way (godot_camp_load.hpp)
     resources_.clear_all();
     drain_log();
 }
@@ -175,7 +178,8 @@ void VivariumView::exit_tree() {
 void VivariumView::boot_host(bool new_seeds) {
     failure_text_ = ::godot::String();
     selected_place_ = GODOT_NO_PLACE;
-    water_pending_place_ = GODOT_NO_PLACE;
+    water_pending_.place = GODOT_NO_PLACE;
+    restart_camp(camp_);  // the new host lays the camp anew (T.3)
     pruning_ = false;
     bedding_ = false;
     bed_started_ = false;
@@ -189,6 +193,9 @@ void VivariumView::boot_host(bool new_seeds) {
     debug_.jump = VivariumJump{};
     hour_length_ = VivariumHourLength{};
     init_pipelines_ = 0u;
+    init_hold_ = ::godot::String();  // the first frame of the new boot names its hold again (B0357)
+    init_hold_word_ = ::godot::String();
+    init_hold_since_ms_ = 0u;
     garden_return_ = GardenReturn{};
     // sow a new seed (03.1 point 2, V7): the first boot sows the seeds of the start configuration, every
     // Reiniciar a new seed per patch (godot_new_seed.hpp) - a new birch of the same species in another shape.
@@ -367,6 +374,7 @@ void VivariumView::process(double delta) {
         const uint64_t scene_start_usec = clock->get_ticks_usec();
         follow_scene(elapsed_s);
         follow_figure(elapsed_s);  // after the scene: the player camera overrides the fixed view's aim of this frame (07.6)
+        follow_camp();             // the camp fire's parts and wood through ase-pl-ingle, drawn in the scene (T.3, T.7)
         follow_initialisation();
         const uint64_t hud_start_usec = clock->get_ticks_usec();
         tick_hud(elapsed_s);  // the HUD's clock: long presses, held pours (godot_vivarium_hud_input.cpp)

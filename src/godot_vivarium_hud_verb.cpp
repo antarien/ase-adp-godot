@@ -34,7 +34,8 @@
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/variant/string.hpp>
@@ -108,10 +109,13 @@ void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
                            : raise(hole.x, hole.z, static_cast<float>(verb.brush_m), static_cast<float>(verb.depth_m));
         }
     } else if (op == VivariumHud::OP_LOOSEN) {
-        // applyTerr soltar (m.html 980): the bridge loosens the points under the brush while flora.patch.v1 carries
-        // no loose soil (N0456); the crumbs and the patch's share read it from there
+        // applyTerr soltar (m.html 980): the stroke goes to the owner on flora.loosen.v1 (B0649), ase-pl-flora files
+        // it as a cultivation order to ase-terrain. The bridge still loosens the points under the brush while
+        // flora.patch.v1 carries no loose soil back (N0456); the crumbs and the patch's share read it from there.
         open_gap(GODOT_HUD_GAP_LOOSE, request.kind);
         if (reticle.brush_on) {
+            (void)loosen(static_cast<float>(reticle.brush_x), static_cast<float>(reticle.brush_z),
+                         static_cast<float>(verb.brush_m), static_cast<float>(verb.depth_m));
             hud_loose_.loosen(reticle.brush_x, reticle.brush_z, verb.brush_m);
         }
         acted = true;

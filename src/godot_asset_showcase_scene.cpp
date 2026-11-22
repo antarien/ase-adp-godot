@@ -26,7 +26,8 @@
 
 #include <ase/adp/godot/godot_asset_showcase_scene.hpp>
 #include <ase/adp/godot/godot_asset_loader.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/classes/box_mesh.hpp>
 #include <godot_cpp/classes/camera3d.hpp>

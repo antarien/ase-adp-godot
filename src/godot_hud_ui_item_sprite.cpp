@@ -23,7 +23,7 @@
 
 #include <ase/adp/godot/godot_hud_ui_item_sprite.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
 

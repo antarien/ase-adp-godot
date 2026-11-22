@@ -5,7 +5,7 @@
  * @brief       VivariumView - the signs the bridge reports into the HUD's frame while no port reports a sign case
  * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.10, design decision 2026-11-10: the HUD draws every element from
  *              its frame and never asks whether a port delivered. The patch set reports no state of a sign case yet
- *              (N0461) and flora.weather.v1 no weather signature (N0449), so the rail's dots, the markers at the
+ *              (N0461) and sky.weather.v1 no weather signature (N0449), so the rail's dots, the markers at the
  *              birch and in the sky and the readings stand on the mockup's signs() applied to the values this
  *              frame already carries: the stage, condition and soil of the patch record, the season of the clock,
  *              the sky band's weather and night and the bridge's tap. Its thresholds and what hangs on the clock
@@ -24,7 +24,7 @@
  * @register    N0461 (the state fields of each sign case), N0449 (the weather signatures), N0454, N0462, N0460,
  *              N0457 (the marks of the tools: soil_not_full, branch_uncut, season_saltatrix, tap_open), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-19
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_hud_sign_marker.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -70,9 +70,10 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
                                 const VivariumClockView& clock, const SkyBandFrame& band,
                                 const HandSlotFrame& hand) {
     // THE EDGE OF THE BRIDGE FOR N0461 AND N0449: the reader of a port's signs is the first to stand; while the
-    // patch set and flora.weather.v1 report none, the mockup's signs() decides over this frame's values.
+    // patch set and the weather port (ports.weather) report none, the mockup's signs() decides over this frame's
+    // values.
     open_gap(GODOT_HUD_GAP_SIGN, "flora.patch.v1.signs");
-    open_gap(GODOT_HUD_GAP_WEATHER, "flora.weather.v1.signatures");
+    open_gap(GODOT_HUD_GAP_WEATHER, (start_.weather_port + ".signatures").c_str());
     game.signs.clear();
     signs.values.clear();
 
@@ -155,7 +156,14 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     // fills the season and logs flora.day.v1 itself.
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.soil_not_full");
     open_gap(GODOT_HUD_GAP_PRUNE, "flora.scene.v1.branch_uncut");
-    open_gap(GODOT_HUD_GAP_SAP, "flora.patch.v1.tap_open");
+    // tap_open and tap_closed stand on hud_bridge_sap_running_, which VivariumView::bridge_patch takes from
+    // flora.sap.v1 each frame once its record stands (GodotHostResourceManager::read_sap, N0457); the gap closes on
+    // that edge and opens again when the record falls silent.
+    if (resources_.get_sap().known) {
+        close_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1.running");
+    } else {
+        open_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1.running");
+    }
     if (soil_rel < hud_bridge_soil_full_) {
         game.marks.emplace_back("soil_not_full");
     }

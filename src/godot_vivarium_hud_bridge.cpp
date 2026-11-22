@@ -12,8 +12,9 @@
  *              moment it arrives.
  *
  *              BRIDGE GAPS (register carrier N0448): the clock bridge (godot_vivarium_hud_bridge_clock.cpp) carries
- *              N0460 the clock groups and N0459 the factor the clock runs at; their tokens are loaded here. N0449 the
- *              weather of flora.weather.v1 (ase-weather, ase-atmosphere): the sky band's
+ *              N0460 the clock groups and N0459 the factor the clock runs at; their tokens are loaded here. The
+ *              weather bridge (godot_vivarium_hud_bridge_weather.cpp, load_hud_bridge_weather and bridge_weather)
+ *              carries N0449 the weather of sky.weather.v1 (ase-atmosphere, ase-pl-sky): the sky band's
  *              glyph, temperature and wind, the forecast strip's coming phases and the weather veil's kind and wind.
  *              N0454 the growth toward the next stage of flora.patch.v1 (growth_share) and, where the forecast port
  *              carries no due hour, the days to that stage, and the share of the year of the day the next stage is
@@ -22,10 +23,13 @@
  *              N0452 the verdict on a move of a carried thing (flora.stow.v1 code), judged by the mockup's fits().
  *              N0461 the signs' thresholds and values (hud_bridge_sign_*, read by
  *              VivariumSignRules). N0450 the past events and their span (hud_bridge_trail_*, read by
- *              VivariumTrailBridge, godot_vivarium_hud_trail.cpp). The hand bridge
+ *              VivariumTrailBridge, godot_vivarium_hud_trail.cpp). The survival bridge
+ *              (godot_vivarium_hud_bridge_survival.cpp, load_hud_bridge_survival) carries N0530 the body, the rest
+ *              and the air of the figure, B0657 the fire cells and B0662 the smoke of the card. The hand bridge
  *              (godot_vivarium_hud_hand.cpp) carries N0454's preview after the pour, N0462 the internodes that may
- *              be cut (flora.scene.v1 cuttable) and N0463 the root zone and the roots in the cut (flora.root.v1
- *              zone_m and segments); the carry bridge (godot_vivarium_hud_carry.cpp) carries N0451 the carried
+ *              be cut (flora.scene.v1 cuttable) and N0463 the root zone and the roots in the cut (the patch
+ *              record's root_m, the segments of flora.organ.root.v1 and the mockup's tree while that port is
+ *              silent); the carry bridge (godot_vivarium_hud_carry.cpp) carries N0451 the carried
  *              things (flora.carry.v1).
  *
  * @module      ase-adp-godot
@@ -35,7 +39,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-19
+ * @modified    2026-11-20
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -45,7 +49,10 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/godot_vivarium_hud_bridge_read.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -53,6 +60,7 @@
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -83,60 +91,6 @@ bool read_list(const UiTheme& theme, const char* prefix, const char* suffix, uin
         }
         out.push_back(number);
     }
-    return true;
-}
-
-/** The token `token` into `out`, which must lie in [low, high]; false with the token's name in `failed`. */
-bool read_in(const UiTheme& theme, const char* token, double low, double high, double& out, std::string& failed) {
-    if (!theme.measure(token, out) || out < low || out > high) {
-        failed = token;
-        return false;
-    }
-    return true;
-}
-
-/** The GODOT_HUD_WEATHER_* key spelled `word`, nullptr for a word that names no kind of weather. */
-const char* weather_key(const ::godot::String& word) {
-    const char* const keys[] = {GODOT_HUD_WEATHER_CLEAR, GODOT_HUD_WEATHER_PCLOUD, GODOT_HUD_WEATHER_CLOUDY,
-                                GODOT_HUD_WEATHER_FOG,   GODOT_HUD_WEATHER_RAIN,   GODOT_HUD_WEATHER_DRIZZLE,
-                                GODOT_HUD_WEATHER_SNOW};
-    for (const char* key : keys) {
-        if (word == ::godot::String(key)) {
-            return key;
-        }
-    }
-    return nullptr;
-}
-
-/** The coming phase `index` of the bridge's forecast (hud_bridge_forecast_<n>_*): its period, kind, night,
- *  temperature and rain; false with the failing token's name in `failed`. */
-bool read_phase(const UiTheme& theme, uint32_t index, ForecastPhase& out, std::string& failed) {
-    const std::string prefix = "hud_bridge_forecast_";
-    const std::string phase = prefix + std::to_string(index + 1);
-    double period = 0.0;
-    double night = 0.0;
-    if (!read_nth(theme, prefix, index, "_period", period, failed) ||
-        !read_nth(theme, prefix, index, "_night", night, failed) ||
-        !read_nth(theme, prefix, index, "_temperature", out.temperature, failed) ||
-        !read_nth(theme, prefix, index, "_rain_mm", out.rain_mm, failed)) {
-        return false;
-    }
-    ::godot::String kind;
-    if (!theme.token_text(phase + "_kind", kind) || weather_key(kind) == nullptr) {
-        failed = phase + "_kind: a GODOT_HUD_WEATHER_* key";
-        return false;
-    }
-    if (period < static_cast<double>(GODOT_PERIOD_FIRST) || period > static_cast<double>(GODOT_PERIOD_LAST)) {
-        failed = phase + "_period: a GODOT_PERIOD_*";
-        return false;
-    }
-    if (!(night == 0.0 || night == 1.0) || out.rain_mm < 0.0) {
-        failed = phase + "_night: 0 or 1, " + phase + "_rain_mm: from 0";
-        return false;
-    }
-    out.period = static_cast<int32_t>(period);
-    out.kind = weather_key(kind);
-    out.night = night == 1.0;
     return true;
 }
 
@@ -190,29 +144,15 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
         }
     }
 
-    // hud_bridge_weather_* and hud_bridge_forecast_<n>_* of SHA (N0449): the sky, the temperature, the wind and
-    // the coming phases the mockup shows, one phase per period.
-    ::godot::String kind;
-    if (!theme.token_text("hud_bridge_weather_kind", kind) || weather_key(kind) == nullptr) {
-        return fail_config("hud_bridge_weather_kind: a GODOT_HUD_WEATHER_* key");
-    }
-    hud_bridge_weather_ = weather_key(kind);
-    // THE WEATHER OF THE STAGE (modes.weather, usecase:5606 observe the sky): the mockup switches its sky from a
-    // panel outside the phone; the app takes the same switch from its launch. The word after the argument stands
-    // in for the artefact's kind; the argument without a known key refuses the configuration.
-    const ::godot::PackedStringArray launch = ::godot::OS::get_singleton()->get_cmdline_user_args();
-    const int64_t named = modes_.weather_argument.is_empty() ? -1 : launch.find(modes_.weather_argument);
-    if (named >= 0) {
-        if (named + 1 >= launch.size() || weather_key(launch[named + 1]) == nullptr) {
-            return fail_config("modes.weather: a GODOT_HUD_WEATHER_* key after the argument");
-        }
-        hud_bridge_weather_ = weather_key(launch[named + 1]);
-        note("stage weather " + launch[named + 1]);
+    // hud_bridge_weather_* and hud_bridge_forecast_<n>_* of SHA (N0449), read by the weather bridge.
+    if (!load_hud_bridge_weather(theme)) {
+        return false;
     }
     // THE PERCEPTION OF THE STAGE (modes.perception, usecase:101440 grow the interface with skills): the mockup
     // switches its depth from the same panel (rPerc I, II, III); the number after the argument stands in for
     // hud.perception.start until flora.skill.v1 files a level, and one outside hud.perception.levels refuses the
     // configuration.
+    const ::godot::PackedStringArray launch = ::godot::OS::get_singleton()->get_cmdline_user_args();
     hud_bridge_level_ = hud_.level_start();
     const int64_t leveled = modes_.perception_argument.is_empty() ? -1 : launch.find(modes_.perception_argument);
     if (leveled >= 0) {
@@ -228,26 +168,12 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
         hud_bridge_level_ = static_cast<uint32_t>(asked);
         note("stage perception " + launch[leveled + 1]);
     }
-    if (!theme.measure("hud_bridge_weather_temperature", hud_bridge_temperature_)) {
-        return fail_config("hud_bridge_weather_temperature");
-    }
-    if (!theme.measure("hud_bridge_weather_wind", hud_bridge_wind_) || hud_bridge_wind_ < 0.0) {
-        return fail_config("hud_bridge_weather_wind: from 0");
-    }
-    hud_bridge_forecast_.clear();
-    for (uint32_t index = 0; index < GODOT_DAY_PHASES; ++index) {
-        ForecastPhase phase;
-        if (!read_phase(theme, index, phase, failed)) {
-            return fail_config(failed.c_str());
-        }
-        hud_bridge_forecast_.push_back(phase);
-    }
 
     // hud_bridge_patch_* of SHA (N0454, N0456, N0457): the growth, the loose soil and the tap the mockup shows.
     double running = 0.0;
-    if (!read_in(theme, "hud_bridge_patch_growth_share", 0.0, 1.0, hud_bridge_growth_, failed) ||
-        !read_in(theme, "hud_bridge_patch_loose_share", 0.0, 1.0, hud_bridge_loose_, failed) ||
-        !read_in(theme, "hud_bridge_patch_sap_running", 0.0, 1.0, running, failed)) {
+    if (!read_bridge_in(theme, "hud_bridge_patch_growth_share", 0.0, 1.0, hud_bridge_growth_, failed) ||
+        !read_bridge_in(theme, "hud_bridge_patch_loose_share", 0.0, 1.0, hud_bridge_loose_, failed) ||
+        !read_bridge_in(theme, "hud_bridge_patch_sap_running", 0.0, 1.0, running, failed)) {
         return fail_config((failed + ": a share 0..1").c_str());
     }
     if (!(running == 0.0 || running == 1.0)) {
@@ -264,7 +190,7 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
     if (!theme.measure("hud_bridge_patch_sap_cap_l", hud_bridge_sap_cap_l_) || !(hud_bridge_sap_cap_l_ > 0.0)) {
         return fail_config("hud_bridge_patch_sap_cap_l: above 0");
     }
-    if (!read_in(theme, "hud_bridge_patch_next_share", 0.0, 1.0, hud_bridge_next_share_, failed)) {
+    if (!read_bridge_in(theme, "hud_bridge_patch_next_share", 0.0, 1.0, hud_bridge_next_share_, failed)) {
         return fail_config("hud_bridge_patch_next_share: a share 0..1");
     }
 
@@ -283,10 +209,15 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
         return fail_config(failed.c_str());
     }
 
+    // hud_bridge_survival_* of SHA (N0530, B0657), read by the survival bridge.
+    if (!load_hud_bridge_survival(theme)) {
+        return false;
+    }
+
     // hud_bridge_mark_* of SHA: the threshold and the state of the mockup's TOOLS[].ok().
     double uncut = 0.0;
-    if (!read_in(theme, "hud_bridge_mark_soil_full_rel", 0.0, 1.0, hud_bridge_soil_full_, failed) ||
-        !read_in(theme, "hud_bridge_mark_branch_uncut", 0.0, 1.0, uncut, failed) ||
+    if (!read_bridge_in(theme, "hud_bridge_mark_soil_full_rel", 0.0, 1.0, hud_bridge_soil_full_, failed) ||
+        !read_bridge_in(theme, "hud_bridge_mark_branch_uncut", 0.0, 1.0, uncut, failed) ||
         !(uncut == 0.0 || uncut == 1.0)) {
         return fail_config("hud_bridge_mark_soil_full_rel: a share 0..1, hud_bridge_mark_branch_uncut: 0 or 1");
     }
@@ -329,56 +260,50 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.next_share");
     year.next_share = hud_bridge_next_share_;
 
-    // N0456: no port carries the loosened share of the soil yet (flora.patch.v1 loose). The loose bridge keeps it
-    // point by point: rain settles it over the game hours (m.html 1030), the patch reads the mean within its reach
-    // (patchLoose, m.html 372); before the patch's centre is known the start share stands.
-    open_gap(GODOT_HUD_GAP_LOOSE, "flora.patch.v1.loose");
-    if (clock.known && hours > 0.0) {
-        hud_loose_.settle(clock.day * hours + clock.hour, hud_bridge_weather_);
+    // N0456: the loosened share of the soil comes from terrain.loose.v1, the looseness raster ase-terrain keeps per
+    // cell of its soil layer (the complement of CAUSA_ASE_GIS LYR_LITHO_COMPACTION), once it is offered
+    // (GodotHostResourceManager::read_loose); the patch asks the cell under its centre (loose_at), never a mean of its
+    // own. Before the raster stands, the loose bridge keeps it point by point: rain settles it over the game hours
+    // (m.html 1030), the patch reads the mean within its reach (patchLoose, m.html 372); before the patch's centre is
+    // known the start share stands, and the gap is logged once on its edge.
+    const double owner_loose = patch != nullptr ? resources_.loose_at(patch->x, patch->z) : std::nan("");
+    if (std::isfinite(owner_loose)) {
+        close_gap(GODOT_HUD_GAP_LOOSE, "terrain.loose.v1(loose_share)");
+        focus.loose_share = owner_loose;
+    } else {
+        open_gap(GODOT_HUD_GAP_LOOSE, "terrain.loose.v1(loose_share)");
+        if (clock.known && hours > 0.0) {
+            hud_loose_.settle(clock.day * hours + clock.hour, hud_bridge_weather_);
+        }
+        focus.loose_share = patch != nullptr ? hud_loose_.share(patch->x, patch->z) : hud_bridge_loose_;
     }
-    focus.loose_share = patch != nullptr ? hud_loose_.share(patch->x, patch->z) : hud_bridge_loose_;
 
-    // N0457: no port carries the tap and its vessel yet (flora.sap.v1 running, l, cap_l).
-    open_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1");
+    // N0457: the tap and its vessel come from flora.sap.v1 (running, held_l, cap_l) once ase-pl-flora files its record
+    // (GodotHostResourceManager::read_sap); the port's state then replaces the bridge's every frame, so the tap hole,
+    // the signs and the hand read the owner's vessel. Before it stands, the tap of SHA (hud_bridge_patch_sap_*) is the
+    // state and the gap is logged once on its edge.
+    const VivariumSapView& sap = resources_.get_sap();
+    if (sap.known) {
+        close_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1(running,held_l,cap_l)");
+        // THE FULL VESSEL IS AN EDGE of the owner's litres: the first snapshot at or over the capacity of a running
+        // tap toasts 'COCHO CHEIO' once, as the bridge's flow does before the port stands.
+        const bool filled = sap.running && hud_bridge_sap_l_ < sap.cap_l && sap.held_l >= sap.cap_l;
+        if (filled) {
+            note("hud sap full: l=" + ::godot::String::num(sap.held_l, GODOT_LOG_DECIMALS) + " port=flora.sap.v1");
+            std::string failed;
+            if (!hud_.toast(VivariumHud::TOAST_VESSEL_FULL, {}, VivariumHud::COLOUR_SAP, failed)) {
+                fail_hud(failed);
+            }
+        }
+        hud_bridge_sap_running_ = sap.running;
+        hud_bridge_sap_l_ = sap.held_l;
+        hud_bridge_sap_cap_l_ = sap.cap_l;
+    } else {
+        open_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1(running,held_l,cap_l)");
+    }
     focus.sap_running = hud_bridge_sap_running_;
     focus.sap_l = hud_bridge_sap_l_;
     focus.sap_cap_l = hud_bridge_sap_cap_l_;
-}
-
-void VivariumView::bridge_weather(SkyBandFrame& band, ForecastStripFrame& forecast, WeatherVeilFrame& veil,
-                                  HandSlotFrame& hand, SkyOvercastFrame& sky) {
-    // THE EDGE OF THE BRIDGE FOR N0449: flora.weather.v1 of ase-weather and ase-atmosphere (kind, temperature,
-    // wind and one forecast record per coming phase: period, kind, night, temperature, rain_mm) files no record
-    // yet, so the sky band, the forecast strip, the weather veil and the hand's rain warning stand on the
-    // mockup's weather (hud_bridge_weather_* of SHA) and the gap is logged once with the port named.
-    open_gap(GODOT_HUD_GAP_WEATHER, "flora.weather.v1");
-    band.weather_kind = hud_bridge_weather_;
-    band.temperature = hud_bridge_temperature_;
-    band.wind = hud_bridge_wind_;
-    forecast.phases = hud_bridge_forecast_;
-    veil.kind = hud_bridge_weather_;
-    veil.wind = hud_bridge_wind_;
-    // THE SKY IS TINTED ONCE (D2280). The mockup's weather is no state of the atmosphere ase-pl-sky lights from,
-    // so the sky port's colours carry no tint of it and SkyOvercast lays the grey of this kind over them. The
-    // record of flora.weather.v1 comes from the same atmosphere SkyAtspWthrSystem tints fog, background and sun
-    // from: its reader fills the band, the strip, the veil and the hand and leaves the sky frame without a kind,
-    // so SkyOvercast keeps the sky port's colours and light as delivered.
-    sky.kind = hud_bridge_weather_;
-
-    // The mockup's rainIn(): the first coming phase in which rain or drizzle falls, counted from one, and the
-    // millimetres it brings; no such phase leaves the warning unset.
-    hand.rain_coming = false;
-    hand.rain_phases = 0;
-    hand.rain_mm = 0.0;
-    for (size_t index = 0; index < hud_bridge_forecast_.size(); ++index) {
-        const std::string kind(hud_bridge_forecast_[index].kind);
-        if (kind == GODOT_HUD_WEATHER_RAIN || kind == GODOT_HUD_WEATHER_DRIZZLE) {
-            hand.rain_coming = true;
-            hand.rain_phases = static_cast<uint32_t>(index + 1);
-            hand.rain_mm = hud_bridge_forecast_[index].rain_mm;
-            return;
-        }
-    }
 }
 
 void VivariumView::bridge_stow(DragLayerFrame& drag) {

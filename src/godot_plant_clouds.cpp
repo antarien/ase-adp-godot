@@ -15,9 +15,9 @@
  * @category    render/pipeline/stage
  * @usecase     usecase:5606 - observe the sky
  * @actor       Sky Watch Guide (SKYWATGUI)
- * @register    N0449 (flora.weather.v1), carrier N0448
+ * @register    N0449 (sky.weather.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -27,7 +27,8 @@
 
 #include <ase/adp/godot/godot_plant_clouds.hpp>
 #include <ase/adp/godot/godot_plant_shader.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>

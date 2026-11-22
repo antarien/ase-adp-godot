@@ -30,8 +30,8 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @register    carrier N0448
  * @created     2026-11-12
- * @modified    2026-11-12
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-21
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -130,6 +130,13 @@ struct VivariumTexts {
     ::godot::String reset;
     ::godot::String separator;   // between the parts of one line, e.g. "área 2 · Broto"
     ::godot::String loading;     // the line of the start screen while the world is initialised
+    ::godot::String hold_patches;    // the step that holds the start screen, after its percent line (B0357): patches not announced
+    ::godot::String hold_brooks;     // brooks not all carried
+    ::godot::String hold_scene;      // scene parts not all built
+    ::godot::String hold_sky_clock;  // sky and game clock not known
+    ::godot::String hold_figure;     // the figure file still loading
+    ::godot::String hold_jump;       // the frame jumped
+    ::godot::String hold_render;     // pipelines compiling or the quiet frames not yet counted
 };
 
 }  // namespace ase::adp::godot

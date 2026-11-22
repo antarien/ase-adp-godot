@@ -32,6 +32,8 @@
  */
 
 #include <ase/adp/godot/godot_hud_debug_layer.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <godot_cpp/variant/string.hpp>
 

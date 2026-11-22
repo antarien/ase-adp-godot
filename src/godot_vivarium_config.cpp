@@ -37,7 +37,8 @@
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/dir_access.hpp>

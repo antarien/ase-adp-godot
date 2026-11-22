@@ -12,7 +12,9 @@
  *              carries out the acts the mockup's doAct carries out on the view.
  *
  *              THE LAYERS. draw() takes HudShown::layers in their order and draws each through its block: band
- *              SkyBand, rail UiEdgeRail, markers and sign_open SignMarker, focus FocusCluster with ActionFan,
+ *              SkyBand, rail UiEdgeRail, body SurvivalBodyRail (the body rail CORPO at the right edge) with
+ *              SurvivalWarmthScale (the scale CONFORTO over its heat row), markers and
+ *              sign_open SignMarker, focus FocusCluster with ActionFan,
  *              prune_marks PruneMarks, root_cut RootCut, reticle TerrainKit, arrive TrailView, sky CalendarSheet,
  *              system SystemRing, rack the list of ToolRack, inventory the hand (HandSlot), the belt (BeltHolster),
  *              the bag (BagIcon), the Toast (the mockup's hand() closes with it, m.html 749) and the windows
@@ -32,7 +34,8 @@
  *              godot_hud_compose_gesture.cpp tells the gestures apart and carries out the acts;
  *              godot_hud_compose_place.cpp (VivariumHudPlaces, a friend) names where a tap lands on each part.
  *              What crosses between the view and this class - the frame, the hit, the request - stands in
- *              godot_hud_compose_frame.hpp.
+ *              godot_hud_compose_frame.hpp; the steps of the drawing and the CPU time each took (P0692) stand in
+ *              godot_hud_compose_share.hpp.
  *
  *              THE HITS. hit() asks the blocks in the reverse order of drawing and gives the first that answers,
  *              with the mockup's data-act id in VivariumHudHit::act, the item's key, the index of a sign, a tool,
@@ -67,7 +70,7 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-19
+ * @modified    2026-11-20
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -83,6 +86,7 @@
 #include <ase/adp/godot/godot_hud_cloud_bank.hpp>
 #include <ase/adp/godot/godot_hud_compose_frame.hpp>
 #include <ase/adp/godot/godot_hud_compose_press.hpp>
+#include <ase/adp/godot/godot_hud_compose_share.hpp>
 #include <ase/adp/godot/godot_hud_context_resolver.hpp>
 #include <ase/adp/godot/godot_hud_debug_layer.hpp>
 #include <ase/adp/godot/godot_hud_drag_layer.hpp>
@@ -99,6 +103,14 @@
 #include <ase/adp/godot/godot_hud_sky_band.hpp>
 #include <ase/adp/godot/godot_hud_sky_overcast.hpp>
 #include <ase/adp/godot/godot_hud_sow_hole.hpp>
+#include <ase/adp/godot/godot_hud_survival_body_rail.hpp>
+#include <ase/adp/godot/godot_hud_survival_fire_card.hpp>
+#include <ase/adp/godot/godot_hud_survival_rail_states.hpp>
+#include <ase/adp/godot/godot_hud_survival_rest_card.hpp>
+#include <ase/adp/godot/godot_hud_survival_air_mark.hpp>
+#include <ase/adp/godot/godot_hud_survival_spoil_ring.hpp>
+#include <ase/adp/godot/godot_hud_survival_water_mark.hpp>
+#include <ase/adp/godot/godot_hud_survival_warmth_scale.hpp>
 #include <ase/adp/godot/godot_hud_system_ring.hpp>
 #include <ase/adp/godot/godot_hud_tap_hole.hpp>
 #include <ase/adp/godot/godot_hud_tree_shade.hpp>
@@ -111,6 +123,7 @@
 #include <ase/adp/godot/godot_hud_weather_veil.hpp>
 #include <ase/adp/godot/godot_hud_world_drop.hpp>
 #include <ase/adp/godot/godot_vivarium_debug.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/variant/dictionary.hpp>
 
@@ -119,16 +132,6 @@
 #include <vector>
 
 namespace ase::adp::godot {
-
-/**
- * One step of VivariumHud::draw and the main thread's CPU time it took (P0692): the world group, the veil and the
- * shade, and each layer of HudShown::layers by its name. The view writes them into its hud_draw_split line, which
- * named the drawing as one number of about 28 ms per frame.
- */
-struct HudDrawShare {
-    std::string step;
-    uint64_t    cpu_usec = 0;
-};
 
 /** The HUD of the care view. */
 class VivariumHud {
@@ -159,6 +162,7 @@ public:
     // The layers of hud.modes.
     static constexpr const char* LAYER_BAND = "band";
     static constexpr const char* LAYER_RAIL = "rail";
+    static constexpr const char* LAYER_BODY = "body";            // the body rail CORPO at the right edge (U01)
     static constexpr const char* LAYER_MARKERS = "markers";
     static constexpr const char* LAYER_SIGN_OPEN = "sign_open";
     static constexpr const char* LAYER_FOCUS = "focus";
@@ -173,35 +177,6 @@ public:
     static constexpr const char* LAYER_DEBUG = "debug";
     static constexpr const char* LAYER_DRAG = "drag";
     static constexpr const char* LAYER_TAP_PULSE = "tap_pulse";  // the pulse at the tap hole in sap and plug
-
-    // The steps of draw before the layers, as HudDrawShare::step names them (P0692); each layer is named by itself.
-    static constexpr const char* DRAW_STEP_TREE_SHADE = "tree_shade";  // ShadeTree: the shade under the birch
-    static constexpr const char* DRAW_STEP_WORLD = "world";            // GroundThings: the things on the ground
-    static constexpr const char* DRAW_STEP_RACK_WORLD = "rack_world";  // ToolRack: the tool place in the world
-    static constexpr const char* DRAW_STEP_HOLES = "holes";            // the tap hole and the sow hole
-    static constexpr const char* DRAW_STEP_VEIL = "veil";              // WeatherVeil
-    static constexpr const char* DRAW_STEP_SHADE = "shade";            // ScreenShade
-    // The parts of the layer inventory (P0695): written before the layer's own share, which still names their sum.
-    static constexpr const char* DRAW_STEP_INV_HAND = "inventory_hand";      // HandSlot
-    // The parts of the hand (P0692), from HandSlot::cost(), written before the hand's own share.
-    static constexpr const char* DRAW_STEP_INV_HAND_LOOK = "inventory_hand_look";  // look() and sprite()
-    static constexpr const char* DRAW_STEP_INV_HAND_ART = "inventory_hand_art";    // hexagon and drawing
-    static constexpr const char* DRAW_STEP_INV_HAND_STOW = "inventory_hand_stow";  // count and stow button
-    static constexpr const char* DRAW_STEP_INV_HAND_MODE = "inventory_hand_mode";  // HandMode::draw
-    static constexpr const char* DRAW_STEP_INV_HAND_TEXT = "inventory_hand_text";  // name, hint, case, reading
-    // The lines of the hand's text and the shaping in all of them (P0692): the parts of inventory_hand_text.
-    static constexpr const char* DRAW_STEP_INV_HAND_TITLE = "inventory_hand_title";      // the item's name
-    static constexpr const char* DRAW_STEP_INV_HAND_HINT = "inventory_hand_hint";        // the instruction
-    static constexpr const char* DRAW_STEP_INV_HAND_CASE = "inventory_hand_case";        // the case words
-    static constexpr const char* DRAW_STEP_INV_HAND_READING = "inventory_hand_reading";  // label and value
-    static constexpr const char* DRAW_STEP_INV_HAND_VALUE = "inventory_hand_value";      // of the reading: value
-    static constexpr const char* DRAW_STEP_INV_HAND_SHAPE = "inventory_hand_shape";      // shaping, every line
-    static constexpr const char* DRAW_STEP_INV_HAND_WARM = "inventory_hand_warm";        // readying, every line
-    static constexpr const char* DRAW_STEP_INV_BELT = "inventory_belt";      // ToolBelt
-    static constexpr const char* DRAW_STEP_INV_BAG = "inventory_bag";        // BagIcon
-    static constexpr const char* DRAW_STEP_INV_TOAST = "inventory_toast";    // Toast
-    static constexpr const char* DRAW_STEP_INV_WINDOW = "inventory_window";  // BagWindow: the pack and the pouch
-    static constexpr const char* DRAW_STEP_INV_SELECT = "inventory_select";  // SelectLabel
 
     // The hit areas of hud.modes.<mode>.hits.
     static constexpr const char* HITS_WORLD = "world";
@@ -421,6 +396,14 @@ private:
     SkyOvercast overcast_;      // the grey and the dimmed light of an overcast sky, shaded over the 3D scene (N01)
     ScreenShade shade_;
     UiEdgeRail rail_;
+    SurvivalBodyRail body_;     // the body rail CORPO at the right edge (U01, mockup VIVARIUM_PHASE_08 S1)
+    SurvivalWarmthScale warmth_;// the scale CONFORTO over the rail's heat row (U03, mockup VIVARIUM_PHASE_08 S3)
+    SurvivalRailStates states_; // the states of the body under the signs on the rail SINAIS (U02, mockup VIVARIUM_PHASE_08 S2)
+    SurvivalFireCard fire_;     // the card of the camp fire on its leader from the hearth (U04, mockup VIVARIUM_PHASE_08 S4)
+    SurvivalRestCard rest_;     // the card of the resting figure on its leader from the figure (U05, mockup VIVARIUM_PHASE_08 S5)
+    SurvivalAirMark air_;       // the mark AR TÓXICO in the sky band under the wind (U06, mockup VIVARIUM_PHASE_08 S6)
+    SurvivalSpoilRing food_;    // the ring ESTRAGO around the food of the bag (U07, mockup VIVARIUM_PHASE_08 S7)
+    SurvivalWaterMark water_;   // the drop at the bag, ÁGUA TURVA while poisoned (U08, mockup VIVARIUM_PHASE_08 S8)
     SignMarker signs_;
     FocusCluster focus_;
     ActionFan fan_;

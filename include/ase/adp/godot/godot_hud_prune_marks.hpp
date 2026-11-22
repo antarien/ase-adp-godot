@@ -42,7 +42,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_organ_view.hpp>
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
 #include <ase/adp/godot/godot_hud_ui_icon.hpp>
 #include <ase/adp/godot/godot_hud_ui_motion.hpp>

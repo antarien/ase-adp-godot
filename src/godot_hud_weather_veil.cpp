@@ -11,9 +11,9 @@
  * @category    ecs/module
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
- * @register    N0449 (flora.weather.v1), carrier N0448
+ * @register    N0449 (sky.weather.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-10
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -22,7 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_weather_veil.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
 #include <ase/math/random.hpp>
@@ -193,7 +193,7 @@ void WeatherVeil::move(double fall, double drift, const WeatherVeilFrame& now, d
 
 bool WeatherVeil::draw(UiPen& canvas, const ::godot::Transform2D& frame, const WeatherVeilFrame& now,
                        std::string& failed) {
-    // The frame always carries a kind of weather: flora.weather.v1's, or the mockup's the bridge writes while the
+    // The frame always carries a kind of weather: sky.weather.v1's, or the mockup's the bridge writes while the
     // port is silent (bridge_weather). A frame without one is a broken frame, never a picture to leave out.
     if (now.kind == nullptr) {
         failed = "WeatherVeil: the frame carries no kind of weather (WeatherVeilFrame::kind)";

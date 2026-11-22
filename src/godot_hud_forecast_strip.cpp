@@ -11,9 +11,9 @@
  * @category    ecs/module
  * @usecase     usecase:5606 - observe the sky
  * @actor       Sky Watch Guide (SKYWATGUI)
- * @register    N0449 (flora.weather.v1: the forecast of the next phases), carrier N0448
+ * @register    N0449 (sky.weather.v1: the forecast of the next phases), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-10
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -23,7 +23,8 @@
 
 #include <ase/adp/godot/godot_hud_forecast_strip.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
 
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -265,7 +266,7 @@ bool ForecastStrip::draw(UiPen& canvas, const ::godot::Transform2D& frame,
     if (!draw_head(canvas, frame, now, failed)) {
         return false;
     }
-    // The frame always carries the coming phases: flora.weather.v1's forecast, or the mockup's the bridge writes
+    // The frame always carries the coming phases: sky.weather.v1's forecast, or the mockup's the bridge writes
     // while the port is silent (bridge_weather).
     if (now.phases.size() != phase_words_.size()) {
         failed = "ForecastStrip: the frame must forecast one phase per period of GODOT_PERIOD_*";

@@ -27,7 +27,7 @@
 #include <ase/adp/godot/godot_plant_geometry.hpp>
 #include <ase/adp/godot/godot_plant_shader.hpp>
 #include <ase/adp/godot/godot_plant_water.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
@@ -126,17 +126,36 @@ void build_plant_water(::godot::Node3D* scene) {
     water->set_material_override(material);
     water->set_cast_shadows_setting(::godot::GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
     scene->add_child(water);
+
+    // the groundwater in the pits, still water of its own shader (D2508)
+    ::godot::Ref<::godot::ShaderMaterial> pit_material;
+    pit_material.instantiate();
+    pit_material->set_shader(load_plant_shader(GODOT_PIT_WATER_SHADER_FILE));
+    pit_material->set_shader_parameter(
+        GODOT_WATER_SHALLOW, ::godot::Color(GODOT_PIT_WATER_SHALLOW_R, GODOT_PIT_WATER_SHALLOW_G, GODOT_PIT_WATER_SHALLOW_B));
+    pit_material->set_shader_parameter(
+        GODOT_WATER_DEEP, ::godot::Color(GODOT_PIT_WATER_DEEP_R, GODOT_PIT_WATER_DEEP_G, GODOT_PIT_WATER_DEEP_B));
+    ::godot::MeshInstance3D* pit_water = memnew(::godot::MeshInstance3D);
+    pit_water->set_name(GODOT_PLANT_PIT_WATER);
+    pit_water->set_material_override(pit_material);
+    pit_water->set_cast_shadows_setting(::godot::GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+    scene->add_child(pit_water);
 }
 
 uint32_t fill_plant_water(::godot::Node3D* scene, const std::vector<VivariumStreamView>& streams,
-                          const PlantMeshArrays& ground) {
+                          const std::vector<VivariumPitView>& pits, const PlantMeshArrays& ground) {
     ::godot::MeshInstance3D* node = brook_part<::godot::MeshInstance3D>(scene, GODOT_PLANT_WATER);
     if (node == nullptr) {
         return 0u;
     }
     PlantMeshArrays arrays;
-    const uint32_t wet = build_water_table(streams, ground, arrays);
+    PlantMeshArrays pit_arrays;
+    const uint32_t wet = build_water_table(streams, pits, ground, arrays, pit_arrays);
     node->set_mesh(water_mesh(arrays));
+    ::godot::MeshInstance3D* pit_node = brook_part<::godot::MeshInstance3D>(scene, GODOT_PLANT_PIT_WATER);
+    if (pit_node != nullptr) {
+        pit_node->set_mesh(water_mesh(pit_arrays));
+    }
     return wet;
 }
 

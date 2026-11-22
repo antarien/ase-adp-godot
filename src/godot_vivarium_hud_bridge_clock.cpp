@@ -33,7 +33,8 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <vector>
 
@@ -44,9 +45,9 @@ void VivariumView::bridge_pace(HourglassFrame& glass) {
     // that one. Before the port filed a record the gap stays open: the hourglass then shows the factor last asked
     // through the debug layer (VivariumView::ask_pace) and, before any was asked, the mockup's S.factor
     // (hud_bridge_pace_factor of SHA).
-    if (hud_clock_shown_.pace_known) {
+    if (hud_shown_.clock.pace_known) {
         close_gap(GODOT_HUD_GAP_PACE, "flora.pace.v1.factor");
-        glass.factor = hud_clock_shown_.pace_factor;
+        glass.factor = hud_shown_.clock.pace_factor;
         return;
     }
     open_gap(GODOT_HUD_GAP_PACE, "flora.pace.v1.factor");

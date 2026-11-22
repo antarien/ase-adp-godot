@@ -8,8 +8,10 @@
  *              MultiMesh as they are. Register B0295 point 4: the bark of a plant is no longer one cylinder
  *              instance per internode but one continuous tube per axis, laid out by tubes_by_body
  *              (godot_plant_tubes.hpp). fill_tube hands that tube to Godot as one mesh whose vertices carry
- *              CUSTOM0 (bark share and tiling) and CUSTOM1 (sway slot, sway share, ring radius, axis order) beside
- *              them, and the material of its node the sway data texture of its internodes and the shown orders of
+ *              CUSTOM0 (bark share and tiling), CUSTOM1 (sway slot, sway share, ring radius, axis order) and, in the
+ *              knot form, CUSTOM2 (the frame of the knot) and CUSTOM3 (the noise key of the axis) beside them, its
+ *              culling box grown by the widest ring and its bark noise, and the material of its node the knot form,
+ *              the bark noise amplitude, the sway data texture of its internodes and the shown orders of
  *              the budget: a ring thinner than a pixel or of an order above them closes onto its axis in the bark
  *              shader. Register B0317: fill_tube serves both meshes of the bark node, the fine tube on every
  *              corner of the knot ring and the coarse tube of the twigs on evenly spaced corners - the same
@@ -34,7 +36,10 @@
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_plant_tubes.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/tube/types.hpp>
+#include <ase/adp/godot/leaf/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
+#include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/image.hpp>
@@ -45,6 +50,7 @@
 #include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/core/type_info.hpp>
+#include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -229,13 +235,37 @@ void fill_tube(::godot::MeshInstance3D* node, const PlantBodyTube& tube, const s
     surface[::godot::Mesh::ARRAY_INDEX] = closed;
     surface[::godot::Mesh::ARRAY_CUSTOM0] = floats_of(tube.custom0);
     surface[::godot::Mesh::ARRAY_CUSTOM1] = floats_of(tube.custom1);
-    const int64_t format =
+    int64_t format =
         (static_cast<int64_t>(::godot::Mesh::ARRAY_CUSTOM_RGBA_FLOAT) << ::godot::Mesh::ARRAY_FORMAT_CUSTOM0_SHIFT) |
         (static_cast<int64_t>(::godot::Mesh::ARRAY_CUSTOM_RGBA_FLOAT) << ::godot::Mesh::ARRAY_FORMAT_CUSTOM1_SHIFT);
+    // the knot form carries the frame of its knot beside every vertex (PLAN_ASE_VIVARIUM_TREEGEN T.6): the bark
+    // shader turns the template corner by it, so it goes to Godot as a third custom array, four floats (RGBA float)
+    if (!tube.custom2.empty()) {
+        surface[::godot::Mesh::ARRAY_CUSTOM2] = floats_of(tube.custom2);
+        // and the tangent of its template corner, which the shader turns by the same frame as the normal, so the
+        // normal maps of the bark run around the ring and up the axis instead of along a tangent Godot derives
+        surface[::godot::Mesh::ARRAY_TANGENT] = floats_of(tube.tangents);
+        format |= static_cast<int64_t>(::godot::Mesh::ARRAY_CUSTOM_RGBA_FLOAT) << ::godot::Mesh::ARRAY_FORMAT_CUSTOM2_SHIFT;
+        // and the noise key of its axis, which the shader spreads to o_axis, the place of the axis in the bark noise
+        // field ("Rindenrauschen"): a fourth custom array of one float (R float)
+        surface[::godot::Mesh::ARRAY_CUSTOM3] = floats_of(tube.custom3);
+        format |= static_cast<int64_t>(::godot::Mesh::ARRAY_CUSTOM_R_FLOAT) << ::godot::Mesh::ARRAY_FORMAT_CUSTOM3_SHIFT;
+    }
     ::godot::Ref<::godot::ArrayMesh> mesh;
     mesh.instantiate();
     mesh->add_surface_from_arrays(::godot::Mesh::PRIMITIVE_TRIANGLES, surface, ::godot::TypedArray<::godot::Array>(),
                                   ::godot::Dictionary(), ::godot::BitField<::godot::Mesh::ArrayFormat>(format));
+    // the bark shader sets every corner out from its knot by the ring radius on custom1 and the bark noise moves it
+    // by at most GODOT_BARK_WOBBLE_MOST of that radius more, so the box Godot culls by is the box of the places grown
+    // by the widest ring and its noise; the places alone would cut the tube at the edge of a view
+    float widest = 0.0f;
+    for (std::size_t at = 2u; at < tube.custom1.size(); at += GODOT_BARK_CUSTOM_VALUES) {
+        widest = ase::math::max(widest, tube.custom1[at]);
+    }
+    widest *= 1.0f + GODOT_BARK_WOBBLE_MOST;
+    const ::godot::AABB placed = mesh->get_aabb();
+    const ::godot::Vector3 grown(widest, widest, widest);
+    mesh->set_custom_aabb(::godot::AABB(placed.position - grown, placed.size + grown * 2.0f));
     node->set_mesh(mesh);
     // the material of this node carries the sway texture of its internodes, so one material cannot serve two plants
     const ::godot::Ref<::godot::ShaderMaterial> shared = material;
@@ -248,6 +278,8 @@ void fill_tube(::godot::MeshInstance3D* node, const PlantBodyTube& tube, const s
     own->set_shader_parameter(GODOT_SWAY_ROW, static_cast<int32_t>(GODOT_SWAY_ROW_INSTANCES));
     own->set_shader_parameter(GODOT_BARK_SHOWN_ORDERS, static_cast<float>(shown_orders));
     own->set_shader_parameter(GODOT_BARK_COARSE, coarse);
+    own->set_shader_parameter(GODOT_BARK_KNOT_FORM, !tube.custom2.empty());
+    own->set_shader_parameter(GODOT_BARK_WOBBLE_AMP, GODOT_BARK_WOBBLE_MOST);
     node->set_material_override(own);
 }
 

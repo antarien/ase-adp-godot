@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_cover.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -132,32 +133,13 @@ float UiPen::pixels(float width) const {
     return width < 0.0f ? width : width * scale_;
 }
 
-float UiPen::core(float width) const {
-    if (width < 0.0f) {
-        return width;
-    }
-    // A core of at least 1 carries the whole feather (core + F covers `width`); below it Godot scales the feather
-    // by the core, so core * (1 + F) covers it. Both meet at a core of 1.
-    if (width >= 1.0f + GODOT_PEN_FEATHER_PX) {
-        return width - GODOT_PEN_FEATHER_PX;
-    }
-    return width / (1.0f + GODOT_PEN_FEATHER_PX);
-}
-
-float UiPen::feather(float core) const {
-    if (core < 0.0f) {
-        return 0.0f;
-    }
-    return core >= 1.0f ? GODOT_PEN_FEATHER_PX : GODOT_PEN_FEATHER_PX * core;
-}
-
 ::godot::PackedVector2Array UiPen::trimmed(const ::godot::PackedVector2Array& points, float core) const {
     const int64_t count = points.size();
     if (count < 2 || points[0].is_equal_approx(points[count - 1])) {
         return points;  // a closed run has no ends
     }
     // Godot lays the end feather past the last point; half of it is the coverage the browser's butt end lacks.
-    const float cut = feather(core) * 0.5f;
+    const float cut = pen_feather(core) * 0.5f;
     if (cut <= 0.0f) {
         return points;
     }
@@ -221,7 +203,7 @@ void UiPen::draw_line(const ::godot::Vector2& from, const ::godot::Vector2& to, 
                       float width, bool antialiased) {
     (void)antialiased;
     plain();
-    const float drawn = core(pixels(width));
+    const float drawn = pen_core(pixels(width));
     ::godot::PackedVector2Array ends;
     ends.push_back(device_.xform(from));
     ends.push_back(device_.xform(to));
@@ -234,7 +216,7 @@ void UiPen::draw_dashed_line(const ::godot::Vector2& from, const ::godot::Vector
     (void)antialiased;
     plain();
     // Godot lays the dashes itself: each takes the core, its ends keep their feather.
-    canvas_.draw_dashed_line(device_.xform(from), device_.xform(to), tinted(color), core(pixels(width)),
+    canvas_.draw_dashed_line(device_.xform(from), device_.xform(to), tinted(color), pen_core(pixels(width)),
                              dash * scale_, aligned, true);
 }
 
@@ -242,7 +224,7 @@ void UiPen::draw_polyline(const ::godot::PackedVector2Array& points, const ::god
                           bool antialiased) {
     (void)antialiased;
     plain();
-    const float drawn = core(pixels(width));
+    const float drawn = pen_core(pixels(width));
     canvas_.draw_polyline(trimmed(moved(points), drawn), tinted(color), drawn, true);
 }
 
@@ -280,7 +262,7 @@ void UiPen::draw_circle(const ::godot::Vector2& centre, float radius, const ::go
         const ::godot::Vector2 middle = device_.xform(centre);
         const float nominal = radius * scale_;
         if (!filled) {
-            canvas_.draw_circle(middle, nominal, shade, false, core(pixels(width)), true);
+            canvas_.draw_circle(middle, nominal, shade, false, pen_core(pixels(width)), true);
             return;
         }
         // The feather's middle on the nominal radius: half the feather in from it. Below a diameter of 1 Godot
@@ -312,14 +294,14 @@ void UiPen::draw_circle(const ::godot::Vector2& centre, float radius, const ::go
         return;
     }
     points.push_back(points[0]);
-    canvas_.draw_polyline(points, shade, core(pixels(width)), true);
+    canvas_.draw_polyline(points, shade, pen_core(pixels(width)), true);
 }
 
 void UiPen::draw_arc(const ::godot::Vector2& centre, float radius, float start_angle, float end_angle,
                      int32_t point_count, const ::godot::Color& color, float width, bool antialiased) {
     (void)antialiased;
     plain();
-    const float drawn = core(pixels(width));
+    const float drawn = pen_core(pixels(width));
     canvas_.draw_polyline(trimmed(round(centre, radius, start_angle, end_angle, point_count, false), drawn),
                           tinted(color), drawn, true);
 }
@@ -332,7 +314,7 @@ void UiPen::draw_rect(const ::godot::Rect2& rect, const ::godot::Color& color, b
         const ::godot::Vector2 corner = device_.xform(rect.position);
         const ::godot::Vector2 far = device_.xform(rect.position + rect.size);
         const ::godot::Rect2 drawn(corner, far - corner);
-        canvas_.draw_rect(drawn.abs(), tinted(color), filled, filled ? -1.0f : core(pixels(width)), !filled);
+        canvas_.draw_rect(drawn.abs(), tinted(color), filled, filled ? -1.0f : pen_core(pixels(width)), !filled);
         return;
     }
     ::godot::PackedVector2Array corners;

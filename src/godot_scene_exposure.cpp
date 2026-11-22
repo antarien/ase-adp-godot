@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_scene_exposure.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
 

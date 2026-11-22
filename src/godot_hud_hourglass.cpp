@@ -23,7 +23,7 @@
 
 #include <ase/adp/godot/godot_hud_hourglass.hpp>
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/core/math.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>

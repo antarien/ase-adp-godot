@@ -32,10 +32,11 @@
  *              hud_terrain_flow_tip ahead, its back hud_terrain_flow_back behind and hud_terrain_flow_half to
  *              each side. The mockup turns its arrows against their travel; the kit follows the water.
  *
- *              THE ROOT ZONE. The radius of the zone the roots of the patch hold comes from ase-radix over
- *              flora.root.v1; while that port is silent (N0463) the hand bridge writes the mockup's RROOT
- *              (hud_bridge_hand_root_m) into the frame and names the gap on its edge, so the ring always stands
- *              (design decision 2026-11-10). It lies on the ground around the trunk, hud_terrain_root_steps
+ *              THE ROOT ZONE. The radius of the zone the roots of the patch hold is the reach of the farthest
+ *              living root tip of its body: ase-radix publishes it as RDX_SPREAD, ase-pl-flora files it in the
+ *              patch record as root_m (FloraInpSoilComponent.spread_m), and the hand bridge hands it into the
+ *              frame (N0463). A body without a living tip holds no ground, and then no ring stands; the ring
+ *              grows as the roots spread. It lies on the ground around the trunk, hud_terrain_root_steps
  *              points dashed hud_terrain_root_dash on, hud_terrain_root_gap off in DOMAIN_ALERT at
  *              hud_terrain_root_alpha, hud_terrain_line_w wide.
  *
@@ -51,9 +52,9 @@
  * @category    ecs/module
  * @usecase     usecase:100389 - level the ground
  * @actor       Plant Keeper (PLNTKEEPER)
- * @register    N0463 (flora.root.v1: the radius of the root zone, the bridge fills it), N0456 (flora.patch.v1 loose), carrier N0448
+ * @register    N0463 (the radius of the root zone: the patch record's root_m, RDX_SPREAD), N0456 (flora.patch.v1 loose), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
+ * @modified    2026-11-20
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -61,7 +62,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_stream_view.hpp>
 #include <ase/adp/godot/godot_hud_ground_crumbs.hpp>
 #include <ase/adp/godot/godot_hud_ground_reticle.hpp>
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
@@ -90,7 +91,7 @@ struct TerrainKitFrame {
     const std::vector<VivariumStreamView>* streams = nullptr;  // the brooks with water (stream port)
     double elapsed = 0.0;                                      // seconds the ground mode has been open
     PlantOrigin origin;                                        // the stem base of the plant of the patch
-    double root_m = 0.0;                                       // REQUIRED: the root zone's radius around the stem base, metres
+    double root_m = 0.0;                                       // the root zone's radius around the stem base, metres; 0: no ring
     GroundReticleFrame reticle;                                // the brush and the bed point
     GroundCrumbsFrame crumbs;                                  // the loosened soil point by point, in every mode
 };
@@ -135,7 +136,7 @@ private:
     bool draw_flow(UiPen& canvas, const UiAnchor& anchor, const UiGround& ground,
                    const VivariumStreamView& stream, double elapsed, std::string& failed) const;
 
-    /** The ring of the root zone around the stem base; false with the reason in `failed`. */
+    /** The ring of the root zone around the stem base, none while root_m is not above 0; true, `failed` unused. */
     bool draw_roots(UiPen& canvas, const TerrainKitFrame& now, std::string& failed);
 
     double grid_alpha_ = 0.0, grid_alpha_depth_ = 0.0, grid_w_ = 0.0;            // hud_terrain_grid_*

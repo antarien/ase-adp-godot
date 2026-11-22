@@ -21,7 +21,7 @@
 
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>

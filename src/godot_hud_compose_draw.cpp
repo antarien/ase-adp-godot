@@ -31,7 +31,7 @@
 
 #include <ase/adp/godot/godot_hud_compose.hpp>
 #include <ase/adp/godot/godot_vivarium_watch.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 namespace ase::adp::godot {
 
@@ -50,31 +50,31 @@ bool VivariumHud::draw(UiPen& canvas, const ::godot::Transform2D& frame, Vivariu
     // drawTree lays the shade under the birch, or the seed mound, before drawWorld and outside its brightness
     // (m.html 488 to 490).
     shade_tree_.draw(canvas, frame, now.shade);
-    share(DRAW_STEP_TREE_SHADE);
+    share(HudDrawStep::TREE_SHADE);
     // drawScene calls drawWorld in every mode (m.html 507): the world group stands in the picture whatever the mode
     // lets the finger reach, and only the hit side (VivariumHud::hit) asks for HITS_WORLD.
     if (!world_.draw(canvas, frame, now.world, failed)) {
         return false;
     }
-    share(DRAW_STEP_WORLD);
+    share(HudDrawStep::WORLD);
     if (!rack_.draw_world(canvas, frame, now.rack_world, failed)) {
         return false;
     }
-    share(DRAW_STEP_RACK_WORLD);
+    share(HudDrawStep::RACK_WORLD);
     // drawWorld closes with the tap hole and the sow hole (m.html 472 to 477), under the same brightness.
     tap_.draw(canvas, frame, now.tap);
     sow_.draw(canvas, frame, now.sow);
-    share(DRAW_STEP_HOLES);
+    share(HudDrawStep::HOLES);
     // The world group ends here, and with it its brightness: the weather, the shade and the layers draw as given.
     canvas.set_tint(::godot::Color(1.0f, 1.0f, 1.0f, 1.0f));
     if (!veil_.draw(canvas, frame, now.veil, failed)) {
         return false;
     }
-    share(DRAW_STEP_VEIL);
+    share(HudDrawStep::VEIL);
     if (!shade_.draw(canvas, frame, now.cover, failed)) {
         return false;
     }
-    share(DRAW_STEP_SHADE);
+    share(HudDrawStep::SHADE);
     for (const std::string& layer : shown_.layers) {
         if (!draw_layer(canvas, frame, layer, now, failed)) {
             return false;
@@ -107,6 +107,33 @@ bool VivariumHud::draw_layer(UiPen& canvas, const ::godot::Transform2D& frame, c
         // that same clock. On the capped HUD clock it ran negative, the rail's line drew a share of 0 and stood
         // nowhere while its dots and its word showed (run 20261113-230745 debug_stage_3.png)
         rail_.draw(canvas, frame, wall_ - replay_.since(), now.still);
+        // The states of the body stand under the signs on the same rail and fade in on the same clock (s.html 187).
+        if (!states_.set(now.body, failed)) {
+            return false;
+        }
+        states_.draw(canvas, frame, wall_ - replay_.since(), now.still);
+        return true;
+    }
+    if (layer == LAYER_BODY) {
+        // The body rail on the same wall clock as the rail of signs: its rows fade in after the view appeared.
+        // The scale CONFORTO hangs over the heat row on its leader and fades in with it (s.html corpo); the card of
+        // the camp fire follows it, as render() lays fireCard(st) right after corpo(st) (s.html 239), and the card of
+        // the resting figure after the fire, as render() lays rest(st) right after fireCard(st), and the mark of
+        // the air after the rest, as render() lays air(st) right after rest(st), and the spoil ring of the bag's food
+        // after the air, as render() lays food(st) right after air(st), and the water mark after the food, as
+        // render() lays water(st) last; it reads the same sign poison of the body the rail SINAIS draws.
+        if (!body_.set(now.body, failed) || !warmth_.set(now.body, failed) || !fire_.set(now.fire, failed) ||
+            !rest_.set(now.rest, failed) || !air_.set(now.air, failed) || !food_.set(now.food, failed) ||
+            !water_.set(now.body, failed)) {
+            return false;
+        }
+        body_.draw(canvas, frame, wall_ - replay_.since(), now.still);
+        warmth_.draw(canvas, frame, wall_ - replay_.since(), now.still);
+        fire_.draw(canvas, frame, wall_ - replay_.since(), now.still);
+        rest_.draw(canvas, frame, wall_ - replay_.since(), now.still);
+        air_.draw(canvas, frame, wall_ - replay_.since(), now.still);
+        food_.draw(canvas, frame, wall_ - replay_.since(), now.still);
+        water_.draw(canvas, frame, wall_ - replay_.since(), now.still);
         return true;
     }
     if (layer == LAYER_MARKERS) {
@@ -191,41 +218,41 @@ bool VivariumHud::draw_inventory(UiPen& canvas, const ::godot::Transform2D& fram
     // sprite() were already filled (run 20261113-p0695-dig); each part stands before the hand's own share.
     const HandSlotCost& hand_cost = hand_.cost();
     for (const std::pair<const char*, uint64_t>& part : std::initializer_list<std::pair<const char*, uint64_t>>{
-             {DRAW_STEP_INV_HAND_LOOK, hand_cost.look_usec},
-             {DRAW_STEP_INV_HAND_ART, hand_cost.art_usec},
-             {DRAW_STEP_INV_HAND_STOW, hand_cost.stow_usec},
-             {DRAW_STEP_INV_HAND_MODE, hand_cost.mode_usec},
-             {DRAW_STEP_INV_HAND_TEXT, hand_cost.text_usec},
-             {DRAW_STEP_INV_HAND_TITLE, hand_cost.title_usec},
-             {DRAW_STEP_INV_HAND_HINT, hand_cost.hint_usec},
-             {DRAW_STEP_INV_HAND_CASE, hand_cost.case_usec},
-             {DRAW_STEP_INV_HAND_READING, hand_cost.reading_usec},
-             {DRAW_STEP_INV_HAND_VALUE, hand_cost.value_usec},
-             {DRAW_STEP_INV_HAND_SHAPE, hand_cost.shape_usec},
-             {DRAW_STEP_INV_HAND_WARM, hand_cost.warm_usec}}) {
+             {HudDrawStep::INV_HAND_LOOK, hand_cost.look_usec},
+             {HudDrawStep::INV_HAND_ART, hand_cost.art_usec},
+             {HudDrawStep::INV_HAND_STOW, hand_cost.stow_usec},
+             {HudDrawStep::INV_HAND_MODE, hand_cost.mode_usec},
+             {HudDrawStep::INV_HAND_TEXT, hand_cost.text_usec},
+             {HudDrawStep::INV_HAND_TITLE, hand_cost.title_usec},
+             {HudDrawStep::INV_HAND_HINT, hand_cost.hint_usec},
+             {HudDrawStep::INV_HAND_CASE, hand_cost.case_usec},
+             {HudDrawStep::INV_HAND_READING, hand_cost.reading_usec},
+             {HudDrawStep::INV_HAND_VALUE, hand_cost.value_usec},
+             {HudDrawStep::INV_HAND_SHAPE, hand_cost.shape_usec},
+             {HudDrawStep::INV_HAND_WARM, hand_cost.warm_usec}}) {
         shares_.push_back(HudDrawShare{part.first, part.second});
     }
-    share_step(DRAW_STEP_INV_HAND, cpu_step);
+    share_step(HudDrawStep::INV_HAND, cpu_step);
     if (!belt_.draw(canvas, hand, now.belt, failed)) {
         return false;
     }
-    share_step(DRAW_STEP_INV_BELT, cpu_step);
+    share_step(HudDrawStep::INV_BELT, cpu_step);
     if (!bag_icon_.draw(canvas, hand, now.bag_icon, failed)) {
         return false;
     }
-    share_step(DRAW_STEP_INV_BAG, cpu_step);
+    share_step(HudDrawStep::INV_BAG, cpu_step);
     if (!toast_.draw(canvas, hand, toast, failed)) {
         return false;
     }
-    share_step(DRAW_STEP_INV_TOAST, cpu_step);
+    share_step(HudDrawStep::INV_TOAST, cpu_step);
     if (!window_.draw(canvas, frame, now.window, failed)) {
         return false;
     }
-    share_step(DRAW_STEP_INV_WINDOW, cpu_step);
+    share_step(HudDrawStep::INV_WINDOW, cpu_step);
     if (!draw_select(canvas, frame, now, failed)) {
         return false;
     }
-    share_step(DRAW_STEP_INV_SELECT, cpu_step);
+    share_step(HudDrawStep::INV_SELECT, cpu_step);
     return true;
 }
 

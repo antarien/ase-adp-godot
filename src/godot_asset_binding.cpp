@@ -22,7 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/asset/types.hpp>
 
 #include <cstdint>
 #include <string>

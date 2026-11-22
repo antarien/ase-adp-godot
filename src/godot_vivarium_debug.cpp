@@ -70,7 +70,8 @@
 #include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_view_layout.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
 #include <ase/math/math.hpp>
 

@@ -63,6 +63,10 @@ bool LeafSeason::shade(const LeafSeasonFrame& now, LeafSeasonShade& out, std::st
     out.season = seasons_[static_cast<size_t>(now.season)];
     // the olive with leaf_dry_share as its alpha; the shader lays it over a leaf only while its stand wilts
     out.dry = ::godot::Color(dry_.r, dry_.g, dry_.b, static_cast<float>(dry_share_));
+    // in autumn the season's colour is the autumn colour, and every birch reaches it at its own pace: the shader turns
+    // a leaf whose body carries its autumn colour by that share instead of the season's (usecase:101646 colour the
+    // leaves in autumn)
+    out.autumn = now.autumn ? 1.0f : 0.0f;
     out.shown = true;
     return true;
 }

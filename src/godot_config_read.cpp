@@ -22,7 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_config_read.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/variant.hpp>

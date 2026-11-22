@@ -35,7 +35,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_patch_view.hpp>
 
 #include <cstdint>
 #include <unordered_map>
@@ -73,6 +73,8 @@ struct PlantStand {
     bool  condition_known = false;  // the condition of the record equals one of the codes of flora.cond.v1 (VivariumPatchView::cond_known)
     float wilted = 0.0f;            // 1 while ase-plant marks the stand wilted, else 0 (VivariumPatchView::wilted)
     float dead = 0.0f;              // 1 while ase-plant marks the stand dead, else 0 (VivariumPatchView::dead)
+    bool  autumn_known = false;     // the autumn port carried a finite share for the patch (VivariumPatchView::autumn, usecase:101646 colour the leaves in autumn)
+    float autumn = 0.0f;            // the share of the way from the start of autumn to its own leaf fall, 0..1, as the record carried it
 };
 
 /** Appends one three-component value - a place or a normal - to the array of a mesh surface. */

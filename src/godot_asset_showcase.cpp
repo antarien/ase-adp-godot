@@ -24,7 +24,8 @@
  */
 
 #include <ase/adp/godot/godot_asset_showcase.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <string>
 #include <vector>

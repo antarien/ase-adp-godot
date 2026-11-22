@@ -34,7 +34,7 @@
 
 #include "test_godot_host_support.hpp"
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 
 #include <cstdint>
 #include <string>

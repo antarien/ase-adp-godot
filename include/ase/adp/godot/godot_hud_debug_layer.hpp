@@ -85,7 +85,8 @@
 #include <ase/adp/godot/godot_hud_ui_text_block.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 #include <ase/adp/godot/godot_vivarium_debug.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <ase/adp/godot/godot_hud_ui_pen.hpp>
 #include <godot_cpp/variant/color.hpp>

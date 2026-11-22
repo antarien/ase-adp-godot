@@ -24,10 +24,12 @@
  *              hud_root_cut_root_width minus n times hud_root_cut_root_width_step wide, never thinner than
  *              hud_root_cut_root_width_min, in ROOT_CUT_ROOT. The unit grows no root of its own.
  *
- *              THE STATE COMES FROM THE FRAME. The segments come from ase-radix over flora.root.v1 (N0463), the
- *              level after a pour from the water budget into the patch record (N0454). The cut draws what the
- *              frame carries and never asks whether a port delivered: while one is silent the bridge fills the
- *              mockup's values (its root tree and S.pour) and VivariumView::open_gap logs the gap on its edge.
+ *              THE STATE COMES FROM THE FRAME. The segments are ase-radix's root organs of the patch's body as
+ *              ase-pl-flora files them on flora.organ.root.v1 (FloraHostRootExptSystem, N0463), the level after a
+ *              pour from the water budget into the patch record (N0454). The cut draws what the frame carries and
+ *              never asks whether a port delivered: while one is silent the bridge fills the mockup's values (its
+ *              root tree and S.pour) and VivariumView::open_gap logs the gap on its edge; the port's first record
+ *              closes it (ARCH_ASE_KERNEL_EMBEDDED, Bridge to the Drawing).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -35,9 +37,9 @@
  * @category    ecs/module
  * @usecase     usecase:100367 - water a patch
  * @actor       Plant Keeper (PLNTKEEPER)
- * @register    N0463 (flora.root.v1), N0454 (flora.patch.v1 level after a pour), carrier N0448
+ * @register    N0463 (flora.organ.root.v1 segments), N0454 (flora.patch.v1 level after a pour), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-11
+ * @modified    2026-11-20
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.

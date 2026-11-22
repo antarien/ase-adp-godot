@@ -28,8 +28,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-14
- * @modified    2026-11-19
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-21
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -43,7 +43,8 @@
 #include <ase/adp/godot/godot_vivarium_start_mode.hpp>
 #include <ase/adp/godot/godot_view_layout.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
@@ -295,7 +296,12 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
         node_->draw_rect(::godot::Rect2(track.position, ::godot::Vector2(bar_width * static_cast<float>(progress),
                                                                          GODOT_PROGRESS_HEIGHT)),
                          ::godot::Color::hex(GODOT_COLOR_PROGRESS));
-        const ::godot::String percent = ::godot::String::num(progress * GODOT_PERCENT, 0) + " %";
+        // the percent line names the step that holds the screen behind the separator (B0357), the word
+        // follow_initialisation chose in the same frame; before its first frame the line stands alone
+        ::godot::String percent = ::godot::String::num(progress * GODOT_PERCENT, 0) + " %";
+        if (!init_hold_word_.is_empty()) {
+            percent += texts_.separator + init_hold_word_;
+        }
         // the percent line: its top GODOT_PROGRESS_GAP under the bar, so its baseline one ascent lower
         const float percent_y = track.get_end().y + GODOT_PROGRESS_GAP + font->get_ascent(GODOT_FONT_BODY);
         node_->draw_string(font, ::godot::Vector2(places.position.x, percent_y), percent,

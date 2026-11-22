@@ -42,8 +42,9 @@
 
 #include <doctest/doctest.h>
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
+#include <ase/adp/godot/patch/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
 #include <ase/fileio/path.hpp>
 #include <ase/fileio/text_reader.hpp>
 #include <ase/fileio/text_writer.hpp>
@@ -64,6 +65,9 @@ inline constexpr double kPatchHalfM = 2.0;
 // inside the bounds ase-pl-flora checks (FLORA_WATER_MIN_MM..MAX_MM, GRV_CONST_AREA_REL_MIN..MAX).
 inline constexpr double kPatchCapacityMm = 100.0;
 inline constexpr double kPatchGravityRel = 1.0;
+// The Startstand every test patch is laid with: a seed, 0 game days since germination (usecase:100390),
+// so the four patches start as seeds as every check of the stage below expects.
+inline constexpr double kPatchAgeDays = 0.0;
 
 // The tests' VivariumStageReadFn: one file of the bundle directory `user` names.
 inline bool read_bundle_file(const char* name, std::string& out, void* user) {
@@ -96,6 +100,9 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // The stem feet ase-physics holds (usecase:100708, N0487): read_snapshot merges their height into the
     // patches by object id, so boot() asks the set for this port as well.
     config.stem_port = "flora.stem.v1";
+    // The autumn colours of the individuals (usecase:101646 colour the leaves in autumn): read_snapshot merges them
+    // into the patches by object id, so boot() asks the set for this port as well.
+    config.autumn_port = "flora.autumn.v1";
     config.clock_port = "flora.clock.v1";
     // The SURA date record (FloraHostClkExptSystem): snapshot() reads it beside the clock, so boot()
     // asks the set for this port as well.
@@ -127,10 +134,21 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.tile_port = "flora.tile.v1";
     // The sway of the internodes (usecase:101335): boot() asks the set for this port as well.
     config.sway_port = "flora.sway.v1";
+    // The bend of every leaf card (TREEGEN T.6): boot() asks the set for this port as well.
+    config.bend_port = "flora.bend.v1";
+    // The colour offset of every leaf card (TREEGEN T.6): boot() asks the set for this port as well.
+    config.tint_port = "flora.tint.v1";
+    // The atlas cell of every leaf card (TREEGEN T.6): boot() asks the set for this port as well.
+    config.atlas_port = "flora.atlas.v1";
     // The bark tube of every axis (usecase:101613): boot() asks the set for this port as well.
     config.bark_port = "flora.mesh.bark.v1";
     // The water of the brooks (usecase:100399): boot() asks the set for this port as well.
     config.stream_port = "flora.stream.v1";
+    // The water of every kind beside the brooks (PLAN_ASE_VIVARIUM_PHASE_10_HYDRO): read once its plugin offers it,
+    // so every snapshot of a host test runs the three readers against the records the real bundle lays.
+    config.current_port = "water.current.v1";
+    config.pit_port = "hydrogeology.pit.v1";
+    config.groundwater_port = "hydrogeology.groundwater.v1";
     // The level requests of the player (03.8 point 2): boot() asks the set for this port as well.
     config.level_port = "flora.level.v1";
     // The flatten requests of the player at a place (03.8): boot() asks the set for this port as well.
@@ -139,6 +157,7 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // a lower and a raise request, each on its own port; boot() asks the set for both as well.
     config.lower_port = "flora.lower.v1";
     config.raise_port = "flora.raise.v1";
+    config.loosen_port = "flora.loosen.v1";
     // The relief of the ground: boot() shapes it on this port before the first patch is laid.
     config.elevation_port = "flora.elevation.v1";
     // The place of the view's camera (03.11 point 7, the level of detail): view() submits on this port.
@@ -166,6 +185,7 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.op_flatten = "flatten";
     config.op_lower = "lower";
     config.op_raise = "raise";
+    config.op_loosen = "loosen";
     config.op_shape = "shape";
     config.op_view = "view";
     config.op_lay = "lay";
@@ -195,6 +215,7 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
         patch.half_m = kPatchHalfM;
         patch.capacity_mm = kPatchCapacityMm;
         patch.gravity_rel = kPatchGravityRel;
+        patch.age_days = kPatchAgeDays;
         config.patches.push_back(patch);
     }
     return config;

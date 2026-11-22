@@ -35,7 +35,7 @@
  */
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh.hpp>
@@ -58,6 +58,7 @@ struct PlantSceneTemplate {
  */
 struct PlantSceneLook {
     ::godot::Ref<::godot::Material> bark;                      // the internodes on both cylinders: white bark mixed with stem-base bark by the share of each instance (GODOT_ROLE_BARK, GODOT_ROLE_BARK_BASE)
+    ::godot::Ref<::godot::Material> wood;                      // the disk on the tip knot of every cut stub: the bark shader with the cut wood on both of its sides (GODOT_ROLE_WOOD)
     ::godot::Ref<::godot::Material> ground[GODOT_SOIL_COUNT];  // the ground by the soil code of the focused patch (GODOT_ROLE_GROUND_*)
     ::godot::Ref<::godot::Material> soil;                      // the ground while the focused patch carries no soil code: bare soil
     PlantSceneTemplate leaf;                                   // leaves (GODOT_ROLE_LEAF), stand-in the leaf template GODOT_TMPL_LEAF

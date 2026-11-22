@@ -22,7 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_garden_return.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 
 namespace ase::adp::godot {
 

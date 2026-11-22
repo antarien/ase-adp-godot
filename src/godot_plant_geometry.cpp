@@ -63,6 +63,10 @@ std::unordered_map<uint32_t, PlantStand> plant_stands(const std::vector<Vivarium
         stand.condition_known = patch.cond_known;
         stand.wilted = patch.cond_known && patch.wilted ? 1.0f : 0.0f;
         stand.dead = patch.cond_known && patch.dead ? 1.0f : 0.0f;
+        // the autumn colour of the individual (usecase:101646 colour the leaves in autumn): NaN until its record is
+        // read, then the share the autumn port carried
+        stand.autumn_known = std::isfinite(patch.autumn);
+        stand.autumn = stand.autumn_known ? static_cast<float>(patch.autumn) : 0.0f;
         stands[patch.object_id] = stand;
     }
     return stands;

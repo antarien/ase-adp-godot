@@ -21,7 +21,8 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_motion.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <ase/math/math.hpp>
 

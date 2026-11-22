@@ -25,8 +25,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-15
- * @modified    2026-11-15
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-20
+ * @version     00.00.26.00026 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -167,6 +167,23 @@ bool take_figure_level(::godot::Node3D* scene, uint32_t object_id, int32_t& leve
     }
     body->set_meta(kFigureMetaLevelNoted, drawn);
     level = drawn;
+    return true;
+}
+
+bool take_figure_water(::godot::Node3D* scene, uint32_t object_id, double& litres) {
+    ::godot::Node3D* body = figure_body(scene, object_id);
+    if (body == nullptr || !body->has_meta(kFigureMetaWater)) {
+        return false;
+    }
+    // the scene notes the litres of the carried vessel each frame and takes the meta away when the hand holds none;
+    // a change is any other value than the one noted, and a vessel seen anew carries no noted value, so its first
+    // litres are noted
+    const double carried = static_cast<double>(body->get_meta(kFigureMetaWater));
+    if (body->has_meta(kFigureMetaWaterNoted) && static_cast<double>(body->get_meta(kFigureMetaWaterNoted)) == carried) {
+        return false;
+    }
+    body->set_meta(kFigureMetaWaterNoted, carried);
+    litres = carried;
     return true;
 }
 

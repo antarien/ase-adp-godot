@@ -22,7 +22,7 @@
 
 #include <ase/adp/godot/godot_hud_ui_icon.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
 

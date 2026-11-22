@@ -28,8 +28,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-13
- * @modified    2026-11-18
- * @version     00.00.22.00022 [init]
+ * @modified    2026-11-22
+ * @version     00.00.26.00026 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -42,7 +42,8 @@
 #include <ase/adp/godot/godot_figure_hand.hpp>
 #include <ase/adp/godot/godot_figure_node.hpp>
 #include <ase/adp/godot/godot_figure_rig.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/bone_attachment3d.hpp>
@@ -91,7 +92,6 @@ constexpr double kFigureAimMinSquared = 1.0e-6;             // eye and aim close
 constexpr float kFigureHandSide = 0.36f;                    // stand-in body: its hand socket beside the capsule on its right (+x), metres
 constexpr float kFigureHandLift = 0.95f;                    // stand-in body: height of its hand socket above the feet, metres
 constexpr float kFigureModelTurn = ase::math::PI;           // turn of the figure file around y: glTF faces +z, course 0 of ase-player looks along -z
-constexpr const char* kFigureMetaWater = "figure_vessel_water_l";  // litres of the carried vessel the gear port showed last, so a rise reads as one draw
 constexpr double kFigureWaterRise = 1.0e-3;                 // litres the vessel must gain between two snapshots to count as a draw, above float noise of the port
 
 /**
@@ -108,6 +108,29 @@ bool carried_water(uint32_t bearer, const std::vector<VivariumFigureGearView>& g
         }
     }
     return false;
+}
+
+/**
+ * The pose of the figure `figure` whose node is `body` (T.11): its record of the rest port and the radius of its
+ * body handed to figure_pose (godot_figure_pose.hpp). The radius is the capsule ase-physics collides the figure
+ * as, from the shoulder joints of its rig, or the stand-in's while the node carries no rig. A figure the port
+ * carries no record for passes NaN, and stands.
+ */
+uint8_t pose_of(const VivariumFigureView& figure, const ::godot::Node3D* body,
+                const std::vector<VivariumSurvivalRestView>& rests, const std::vector<FigureSceneStone>& stones) {
+    FigureSceneRest rest{std::nan(""), std::nan(""), std::nan(""), std::nan("")};
+    for (const VivariumSurvivalRestView& candidate : rests) {
+        if (candidate.object_id == figure.object_id) {
+            rest.is_resting = candidate.is_resting;
+            rest.sleeping = candidate.sleeping;
+            rest.rest_quality = candidate.rest_quality;
+            rest.rest_target = candidate.rest_target;
+            break;
+        }
+    }
+    const double radius = body->has_meta(kFigureMetaRadius) ? static_cast<double>(body->get_meta(kFigureMetaRadius))
+                                                            : static_cast<double>(kFigureStandInRadius);
+    return figure_pose(rest, figure.x, figure.z, radius, stones);
 }
 
 /** The detail level a node name carries as _lod<k>_, -1 when it carries none. */
@@ -337,7 +360,8 @@ void end_figure_warmth(::godot::Node3D* scene) {
 
 void fill_figures(::godot::Node3D* scene, const std::vector<VivariumFigureView>& figures,
                   const std::vector<VivariumFigureGearView>& gear, const FigureSceneLook& look,
-                  const VivariumFigureCodeView& codes) {
+                  const VivariumFigureCodeView& codes, const std::vector<VivariumSurvivalRestView>& rests,
+                  const std::vector<FigureSceneStone>& stones) {
     // while the file loads no node is built: a node built now would stay the stand-in body once the pack came
     if (scene == nullptr || figure_load_running(look.load)) {
         return;
@@ -391,8 +415,12 @@ void fill_figures(::godot::Node3D* scene, const std::vector<VivariumFigureView>&
                 body->set_meta(kFigureMetaWater, litres);
             } else if (body->has_meta(kFigureMetaWater)) {
                 body->remove_meta(kFigureMetaWater);
+                if (body->has_meta(kFigureMetaWaterNoted)) {
+                    body->remove_meta(kFigureMetaWaterNoted);  // the water line notes the next vessel from its first litres
+                }
             }
-            drive_figure_motion(body, figure.gait, codes.gait_stand, codes.gait_run, turning, bend);
+            drive_figure_motion(body, figure.gait, codes.gait_stand, codes.gait_run, turning, bend,
+                                pose_of(figure, body, rests, stones));
         }
 
         // the detail level by the figure's share of the frame height

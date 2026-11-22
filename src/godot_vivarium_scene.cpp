@@ -42,7 +42,11 @@
 #include <ase/adp/godot/godot_plant_horizon_ridge.hpp>
 #include <ase/adp/godot/godot_plant_leaf_season.hpp>
 #include <ase/adp/godot/godot_vivarium_scene_counts.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
+#include <ase/adp/godot/tube/godot_knot_resource_manager.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/time.hpp>
@@ -99,11 +103,14 @@ void VivariumView::follow_scene(double elapsed_s) {
              " " + measure(GODOT_NO_PLACE));
     }
     // the water of the brooks (usecase:100399 carry brook water): in every bed at its bed plus the depth ase-hydro
-    // gives it, and beside it at the groundwater level ase-hydro gives that brook (build_water_table); laid anew
-    // when ase-hydro changed a stream or the ground under the water moved, never once per frame
+    // gives it, and in every pit ase-hydro fills at its floor plus the depth of its record (build_water_table,
+    // D2506); laid anew when ase-hydro changed a stream or a pit or the ground under the water moved, never once
+    // per frame
     const uint64_t streams = resources_.stream_generation();
-    if (ground_moved || streams != scene_streams_) {
+    const uint64_t pits = resources_.pit_generation();
+    if (ground_moved || streams != scene_streams_ || pits != scene_pits_) {
         scene_streams_ = streams;
+        scene_pits_ = pits;
         // the edge of the bridge for the groundwater beside a brook (N0484): the stream port carries no level
         // until ase-gis has mapped the cell at the start of the bed (GIS_HYD_CELL_LEVEL, filed by
         // FloraHostStrmExptSystem); logged once on its edge, the water stays in the beds meanwhile
@@ -120,10 +127,12 @@ void VivariumView::follow_scene(double elapsed_s) {
         }
         const uint64_t water_start_usec = ticks->get_ticks_usec();
         // the ground as fill_ground just left it: the table reads its vertices, never the ports by object id
-        const uint32_t wet = fill_plant_water(scene_, resources_.get_streams(), ground_surface_.arrays);
+        const uint32_t wet =
+            fill_plant_water(scene_, resources_.get_streams(), resources_.get_pits(), ground_surface_.arrays);
         const uint64_t water_usec = ticks->get_ticks_usec() - water_start_usec;
         note("scene water cells " + ::godot::String::num_int64(static_cast<int64_t>(wet)) + " brooks " +
-             ::godot::String::num_int64(static_cast<int64_t>(resources_.get_streams().size())) +
+             ::godot::String::num_int64(static_cast<int64_t>(resources_.get_streams().size())) + " pits " +
+             ::godot::String::num_int64(static_cast<int64_t>(resources_.get_pits().size())) +
              " fill_usec=" + ::godot::String::num_uint64(water_usec));
     }
     // the stem base of every configured patch, as its record carries it (plant_origins reads it)
@@ -159,9 +168,9 @@ void VivariumView::follow_scene(double elapsed_s) {
     // the templates arrive with the plugin's first Production run and stay; their generation changes then
     // and with every new host (usecase:101011 tessellate the organ templates)
     const uint64_t templates = resources_.template_generation();
-    // the bark tubes are laid anew only when the bark port carried a new set, which ase-render-data builds only
-    // when a body ticked (register B0295 point 4, usecase:101613)
-    const uint64_t bark = resources_.bark_generation();
+    // the bark tubes are laid anew only when the knot store took a new set of knots, feet and cut faces, which
+    // ase-render-data builds only when a body ticked (register B0295 point 4, B0677, usecase:101613)
+    const uint64_t bark = resources_.knots().get_generation();
     if (organs != scene_organs_ || templates != scene_templates_ || bark != scene_bark_ || orders_moved ||
         stood_moved) {
         // the organ views are read anew with every Dissemination run, so only the first fill after a
@@ -215,7 +224,7 @@ void VivariumView::follow_scene(double elapsed_s) {
     // an overcast sky turns the sky grey and dims the light (PLAN_ASE_VIVARIUM_PHASE_06_HUD row N01): SkyOvercast
     // derives the shade from the sky frame's kind of weather and the sun's height. The frame carries a kind only
     // while the sky port's colours carry no tint of it (the bridge's weather, N0449); the weather of
-    // flora.weather.v1 is already in them through ase-pl-sky, so the sky is tinted exactly once (D2280). The sky's
+    // sky.weather.v1 is already in them through ase-pl-sky, so the sky is tinted exactly once (D2280). The sky's
     // own colours stand from the first frame the configuration is loaded in (SkyOvercast is bound by load_hud),
     // not only once the HUD stands: before that the frame carries no kind, so the sky shows the mockup's colours
     // by the sun's height under an open sky, never the depth fog's grey of the sky port as its horizon
@@ -283,6 +292,9 @@ void VivariumView::follow_scene(double elapsed_s) {
         LeafSeasonFrame leaf;
         leaf.season = static_cast<int32_t>(ase::math::floor(
             static_cast<float>(clock.day_known ? clock.season : hud_bridge_clock_.season)));
+        // autumn by the code of HALITRIX the date record carries (usecase:101646 colour the leaves in autumn): only
+        // then each birch turns at its own pace; without the codes no leaf takes its own colour
+        leaf.autumn = clock.season_codes_known && leaf.season == static_cast<int32_t>(clock.season_halitrix);
         std::string failed;
         if (!hud_leaf_season_.shade(leaf, leaf_shade, failed)) {
             fail_hud("leaf season " + failed);

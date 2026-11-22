@@ -95,7 +95,7 @@ FigureSceneGlass bind_figure_glass(double width, double height, double hold, dou
 
 void flash_figure_edges(::godot::Node3D* scene, const std::vector<VivariumFigureBumpView>& bumps,
                         const std::vector<VivariumFigureView>& figures, const FigureSceneGlass& glass,
-                        double elapsed_s) {
+                        uint32_t held_figure, bool held, double elapsed_s) {
     if (scene == nullptr || glass.material.is_null()) {
         return;
     }
@@ -137,6 +137,15 @@ void flash_figure_edges(::godot::Node3D* scene, const std::vector<VivariumFigure
         pane->set_rotation(::godot::Vector3(
             0.0f, ase::math::atan2(static_cast<float>(bump.normal_x), static_cast<float>(bump.normal_z)), 0.0f));
         pane->set_visible(true);
+    }
+    // the rim holds the figure (camera.edge or camera.bound of this frame): its pane stands at full glow at the last
+    // touched point and its hold starts anew, so it fades only from the frame the rim lets the figure go (M0157, 07-G)
+    if (held) {
+        ::godot::MeshInstance3D* pane = pane_of(holder, ::godot::String(kGlassPane) + ::godot::String::num_uint64(held_figure));
+        if (pane != nullptr) {
+            pane->set_meta(kGlassMetaAge, 0.0);
+            pane->set_visible(true);
+        }
     }
     // every shown pane ages by the frame: full glow during the hold, then down to nothing over the fade, then hidden
     for (int32_t i = 0; i < holder->get_child_count(); ++i) {

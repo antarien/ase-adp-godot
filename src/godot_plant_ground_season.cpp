@@ -22,7 +22,8 @@
  */
 
 #include <ase/adp/godot/godot_plant_ground_season.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>

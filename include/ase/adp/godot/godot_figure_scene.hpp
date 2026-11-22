@@ -26,7 +26,11 @@
  *              clip while the body turns on the spot toward the course of the port. THE BEND AT THE BROOK
  *              (07.14): when the vessel the gear port shows in the figure's hand gains water, ase-equipment
  *              filled it in one draw, and the bend clip of the file plays once over the mix - the body goes
- *              down through hips, knees and spine of its rig, never a slide of the whole node. Of the four detail levels
+ *              down through hips, knees and spine of its rig, never a slide of the whole node. THE POSE AT THE
+ *              CAMP FIRE (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP T.11, usecase:2157 - go to Sleep): the rest port
+ *              says whether ase-metabolism holds the figure resting and sleeping (MTB_IS_RESTING,
+ *              MTB_IS_SLEEPING); a sleeping figure lies, a resting one sits on a ring stone under its body or on
+ *              the ground, and the mix plays the passages between them. Of the four detail levels
  *              (meshes named _lod<k>_) the one drawn follows the figure's share of the frame height against
  *              the three bands the port carries (RND_CONST_FIGURE_LOD_NEAR/_MID/_FAR). Under the Skeleton3D of
  *              the rig a BoneAttachment3D (FigureSocketHandR) follows the socket bone socket_hand_r: what the
@@ -51,8 +55,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-13
- * @modified    2026-11-18
- * @version     00.00.22.00022 [init]
+ * @modified    2026-11-22
+ * @version     00.00.26.00026 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -62,7 +66,8 @@
 #include <ase/adp/godot/godot_asset_binding.hpp>
 #include <ase/adp/godot/godot_figure_hand.hpp>
 #include <ase/adp/godot/godot_figure_load.hpp>
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_figure_pose.hpp>
+#include <ase/adp/godot/godot_host_figure_view.hpp>
 
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/node3d.hpp>
@@ -75,6 +80,8 @@
 #include <vector>
 
 namespace ase::adp::godot {
+
+struct VivariumSurvivalRestView;
 
 /**
  * How the drawn body follows the course its port reports, SHA's hud_figure_body_turn_* read with the HUD
@@ -123,11 +130,15 @@ void end_figure_warmth(::godot::Node3D* scene);
  * below its socket as the stand-in of its kind (pa, enxada, faca); it is rebuilt when the kind changes and
  * leaves when the port carries no piece in that hand. The clip mix reads the gait against the codes of the code
  * port (avatar.code.v1, `codes`): stand, walk and run are ase-pl-avatar's values, never the adapter's; while no
- * code record stood the clips are neither set up nor driven.
+ * code record stood the clips are neither set up nor driven. The pose follows the rest port (survival.rest.v1,
+ * `rests`, T.11): a figure ase-metabolism says sleeps lies down, one that rests awake sits, on a ring stone of
+ * `stones` when the stone lies within the radius of its body, else on the ground; a figure without a rest record
+ * stands.
  */
 void fill_figures(::godot::Node3D* scene, const std::vector<VivariumFigureView>& figures,
                   const std::vector<VivariumFigureGearView>& gear, const FigureSceneLook& look,
-                  const VivariumFigureCodeView& codes);
+                  const VivariumFigureCodeView& codes, const std::vector<VivariumSurvivalRestView>& rests,
+                  const std::vector<FigureSceneStone>& stones);
 
 /** The scene's camera at the eye of the player camera, looking at its aim; false while the port carries none. */
 bool aim_figure_camera(::godot::Node3D* scene, const VivariumFigureCameraView& camera);
@@ -174,6 +185,17 @@ bool take_figure_gait(::godot::Node3D* scene, uint32_t object_id, double gait);
  * no such node or has not drawn it yet.
  */
 bool take_figure_level(::godot::Node3D* scene, uint32_t object_id, int32_t& level);
+
+/**
+ * THE WATER A FIGURE CARRIES, BY CHANGE (07.14, 07-G under AI/PC): true on the first call after the scene noted the
+ * litres of the vessel figure `object_id` carries and then whenever those litres differ from the litres last returned;
+ * the litres land in `litres`. The gear port hands the owner's value unchanged between two acts, so any other value
+ * is an act, the same compare as the gait line. The scene notes them from the gear
+ * port each frame (show_figures), ase-equipment owns the vessel and fills it at the brook and empties it at the birch,
+ * so a rise is the fill and a fall the pour of the figure's own act - the view only compares, never computes it.
+ * False while the figure carries no vessel or the scene stands no such node.
+ */
+bool take_figure_water(::godot::Node3D* scene, uint32_t object_id, double& litres);
 
 /**
  * THE FACE AND THE EYE AS THEY ARE DRAWN (07.3): the edges in texels of the albedo bound on the face material

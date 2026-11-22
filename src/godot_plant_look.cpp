@@ -33,7 +33,10 @@
 #include <ase/adp/godot/godot_asset_loader.hpp>
 #include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_plant_shader.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/classes/base_material3d.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
@@ -243,6 +246,14 @@ PlantSceneLook bind_plant_look(const VivariumAssetBinding& binding, const ::godo
     const std::string base_name = asset_of(roles, GODOT_ROLE_BARK_BASE);
     look.bark = bark_mix_of(binding, white_name, role_material(binding, asset_root, white_name), base_name,
                             role_material(binding, asset_root, base_name));
+    // the disk of a cut stub lies in the arrays of its bark tube and is set out by the same knot form, so it takes the
+    // bark shader too; the cut wood stands on both sides, so the bark share of the stub changes nothing on its face
+    const std::string wood_name = asset_of(roles, GODOT_ROLE_WOOD);
+    const ::godot::Ref<::godot::Material> wood = role_material(binding, asset_root, wood_name);
+    look.wood = bark_mix_of(binding, wood_name, wood, wood_name, wood);
+    // its UV is turned around the pith in the middle of the wood texture, sampled once over the disk (cut_face)
+    const ::godot::Ref<::godot::ShaderMaterial> wood_shader = look.wood;
+    wood_shader->set_shader_parameter(GODOT_BARK_CUT_FACE, true);
     look.ground[GODOT_SOIL_MEADOW] = soil_ground(binding, asset_root, roles, GODOT_ROLE_GROUND_MEADOW);
     look.ground[GODOT_SOIL_FOREST] = soil_ground(binding, asset_root, roles, GODOT_ROLE_GROUND_FOREST);
     look.soil = ground_of(::godot::Ref<::godot::Material>(), GODOT_COLOR_SOIL);

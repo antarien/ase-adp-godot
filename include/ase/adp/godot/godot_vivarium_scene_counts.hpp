@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/variant/string.hpp>

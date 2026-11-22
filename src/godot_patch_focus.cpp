@@ -21,7 +21,8 @@
  */
 
 #include <ase/adp/godot/godot_patch_focus.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
 namespace ase::adp::godot {

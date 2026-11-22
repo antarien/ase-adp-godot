@@ -2,27 +2,27 @@
  * ASE GODOT ADAPTER - VIVARIUM VIEW HUD
  *
  * @file        godot_vivarium_hud.cpp
- * @brief       VivariumView - the HUD of the care view: its frame from the ports, its drawing (its configuration and
- *              the still mode in godot_vivarium_hud_config.cpp)
+ * @brief       VivariumView - the HUD of the care view: its frame from the ports (its drawing in
+ *              godot_vivarium_hud_draw.cpp, its configuration and the still mode in godot_vivarium_hud_config.cpp)
  * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.5: once the world stands initialised and no error panel stands,
  *              the canvas over the scene is VivariumHud (godot_hud_compose.hpp). Every frame the view lays the
  *              HUD's frame on the placed layout (place_hud), fills every block's frame from the ports it reads
  *              (fill_hud, which first lays the surface and the outer bands' offsets, HudCover, in the frame's
- *              units), lets the HUD resolve its mode and draws it. The frames of the blocks placed in the world
- *              (cut marks, ground kit, hand, world drop, tool place, carried things, the cut under the trunk, the
- *              drag) are filled in godot_vivarium_hud_world.cpp (fill_hud_world). A value no port carries yet is the
- *              mockup's, written by the bridge from hud_bridge_* of SHA (godot_vivarium_hud_bridge.cpp), and its register
- *              id is logged once on the edge of the bridge (open_gap), never shown: the picture stands whole
- *              (design decision 2026-11-10). A HUD that cannot draw names why on the error panel (fail_hud). The touches go
- *              through godot_vivarium_hud_input.cpp. After each drawn frame the places a tap reaches the HUD
- *              through are logged whenever they change (godot_vivarium_hud_place.cpp: note_hud_places).
+ *              units), and draw_hud (godot_vivarium_hud_draw.cpp) lets the HUD resolve its mode and draws it. The
+ *              frames of the blocks placed in the world (cut marks, ground kit, hand, world drop, tool place, carried
+ *              things, the cut under the trunk, the drag) are filled in godot_vivarium_hud_world.cpp
+ *              (fill_hud_world). A value no port carries yet is the mockup's, written by the bridge from
+ *              hud_bridge_* of SHA (godot_vivarium_hud_bridge.cpp), and its register id is logged once on the edge
+ *              of the bridge (open_gap), never shown: the picture stands whole (design decision 2026-11-10). The
+ *              touches go through godot_vivarium_hud_input.cpp.
  *
  *              BACKEND GAPS OF THE FRAME (register carrier N0448): N0449 weather, N0450 trail, N0451 carry,
  *              N0453 skill (the level stands at hud.perception.start), N0454 patch preview and growth,
  *              N0456 loosened soil, N0457 sap, N0459 pace, N0460 clock shares, N0461 sign states,
- *              N0462 marked internodes, N0463 roots, N0464 the measure request. Each id is logged with its port
- *              field where its bridge default is written (bridge_trail, bridge_skill, bridge_patch, fill_hud_world,
- *              send_hud_verb, bridge_clock, bridge_weather, bridge_signs, bridge_pace).
+ *              N0462 marked internodes, N0463 roots, N0464 the measure request, N0530 the body of the figure,
+ *              B0657 the camp fire. Each id is logged with its port field where its bridge default is written
+ *              (bridge_trail, bridge_skill, bridge_patch, fill_hud_world, send_hud_verb, bridge_clock,
+ *              bridge_weather, bridge_signs, bridge_pace, bridge_body, bridge_fire).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -31,7 +31,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-19
+ * @modified    2026-11-20
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -40,16 +40,14 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
-#include <ase/adp/godot/godot_plant_clouds.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/variant/array.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
 #include <cstdint>
@@ -141,26 +139,26 @@ bool VivariumView::fill_hud(std::string& failed) {
     // renders at once: another place in focus, its record appearing or gone, a new stage or condition (the stage
     // toast and the death, m.html 1033), besides the press, the release and the mode the view forces itself.
     const VivariumPatchView* live = resources_.get_patch_at(focus);
-    if (focus != hud_patch_shown_place_ || (live != nullptr) != hud_patch_shown_known_ ||
-        (live != nullptr && (live->stage != hud_patch_shown_.stage || live->cond_known != hud_patch_shown_.cond_known ||
-                             live->wilted != hud_patch_shown_.wilted || live->dead != hud_patch_shown_.dead))) {
+    if (focus != hud_shown_.place || (live != nullptr) != hud_shown_.patch_known ||
+        (live != nullptr && (live->stage != hud_shown_.patch.stage || live->cond_known != hud_shown_.patch.cond_known ||
+                             live->wilted != hud_shown_.patch.wilted || live->dead != hud_shown_.patch.dead))) {
         hud_refresh_.force();
     }
     if (hud_refresh_.take()) {
-        hud_patch_shown_place_ = focus;
-        hud_patch_shown_known_ = live != nullptr;
+        hud_shown_.place = focus;
+        hud_shown_.patch_known = live != nullptr;
         if (live != nullptr) {
-            hud_patch_shown_ = *live;
+            hud_shown_.patch = *live;
         }
-        hud_clock_shown_ = resources_.get_clock();
+        hud_shown_.clock = resources_.get_clock();
         // Night is the sun under the horizon of ase-pl-sky's sun, the same test the scene's sun disc stands by.
         const VivariumSkyView& sampled_sky = resources_.get_sky();
-        hud_night_shown_ = sampled_sky.known && !(sampled_sky.sun_y > 0.0);
+        hud_shown_.night = sampled_sky.known && !(sampled_sky.sun_y > 0.0);
         // the debug drawer's run numbers are readings of the same render (debugLayer, m.html 903)
-        hud_simulation_s_shown_ = resources_.simulation_seconds();
-        hud_steps_shown_ = resources_.tick_count();
+        hud_shown_.simulation_s = resources_.simulation_seconds();
+        hud_shown_.steps = resources_.tick_count();
     }
-    const VivariumPatchView* patch = hud_patch_shown_known_ ? &hud_patch_shown_ : nullptr;
+    const VivariumPatchView* patch = hud_shown_.patch_known ? &hud_shown_.patch : nullptr;
     const PlantOrigin* origin = nullptr;
     hud_segments_.clear();
     if (patch != nullptr) {
@@ -221,7 +219,7 @@ bool VivariumView::fill_hud(std::string& failed) {
     // The clock record: the SURA date, the hour and the phase of the band and of the calendar sheet.
     // The port's record of the last sample first; every group it leaves empty is the mockup's, written by the bridge
     // (N0460).
-    VivariumClockView clock = hud_clock_shown_;
+    VivariumClockView clock = hud_shown_.clock;
     bridge_clock(clock);
     SkyBandFrame& band = hud_now_.band;
     band.vec = static_cast<uint32_t>(clock.year);
@@ -237,8 +235,8 @@ bool VivariumView::fill_hud(std::string& failed) {
     band.sunrise = clock.sunrise_h;
     band.sunset = clock.sunset_h;
     band.season = static_cast<int32_t>(clock.season);
-    // Night as the last sample read it from ase-pl-sky's sun (hud_night_shown_).
-    band.night = hud_night_shown_;
+    // Night as the last sample read it from ase-pl-sky's sun (hud_shown_.night).
+    band.night = hud_shown_.night;
     band.elapsed = hud_clock_;
     CalendarSheetFrame& sheet = hud_now_.sheet;
     sheet.year.lun = band.lun;
@@ -257,6 +255,21 @@ bool VivariumView::fill_hud(std::string& failed) {
     // The past events of the trail on arrival and the ring's dots: flora.trail.v1 files none yet, so the bridge
     // writes the mockup's S.log (N0450, bridge_trail).
     bridge_trail(hud_now_.trail, sheet.year);
+    // The body of the figure for the rail CORPO: no host port reports its MTB_* yet, so the bridge writes the
+    // mockup's body (N0530, bridge_body).
+    bridge_body(hud_now_.body);
+    // The camp fire for the card FOGUEIRA: the adapter reads no ingle.fire.v1 yet, so the bridge writes the mockup's
+    // camp fire (B0657, bridge_fire).
+    bridge_fire(hud_now_.fire);
+    // The figure's rest for the rest card: survival.rest.v1 lays is_resting and sleeping of the seat's figure; while
+    // no record carries them the bridge writes the mockup's resting figure (N0530, N0555, bridge_rest).
+    bridge_rest(hud_now_.rest);
+    // The owner's grade of the air for the mark AR TÓXICO: ingle.fire.v1 lays the GLOBAL grade with every fire cell,
+    // the grade at the figure's own cell waits for survival.body.v1 (N0530, bridge_air).
+    bridge_air(hud_now_.air);
+    // The spoil of the bag's food for the ring ESTRAGO: no port lays it, so the bridge writes the mockup's food of
+    // the bag (N0530, bridge_food).
+    bridge_food(hud_now_.food);
     sheet.day.vec = band.vec;
     sheet.day.lun = band.lun;
     sheet.day.tum = band.tum;
@@ -285,7 +298,7 @@ bool VivariumView::fill_hud(std::string& failed) {
     hud_now_.veil.horizon_y = horizon_y;
     hud_now_.veil.time = hud_clock_;
     hud_now_.veil.dt = hud_dt_;
-    // The weather of the band, the strip, the veil and the hand's rain warning: flora.weather.v1's record, the
+    // The weather of the band, the strip, the veil and the hand's rain warning: sky.weather.v1's record, the
     // mockup's while it is silent.
     bridge_weather(band, sheet.forecast, hud_now_.veil, hud_now_.hand, hud_now_.sky);
 
@@ -369,126 +382,6 @@ bool VivariumView::fill_hud(std::string& failed) {
     fill_hud_debug(patch);
     hud_now_.debug_data = &debug_;
     return true;
-}
-
-void VivariumView::fill_hud_debug(const VivariumPatchView* patch) {
-    // The debug layer: the identity of the build, the clock, the chosen patch and the date the entry shows.
-    DebugLayerFrame& debug = hud_now_.debug;
-    // The clock record of the last sample, as the band reads it: every group the ports leave empty is the bridge's
-    // (N0460).
-    VivariumClockView clock = hud_clock_shown_;
-    bridge_clock(clock);
-    debug.stage = patch != nullptr ? patch->stage : GODOT_STAGE_NONE;
-    // The TEMPO chip of the factor the clock runs at, the one the hourglass fills: bridge_pace wrote it above
-    // (N0459). The RELEVO chip of the relief that stands: the boot's or the one granted last (ask_shape).
-    debug.factor = hud_now_.sheet.glass.factor;
-    debug.height_scale_m = debug_.height_scale_m;
-    // The adapter's version as the stage wrote it into build.identity (stage_native.py identity_text): a version
-    // passed as a compile define would stand on the command line of every unit of the adapter.
-    ::godot::String adapter;
-    if (read_text(identity_, "adapter_version", adapter)) {
-        debug.adapter = adapter.utf8().get_data();
-    }
-    ::godot::String client;
-    if (read_text(identity_, "client_commit", client)) {
-        debug.client = client.utf8().get_data();
-    }
-    debug.units = static_cast<uint64_t>(resources_.get_bundle().units.size());
-    debug.day = clock.year_day;
-    debug.hour = clock.hour;
-    debug.simulation_s = hud_simulation_s_shown_;
-    debug.steps = hud_steps_shown_;
-    debug.patch = patch != nullptr;
-    if (patch != nullptr) {
-        debug.cover = patch->coverage;
-        debug.soil_mm = patch->soil_mm;
-        debug.soil_rel = patch->soil_rel;
-    }
-    static_cast<void>(shown_date(debug.date));
-    debug.typing = debug_.date.typing;
-    debug.elapsed = hud_clock_;
-}
-
-void VivariumView::draw_hud() {
-    std::string failed;
-    // THE SHARES OF THE DRAWING (P0692): the frame line of the ground watch names the canvas time as one number
-    // (hud_draw_cpu_usec, about 35 ms of CPU in every frame in run 20261113-033131-p0690-cpu). The main thread's CPU
-    // time at each step boundary says which step carries it; the watched frames after a ground act write the shares.
-    const uint64_t cpu_begin = thread_cpu_usec();
-    place_hud();
-    const uint64_t cpu_placed = thread_cpu_usec();
-    // The HUD lays its shapes in mockup units under hud_frame_; the pen renders each at the screen's pixels.
-    UiPen pen(*node_);
-    if (!fill_hud(failed)) {
-        fail_hud(failed);
-        return;
-    }
-    const uint64_t cpu_filled = thread_cpu_usec();
-    if (!hud_.resolve(hud_now_, failed)) {
-        fail_hud(failed);
-        return;
-    }
-    const uint64_t cpu_resolved = thread_cpu_usec();
-    if (!hud_.draw(pen, hud_frame_, hud_now_, failed)) {
-        fail_hud(failed);
-        return;
-    }
-    draw_figure_hud(pen);  // the phone's stick and cam.mode over the HUD (07.9)
-    const uint64_t cpu_drawn = thread_cpu_usec();
-    // THE EDGE OF THE CARRY BRIDGE FOR THE CONTAINERS (N0451): BagWindow::take took this frame's container records
-    // from VivariumCarryBridge in every mode. A container left without one (ContainerDef::backend_open) is a fault of
-    // the bridge and keeps its last record in the picture; the bridge names its register id (ContainerDef::gap) once
-    // on its edge with the fields of the record flora.carry.v1 will carry. The windows themselves never ask.
-    const BagWindow& carried = hud_.window();
-    for (const ContainerDef* container : {&carried.pack_def(), &carried.pouch_def()}) {
-        if (container->backend_open()) {
-            open_gap(container->gap(), "flora.carry.v1.containers(opening_cm,room_l,carry_kg,asset)");
-        }
-    }
-    // The cloud banks of the mockup's drawSky stand behind the hills and the tree, so CloudBank lays them in
-    // frame units and the sky of the 3D scene shows them (godot_plant_clouds.cpp, N04); the kind is the veil's.
-    std::vector<CloudBankEllipse> banks;
-    hud_.clouds().lay(CloudBankFrame{hud_now_.veil.kind, hud_cloud_run_}, banks);
-    light_plant_clouds(scene_, banks, hud_.clouds().veil(), hud_frame_);
-    const uint64_t cpu_clouded = thread_cpu_usec();
-    note_hud_places();
-    const uint64_t cpu_noted = thread_cpu_usec();
-    if (!ground_watch_.op.empty()) {
-        // only in the GODOT_GROUND_WATCH_FRAMES frames a ground act watches, beside its ground_frame lines; the draw
-        // share is followed by the share of each step of VivariumHud::draw (HudDrawShare), so the line names the step
-        // that carries the drawing's cost and not only its sum.
-        std::string split = "hud_draw_split op=" + ground_watch_.op + " frame=" +
-                            std::to_string(ground_watch_.frames) +
-                            " place_cpu_usec=" + std::to_string(cpu_placed - cpu_begin) +
-                            " fill_cpu_usec=" + std::to_string(cpu_filled - cpu_placed) +
-                            " resolve_cpu_usec=" + std::to_string(cpu_resolved - cpu_filled) +
-                            " draw_cpu_usec=" + std::to_string(cpu_drawn - cpu_resolved) +
-                            " clouds_cpu_usec=" + std::to_string(cpu_clouded - cpu_drawn) +
-                            " places_cpu_usec=" + std::to_string(cpu_noted - cpu_clouded);
-        for (const HudDrawShare& share : hud_.shares()) {
-            split += " draw_" + share.step + "_cpu_usec=" + std::to_string(share.cpu_usec);
-        }
-        note(::godot::String(split.c_str()));
-    }
-    // THE EDGE OF A MODE COMES AFTER ITS PLACES. One line names the mode the HUD opened and measures the patch in
-    // focus, the place a tap on the birch (ACT_TREE) or a care step acts on, with the same fields the plain view's
-    // select line carries (measure: place, object, game_s, soil); the window acceptance reads it where the plain view
-    // writes its select line. It stands behind the place set of the same frame: the acceptance looks a place up the
-    // moment it reads the edge, and in run 20261112-places-210911 the edge "hud mode=rest" stood 37 ms before the
-    // rest frame's places, so the lookup found the sky mode's set and missed the system glyph (H06).
-    if (hud_.mode() != hud_mode_) {
-        hud_mode_ = hud_.mode();
-        const uint32_t focus = start_.patches.empty() ? GODOT_NO_PLACE
-                                                      : patch_focus_place(selected_place_, start_.patches.front().place);
-        note("hud mode=" + ::godot::String::utf8(hud_mode_.c_str()) + " " + measure(focus));
-    }
-}
-
-void VivariumView::fail_hud(const std::string& failed) {
-    failure_text_ = texts_.error + ": hud " + ::godot::String::utf8(failed.c_str());
-    ::godot::UtilityFunctions::push_error(failure_text_);
-    note("hud result=failed reason=" + ::godot::String::utf8(failed.c_str()));
-    node_->queue_redraw();
 }
 
 }  // namespace ase::adp::godot

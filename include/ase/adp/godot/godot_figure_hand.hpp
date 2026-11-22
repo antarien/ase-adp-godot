@@ -43,7 +43,7 @@
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
 #include <ase/adp/godot/godot_figure_load.hpp>
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_figure_view.hpp>
 #include <ase/adp/godot/godot_hud_world_drop.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>

@@ -11,7 +11,7 @@
  *              of ase-pl-avatar carries it to the view (avatar.boundary.v1, AvatarHostBndyExptSystem) with the
  *              outward normal, the touched point and the count of bumps of that body.
  *
- *              THE PANE FLASHES, NO MESSAGE STANDS WITH IT: where the body touched the edge the scene stands one
+ *              THE PANE FLASHES AT THE PLACE OF THE BUMP: where the body touched the edge the scene stands one
  *              quad per body, turned along the outward normal, drawn with figure_edge_glass.gdshader. Whenever the
  *              count of the port differs from the count the pane flashed for, the pane glows at full for the hold
  *              and fades to nothing over the fade, then it is hidden. The view computes nothing of the edge: where
@@ -36,7 +36,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_figure_view.hpp>
 
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
@@ -72,9 +72,16 @@ FigureSceneGlass bind_figure_glass(double width, double height, double hold, dou
  * the figure the body is up, turned along the outward normal, and glows at full for the hold, then fades over the
  * fade (`elapsed_s` the frame's seconds); at the end it is hidden. A body the scene draws no figure for has no feet
  * the view knows, so no pane stands for it. Nothing while the glass is not bound.
+ *
+ * THE PANE ALSO STANDS FOR AS LONG AS THE RIM HOLDS THE FIGURE (M0157, 07-G): while `held` is true the pane of the
+ * body `held_figure` stays at full glow at its last touched point, its hold starting anew every frame, and only when
+ * the rim lets the figure go does it fade. `held` is the rim state of the camera record the view keeps in this frame:
+ * ase-physics holds the followed figure at a chunk border (camera.edge) or ase-camera holds the player camera on the
+ * rim of its area (camera.bound). The pane shows the rim where the figure stands; the head bar of the HUD names it
+ * under the same condition (RAND DES AREALS, plan 07-G, godot_vivarium_figure_controls.cpp).
  */
 void flash_figure_edges(::godot::Node3D* scene, const std::vector<VivariumFigureBumpView>& bumps,
                         const std::vector<VivariumFigureView>& figures, const FigureSceneGlass& glass,
-                        double elapsed_s);
+                        uint32_t held_figure, bool held, double elapsed_s);
 
 }  // namespace ase::adp::godot

@@ -21,7 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_edge_rail.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>

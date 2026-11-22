@@ -27,9 +27,9 @@
  * @category    render/pipeline/stage
  * @usecase     usecase:5606 - observe the sky
  * @actor       Sky Watch Guide (SKYWATGUI)
- * @register    N0449 (flora.weather.v1), carrier N0448
+ * @register    N0449 (sky.weather.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -37,7 +37,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_sky_view.hpp>
 #include <ase/adp/godot/godot_hud_cloud_bank.hpp>
 
 #include <godot_cpp/classes/node3d.hpp>

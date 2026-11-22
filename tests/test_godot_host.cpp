@@ -34,8 +34,10 @@
 
 #include "test_godot_host_support.hpp"
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
 #include <ase/fileio/text_reader.hpp>
 #include <ase/math/math.hpp>
 #include <ase/utils/fs.hpp>

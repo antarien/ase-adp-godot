@@ -41,11 +41,12 @@
 
 #include "test_godot_host_figure_support.hpp"
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/kernel/kernel_embedded_host.hpp>
 
 #include <cmath>
 #include <cstdint>
+#include <string>
 
 namespace ase::adp::godot {
 
@@ -206,8 +207,13 @@ TEST_CASE("usecase:100399 carry brook water: the fill and drain ports file the r
     // ase-equipment (GIS_HYD_CELL_DEPTH), so the vessel holds 0 up to its room and never a level the view set.
     CHECK(resources.fill_figure(figure) == ase::kernel::HostStatusOk);
     CHECK(frames_carry(resources, "fills its vessel, fill request filed"));
-    CHECK(resources.drain_figure(figure, 1.0) == ase::kernel::HostStatusOk);
-    CHECK(frames_carry(resources, "lets 1 litres go, drain request filed"));
+    // The release names the patch the water falls on (N0517): the patch of place 0 the shared configuration lays,
+    // whose soil column ase-equipment wets - the same patch object the scene hands on from get_patch_at.
+    const VivariumPatchView* patch = resources.get_patch_at(0u);
+    REQUIRE(patch != nullptr);
+    CHECK(resources.drain_figure(figure, 1.0, patch->object_id) == ase::kernel::HostStatusOk);
+    CHECK(frames_carry(resources, "lets 1 litres go over patch " + std::to_string(patch->object_id) +
+                                      ", drain request filed"));
     for (const VivariumFigureGearView& piece : resources.get_figure_gear()) {
         if (piece.vessel) {
             CHECK(std::isfinite(piece.water_l));
@@ -216,7 +222,7 @@ TEST_CASE("usecase:100399 carry brook water: the fill and drain ports file the r
     }
 
     // A figure the host does not know is the plugin's to refuse: the port still takes the request.
-    CHECK(resources.drain_figure(0u, 1.0) == ase::kernel::HostStatusOk);
+    CHECK(resources.drain_figure(0u, 1.0, patch->object_id) == ase::kernel::HostStatusOk);
 }
 
 TEST_CASE("07.14 usecase:101611 the bend at the brook: the vessel the figure bears stands in the gear port and a fill never lowers its litres") {

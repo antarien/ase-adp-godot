@@ -37,7 +37,7 @@
 
 #include "test_godot_host_figure_support.hpp"
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 
 #include <cmath>
 #include <cstdint>

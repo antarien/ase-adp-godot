@@ -27,7 +27,7 @@
 
 #include <ase/adp/godot/godot_hud_compose.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <cstring>
 
@@ -67,6 +67,9 @@ bool VivariumHud::load(const ::godot::Dictionary& root, std::string& failed) {
     if (!band_.bind(theme_, failed) || !veil_.bind(theme_, failed) || !clouds_.bind(theme_, failed) ||
         !overcast_.bind(theme_, failed) || !shade_.bind(theme_, failed) ||
         !rail_.bind(theme_, failed) ||
+        !body_.bind(theme_, failed) || !warmth_.bind(theme_, failed) || !states_.bind(theme_, failed) ||
+        !fire_.bind(theme_, failed) || !rest_.bind(theme_, failed) || !air_.bind(theme_, failed) ||
+        !food_.bind(theme_, failed) || !water_.bind(theme_, failed) ||
         !signs_.bind(theme_, failed) || !focus_.bind(theme_, failed) || !fan_.bind(theme_, failed) ||
         !prune_.bind(theme_, failed) || !root_cut_.bind(theme_, failed) || !terrain_.bind(theme_, failed) ||
         !trail_.bind(theme_, failed) ||

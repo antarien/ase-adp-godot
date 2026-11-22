@@ -33,6 +33,7 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -139,7 +140,9 @@ bool VivariumView::load_hud(const ::godot::Dictionary& root) {
         }
         // A spade stroke moves the ground by a set amount (applyTerr, m.html 987: elevar and rebaixar move the
         // height by 0.3 under the brush); the amount is the verb's depth_m, required where the verb digs or heaps.
-        if (verb.op == VivariumHud::OP_LOWER || verb.op == VivariumHud::OP_RAISE) {
+        // A loosen verb carries the tilth depth its tool turns the same way, the depth_m of flora.loosen.v1 (B0649).
+        if (verb.op == VivariumHud::OP_LOWER || verb.op == VivariumHud::OP_RAISE ||
+            verb.op == VivariumHud::OP_LOOSEN) {
             double depth_m = 0.0;
             if (!read_number(entry, "depth_m", depth_m) || !(depth_m > 0.0)) {
                 return fail_config(("hud.verbs." + key + ".depth_m").c_str());

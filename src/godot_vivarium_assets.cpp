@@ -28,7 +28,8 @@
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/file_access.hpp>
@@ -70,7 +71,7 @@ std::unordered_map<std::string, uint32_t> stand_ins_of(const std::unordered_map<
         {GODOT_ROLE_GROUND_MEADOW, GODOT_COLOR_STAND_IN_MEADOW}, {GODOT_ROLE_GROUND_FOREST, GODOT_COLOR_STAND_IN_FOREST},
         {GODOT_ROLE_LEAF, GODOT_COLOR_STAND_IN_LEAF},           {GODOT_ROLE_MALE, GODOT_COLOR_STAND_IN_MALE},
         {GODOT_ROLE_FEMALE, GODOT_COLOR_STAND_IN_FEMALE},       {GODOT_ROLE_FRUIT, GODOT_COLOR_STAND_IN_FRUIT},
-        {GODOT_ROLE_NUTLET, GODOT_COLOR_STAND_IN_NUTLET},
+        {GODOT_ROLE_NUTLET, GODOT_COLOR_STAND_IN_NUTLET},       {GODOT_ROLE_WOOD, GODOT_COLOR_STAND_IN_WOOD},
     };
     std::unordered_map<std::string, uint32_t> stand_ins;
     for (const auto& [role, colour] : colours) {

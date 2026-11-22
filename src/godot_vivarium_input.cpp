@@ -26,7 +26,7 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 
 #include <godot_cpp/classes/input_event_magnify_gesture.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>

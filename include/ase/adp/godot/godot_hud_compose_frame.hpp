@@ -52,6 +52,11 @@
 #include <ase/adp/godot/godot_hud_sky_band.hpp>
 #include <ase/adp/godot/godot_hud_sky_overcast.hpp>
 #include <ase/adp/godot/godot_hud_sow_hole.hpp>
+#include <ase/adp/godot/godot_hud_survival_body_rail.hpp>
+#include <ase/adp/godot/godot_hud_survival_fire_card.hpp>
+#include <ase/adp/godot/godot_hud_survival_rest_card.hpp>
+#include <ase/adp/godot/godot_hud_survival_air_mark.hpp>
+#include <ase/adp/godot/godot_hud_survival_spoil_ring.hpp>
 #include <ase/adp/godot/godot_hud_tap_hole.hpp>
 #include <ase/adp/godot/godot_hud_tree_shade.hpp>
 #include <ase/adp/godot/godot_hud_terrain_kit.hpp>
@@ -108,6 +113,11 @@ struct VivariumHudFrame {
     RootCutFrame root_cut;                    // the ground opened under the trunk in the mode water
     TerrainKitFrame terrain;
     TrailViewFrame trail;
+    SurvivalBodyFrame body;                   // the figure's body for the rail CORPO (U01), written by the body bridge
+    SurvivalFireFrame fire;                   // the camp fire for the card FOGO (U04), written by the fire bridge
+    SurvivalRestFrame rest;                   // the figure's rest for the card SENTADO or DORMINDO (U05), written by the rest bridge
+    SurvivalAirFrame air;                     // the owner's rating of the air for the mark AR TÓXICO (U06), written by the air bridge
+    SurvivalSpoilFrame food;                  // the spoil of the bag's food for the ring ESTRAGO (U07), written by the food bridge
     CalendarSheetFrame sheet;
     ToolRackWorld rack_world;
     ToolRackFrame rack;

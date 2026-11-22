@@ -22,7 +22,7 @@
 
 #include <ase/adp/godot/godot_hud_calendar_sheet.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <initializer_list>
 #include <utility>

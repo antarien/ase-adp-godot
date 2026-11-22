@@ -8,7 +8,9 @@
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 point 4 and 03.11 step 2: every organ the view draws is an
  *              instance of a template, and its 3x4 is the one ase-render-data computed - the view copies it.
  *              rows_by_body sorts the records of one instance port by the body and the order their organ
- *              record names and puts beside each its custom data, the bark share and tiling. Nothing is
+ *              record names and puts beside each its custom data, the bend of its leaf card across and along
+ *              (PLAN_ASE_VIVARIUM_TREEGEN T.6, the bend port); the bark and its tiling reach the tube on CUSTOM0 of
+ *              its vertices (godot_tube_ring.cpp lay_tube_ring). Nothing is
  *              computed: no ring, no frame, no scale and no place - the values of a record go to the buffer as
  *              the port carried them.
  *
@@ -30,7 +32,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_organ_view.hpp>
 
 #include <cstdint>
 #include <unordered_map>
@@ -47,8 +49,8 @@ namespace ase::adp::godot {
 struct PlantBodyRows {
     std::vector<float> up_to;         // the organs of an order up to the split
     std::vector<float> above;         // the organs of an order above it
-    std::vector<float> up_to_custom;  // per organ of up_to its GODOT_INSTANCE_CUSTOM_VALUES: the bark share, then the tiles around, along and of the base bark
-    std::vector<float> above_custom;  // per organ of above its GODOT_INSTANCE_CUSTOM_VALUES: the bark share, then the tiles around, along and of the base bark
+    std::vector<float> up_to_custom;  // per organ of up_to its GODOT_INSTANCE_CUSTOM_VALUES: the bend across and along and the colour offset of its leaf card, then its atlas cell packed by GODOT_ATLS_PACK
+    std::vector<float> above_custom;  // per organ of above its GODOT_INSTANCE_CUSTOM_VALUES: the bend across and along and the colour offset of its leaf card, then its atlas cell packed by GODOT_ATLS_PACK
     std::vector<float> up_to_sway;    // per organ of up_to its GODOT_SWAY_VALUES: frequency, mean x and z, gust x and z, share at base and top, one spare
     std::vector<float> above_sway;    // per organ of above its GODOT_SWAY_VALUES, the same order
 };
@@ -56,8 +58,10 @@ struct PlantBodyRows {
 /**
  * Sorts the records of one instance port by the body and the order their organ record names - the
  * organ record of the same object id carries both (VivariumInstanceView) - and beside each record its
- * custom data: the bark share its organ record carries (usecase:100395 age the bark; 0 for an organ
- * class without bark), then the bark tiling of its section, up to GODOT_INSTANCE_CUSTOM_VALUES, and its sway
+ * custom data: the bend of its leaf card across and along as the bend port carried it (usecase:6540;
+ * GODOT_BEND_NONE for an organ without a bend record), its colour offset as the tint port carried it
+ * (GODOT_TINT_NONE for an organ without a tint record), then its atlas cell and cells as the atlas port carried
+ * them, packed as cell * GODOT_ATLS_PACK + (cells - 1) (0 for an organ without an atlas record), and its sway
  * (usecase:101335 animate the branch sway; all zero for an organ without a sway record). A record
  * without an organ record is not drawn: both ports are read in the same snapshot, so the gap is a broken
  * port, never an organ of an unknown plant. GODOT_ORDER_EVERY as `split_order` puts every organ above it -

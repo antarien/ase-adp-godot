@@ -15,7 +15,7 @@
  * @usecase     usecase:100974 - lay out organ records
  * @actor       Vivarium Steward (VIVARIUSTE)
  * @created     2026-11-05
- * @modified    2026-11-05
+ * @modified    2026-11-21
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -26,7 +26,9 @@
 // Own header FIRST
 #include <ase/adp/godot/godot_organ_records.hpp>
 #include <ase/adp/godot/godot_host_record.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/leaf/types.hpp>
+#include <ase/adp/godot/tube/types.hpp>
 
 #include <cmath>
 #include <cstdint>
@@ -122,6 +124,51 @@ bool organ_sway_of(const KernelHostRecord& record, VivariumOrganView& out) {
 }
 
 /**
+ * The bend port writes both keys of every bent leaf (ase-pl-flora, FloraHostBendExptSystem), each inside the
+ * bounds of the species catalogue that FloraHubBendSyncSystem checked against PLT_CONST_LEAF_BEND_MIN/MAX. A gap
+ * or a value that is no finite number is a broken port; the view holds no bound of ase-plant of its own.
+ */
+bool leaf_bend_of(const KernelHostRecord& record, VivariumOrganView& out) {
+    const double across = record_value(record, GODOT_KEY_BEND_ACROSS);
+    const double along = record_value(record, GODOT_KEY_BEND_ALONG);
+    if (!std::isfinite(across) || !std::isfinite(along)) {
+        return false;
+    }
+    out.bend_across = across;
+    out.bend_along = along;
+    return true;
+}
+
+/**
+ * The tint port writes its one key for every leaf with a colour offset (ase-pl-flora, FloraHostTintExptSystem), so a
+ * value that is no finite number is a broken port - never a card drawn black or white.
+ */
+bool leaf_tint_of(const KernelHostRecord& record, VivariumOrganView& out) {
+    const double offset = record_value(record, GODOT_KEY_TINT_OFFSET);
+    if (!std::isfinite(offset)) {
+        return false;
+    }
+    out.tint_offset = offset;
+    return true;
+}
+
+/**
+ * The atlas port writes both keys of every leaf with an atlas cell (ase-pl-flora, FloraHostAtlsExptSystem), the cell
+ * below its cells and the cells inside FLRA_PART_ATLS_CELLS_MIN/MAX as FloraHubAtlsSyncSystem checked them. A gap or
+ * a value that is no finite number is a broken port - never a card sampled outside its texture.
+ */
+bool leaf_atlas_of(const KernelHostRecord& record, VivariumOrganView& out) {
+    const double cell = record_value(record, GODOT_KEY_ATLS_CELL);
+    const double cells = record_value(record, GODOT_KEY_ATLS_CELLS);
+    if (!std::isfinite(cell) || !std::isfinite(cells)) {
+        return false;
+    }
+    out.atlas_cell = cell;
+    out.atlas_cells = cells;
+    return true;
+}
+
+/**
  * The instance port writes all twelve keys of every organ (ase-pl-flora, the instance export systems), so a
  * gap is a broken port - never an instance drawn collapsed at the origin. The keys stand in the row order of
  * MultiMesh::set_buffer and of VivariumInstanceView::rows.
@@ -173,6 +220,98 @@ bool bark_vertex_view_of(const KernelHostRecord& record, VivariumBarkVertexView&
     out.next = static_cast<uint32_t>(next);
     out.below = static_cast<uint32_t>(below);
     out.organ = static_cast<uint32_t>(organ);
+    return true;
+}
+
+/**
+ * usecase:101613 show the plant bark tubes (PLAN_ASE_VIVARIUM_TREEGEN T.6). The knot port writes all twelve keys of
+ * every internode (FloraHostCylNodeExptSystem), so a gap is a broken port - never a ring laid around a knot nobody
+ * carried. below is an object id, a whole number up to UINT32_MAX; the radius is never negative. rings is the count
+ * of intermediate rings ase-render-data gave the piece by the turn of its tangent (usecase:101643 - ring the tubes
+ * by curvature), a whole number up to GODOT_TUBE_RING_MAX.
+ */
+bool knot_view_of(const KernelHostRecord& record, VivariumKnotView& out) {
+    out = VivariumKnotView{};
+    out.object_id = record.object_id;
+    const double body = record_value(record, GODOT_KEY_BODY);
+    const double below = record_value(record, GODOT_KEY_BELOW);
+    out.x = record_value(record, GODOT_KEY_X);
+    out.y = record_value(record, GODOT_KEY_Y);
+    out.z = record_value(record, GODOT_KEY_Z);
+    out.radius = record_value(record, GODOT_KEY_RADIUS);
+    out.qx = record_value(record, GODOT_KEY_QX);
+    out.qy = record_value(record, GODOT_KEY_QY);
+    out.qz = record_value(record, GODOT_KEY_QZ);
+    out.qw = record_value(record, GODOT_KEY_QW);
+    out.v = record_value(record, GODOT_KEY_V);
+    const double rings = record_value(record, GODOT_KEY_RINGS);
+    const double limit = static_cast<double>(UINT32_MAX);
+    if (!whole(body) || body > limit || !whole(below) || below > limit || !whole(rings) ||
+        rings > static_cast<double>(GODOT_TUBE_RING_MAX) || !std::isfinite(out.x) ||
+        !std::isfinite(out.y) || !std::isfinite(out.z) || !std::isfinite(out.radius) || out.radius < 0.0 ||
+        !std::isfinite(out.qx) || !std::isfinite(out.qy) || !std::isfinite(out.qz) || !std::isfinite(out.qw) ||
+        !std::isfinite(out.v)) {
+        return false;
+    }
+    out.body = static_cast<uint32_t>(body);
+    out.below = static_cast<uint32_t>(below);
+    out.rings = static_cast<uint32_t>(rings);
+    return true;
+}
+
+/**
+ * usecase:101613 show the plant bark tubes (PLAN_ASE_VIVARIUM_TREEGEN T.6). The foot port writes all twelve keys of
+ * every internode that starts an axis (FloraHostCylNodeExptSystem, in the pass of its knot), so a gap is a broken
+ * port - never an axis opened on a ring nobody carried. sides is the corner count K ase-render-data laid every ring
+ * of the axis with (usecase:101644 - count ring corners by size), a whole number from GODOT_TUBE_SIDE_MIN to
+ * GODOT_TUBE_SIDE_MAX; noise is the key of the place of the axis in the bark noise field, from GODOT_TUBE_NOISE_LEAST
+ * to GODOT_TUBE_NOISE_MOST ("Rindenrauschen").
+ */
+bool foot_view_of(const KernelHostRecord& record, VivariumFootView& out) {
+    out = VivariumFootView{};
+    out.object_id = record.object_id;
+    const double body = record_value(record, GODOT_KEY_BODY);
+    out.x = record_value(record, GODOT_KEY_X);
+    out.y = record_value(record, GODOT_KEY_Y);
+    out.z = record_value(record, GODOT_KEY_Z);
+    out.radius = record_value(record, GODOT_KEY_RADIUS);
+    out.qx = record_value(record, GODOT_KEY_QX);
+    out.qy = record_value(record, GODOT_KEY_QY);
+    out.qz = record_value(record, GODOT_KEY_QZ);
+    out.qw = record_value(record, GODOT_KEY_QW);
+    out.v = record_value(record, GODOT_KEY_V);
+    const double sides = record_value(record, GODOT_KEY_SIDES);
+    if (!whole(sides) || sides < static_cast<double>(GODOT_TUBE_SIDE_MIN) ||
+        sides > static_cast<double>(GODOT_TUBE_SIDE_MAX)) {
+        return false;
+    }
+    out.sides = static_cast<uint32_t>(sides);
+    out.noise = record_value(record, GODOT_KEY_NOISE);
+    if (!std::isfinite(out.noise) || out.noise < GODOT_TUBE_NOISE_LEAST || out.noise > GODOT_TUBE_NOISE_MOST) {
+        return false;
+    }
+    if (!whole(body) || body > static_cast<double>(UINT32_MAX) || !std::isfinite(out.x) || !std::isfinite(out.y) ||
+        !std::isfinite(out.z) || !std::isfinite(out.radius) || out.radius < 0.0 || !std::isfinite(out.qx) ||
+        !std::isfinite(out.qy) || !std::isfinite(out.qz) || !std::isfinite(out.qw) || !std::isfinite(out.v)) {
+        return false;
+    }
+    out.body = static_cast<uint32_t>(body);
+    return true;
+}
+
+/**
+ * usecase:101613 show the plant bark tubes (PLAN_ASE_VIVARIUM_TREEGEN T.6, cut face). The scar port writes the
+ * body of every stub knot (FloraHostCylNodeExptSystem step 5b), its object the internode, so a missing body is a
+ * broken port - never a disk laid on a tip nobody cut.
+ */
+bool scar_view_of(const KernelHostRecord& record, VivariumScarView& out) {
+    out = VivariumScarView{};
+    out.object_id = record.object_id;
+    const double body = record_value(record, GODOT_KEY_BODY);
+    if (!whole(body) || body > static_cast<double>(UINT32_MAX)) {
+        return false;
+    }
+    out.body = static_cast<uint32_t>(body);
     return true;
 }
 

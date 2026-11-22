@@ -47,11 +47,11 @@
  *              growing in a fog phase as ase-pl-sky draws the fog in. So the sky turns grey in murky weather and
  *              in fog, and shows the mockup's colours under an open one.
  *
- *              BRIDGE GAP N0449. The kind of weather is state of the weather simulation on flora.weather.v1; the
+ *              BRIDGE GAP N0449. The kind of weather is state of the weather simulation on sky.weather.v1; the
  *              block reads it from its frame (VivariumHudFrame::sky), which carries a kind only while the sky
  *              port's colours carry no tint of it: the bridge writes the mockup's kind there from
  *              hud_bridge_weather_* of SHA (godot_vivarium_hud_bridge.cpp, bridge_weather), while the weather of
- *              flora.weather.v1 reaches the sky port through ase-pl-sky's weather tint and leaves the frame
+ *              sky.weather.v1 reaches the sky port through ase-pl-sky's weather tint and leaves the frame
  *              without a kind. So the sky is tinted exactly once (D2280). The block never asks whether a port
  *              delivered.
  *
@@ -61,9 +61,9 @@
  * @category    render/pipeline/stage
  * @usecase     usecase:5606 - observe the sky
  * @actor       Sky Watch Guide (SKYWATGUI)
- * @register    N0449 (flora.weather.v1), carrier N0448
+ * @register    N0449 (sky.weather.v1), carrier N0448
  * @created     2026-11-11
- * @modified    2026-11-12
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.

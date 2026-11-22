@@ -13,8 +13,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-19
- * @version     00.00.04.00023 [seed]
+ * @modified    2026-11-20
+ * @version     00.00.04.00024 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -104,11 +104,18 @@
 //            to an external host (the Godot process that embeds ASE).
 
 // Own header FIRST
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/adp/godot/godot_host_record.hpp>
 #include <ase/adp/godot/godot_organ_records.hpp>
 #include <ase/adp/godot/godot_terrain_samples.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
 #include <ase/adp/godot/types.hpp>
+// The knots, feet and cut faces of the bark tubes (N0543): knots_ is a unique_ptr to this type, so the
+// constructor and the destructor need it complete here; its schedule and page size come with the tube types
+#include <ase/adp/godot/tube/godot_knot_resource_manager.hpp>
+#include <ase/adp/godot/tube/types.hpp>
 #include <ase/fileio/text_reader.hpp>
 #include <ase/math/math.hpp>
 #include <ase/utils/strops.hpp>
@@ -233,7 +240,76 @@ constexpr const char* kFigureKeyPitchDelta = "pitch_delta";
 constexpr const char* kFigureKeyZoomDelta = "zoom_delta";  // turn request: change of the orbit distance, m (AVATAR_HOST_KEY_ZOOM_DELTA)
 constexpr const char* kFigureKeyItem = "item";      // hold request: catalog id of the thing (AVATAR_HOST_KEY_ITEM)
 constexpr const char* kFigureKeyLitres = "litres";  // drain request: litres the release lets go (AVTR_HOST_KEY_LITRES)
+constexpr const char* kFigureKeyPatch = "patch";    // drain request: patch object the water falls on (AVTR_HOST_KEY_PATCH, N0517)
 constexpr const char* kFigureKeyBearer = "bearer";  // gear record: the figure that carries the piece (AVATAR_HOST_KEY_BEARER)
+constexpr const char* kSurvivalKeyEffectiveTemp = "effective_temp";  // survival body: MTB_EFFECTIVE_TEMP, degrees (N0530)
+constexpr const char* kSurvivalKeyTempStress = "temp_stress";        // survival body: MTB_TEMP_STRESS, 0 to 1
+constexpr const char* kSurvivalKeyHunger = "hunger";                 // survival body: MTB_HUNGER, 0 to 100
+constexpr const char* kSurvivalKeyThirst = "thirst";                 // survival body: MTB_THIRST, 0 to 100
+constexpr const char* kSurvivalKeyEnergy = "energy";                 // survival body: MTB_ENERGY, 0 to 100
+constexpr const char* kSurvivalKeyFatigue = "fatigue";               // survival body: MTB_FATIGUE, 0 to 1
+constexpr const char* kSurvivalKeyHealth = "health";                 // survival body: MTB_HEALTH, 0 to 100
+constexpr const char* kSurvivalKeyPoisoned = "poisoned";             // survival body: TAG_MTB_POISONED, 1 or 0 (U02)
+constexpr const char* kSurvivalKeyBleeding = "bleeding";             // survival body: TAG_MTB_BLEEDING, 1 or 0
+constexpr const char* kSurvivalKeyEmaciated = "emaciated";           // survival body: TAG_MTB_EMACIATED, 1 or 0
+constexpr const char* kSurvivalKeyWellRested = "well_rested";        // survival body: TAG_MTB_WELL_RESTED, 1 or 0
+constexpr const char* kSurvivalKeyBreath = "breath";                  // survival body: GIS_LOCAL_BREATH, 0 normal or better to 1 none (N0532)
+constexpr const char* kSurvivalKeyIsResting = "is_resting";          // survival rest: MTB_IS_RESTING, 1 while resting (U05)
+constexpr const char* kSurvivalKeySleeping = "sleeping";              // survival rest: MTB_IS_SLEEPING, 1 while the resting figure sleeps (N0555)
+constexpr const char* kSurvivalKeyRestQuality = "rest_quality";       // survival rest: MTB_REST_QUALITY, 0 to 1 (FIRECAMP T.11, N0578)
+constexpr const char* kSurvivalKeyRestTarget = "rest_target";         // survival rest: MTB_CONST_REST_QUALITY_TARGET, good rest (N0578)
+constexpr const char* kSurvivalKeySpoil = "spoil";                    // survival food: ENT_FOOD_ROT_CARRIED, 0 fresh to 1 rotten (U07)
+constexpr const char* kSurvivalKeySoot = "soot";                      // survival smoke: GIS_LOCAL_SOOT, kg of soot in the air of the figure's cell (U06, D2500)
+constexpr const char* kSurvivalKeyKind = "kind";                      // survival stock: the hash of the item_art.json key of the food (T.8)
+constexpr const char* kSurvivalKeyKg = "kg";                          // survival stock: the fresh mass of the piece, kg (T.8)
+// The camp ports of ase-pl-ingle (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP T.3, T.7; IGL_HOST_KEY_* of its types.hpp).
+constexpr const char* kCampKeyEast = "x";        // camp and part request: metres east (IGL_HOST_KEY_X)
+constexpr const char* kCampKeyNorth = "y";       // camp and part request: metres north, the second horizontal axis (IGL_HOST_KEY_Y)
+constexpr const char* kCampKeyDrop = "drop";     // part request: release height above the stem foot, metres
+constexpr const char* kCampKeyFall = "fall";     // part request: fall speed in still air, m/s
+constexpr const char* kCampKeyMass = "mass";     // part request: mass of the recipe variant, kg
+constexpr const char* kCampKeyMake = "make";     // part, hull and body: name id of the recipe variant
+constexpr const char* kCampKeyFuel = "fuel";     // part request: present on a part that burns
+constexpr const char* kCampKeyHullX = "hx";      // hull request: corner, metres east of the centre of mass
+constexpr const char* kCampKeyHullY = "hy";      // hull request: corner, metres above the centre of mass
+constexpr const char* kCampKeyHullZ = "hz";      // hull request: corner, metres north of the centre of mass
+constexpr const char* kCampKeyPatch = "patch";   // body record: the patch whose frame the body lies in
+constexpr const char* kCampKeyTurnX = "tx";      // body record: rotation vector, east component, radians
+constexpr const char* kCampKeyTurnY = "ty";      // body record: rotation vector, up component, radians
+constexpr const char* kCampKeyTurnZ = "tz";      // body record: rotation vector, north component, radians
+constexpr const char* kCampKeyBody = "body";     // refuel record: the fuel body the keeper lays wood on
+constexpr const char* kCampKeyCell = "cell";     // refuel record: the fire cell of that body
+constexpr double kCampFuelMark = 1.0;            // the value the key fuel carries; the plugin reads its presence
+constexpr double kCampIdMax = 4294967295.0;      // the largest entity id or name id a uint32_t holds
+constexpr const char* kFireKeyFlame = "flame";          // fire cell: mark HUB_FIRE_CELL_FLAM, 1 or 0 (IGL_HOST_KEY_FLAME)
+constexpr const char* kFireKeyEmber = "ember";          // fire cell: mark HUB_FIRE_CELL_EMBR, 1 or 0 (IGL_HOST_KEY_EMBER)
+constexpr const char* kFireKeyAsh = "ash";              // fire cell: mark HUB_FIRE_CELL_ASH, 1 or 0 (IGL_HOST_KEY_ASH)
+constexpr const char* kFireKeyFuel = "fuel";            // fire cell: HUB_FIRE_CELL_FUEL, fuel left (IGL_HOST_KEY_FUEL_LEFT)
+constexpr const char* kFireKeyFuelLaid = "fuel_laid";   // fire cell: HUB_FIRE_CELL_FUEL_LAID (IGL_HOST_KEY_FUEL_LAID)
+constexpr const char* kFireKeyHeat = "heat";            // fire cell: HUB_FIRE_CELL_HEAT (IGL_HOST_KEY_HEAT)
+constexpr const char* kFireKeyBody = "body";            // fire cell: HUB_FIRE_CELL_BODY, the fuel body (IGL_HOST_KEY_BODY)
+constexpr const char* kFireKeyOxygen = "oxygen";        // fire cell: ATM_OXYGEN_FACTOR, 1 is normal (IGL_HOST_KEY_OXYGEN)
+constexpr const char* kFireKeyToxicity = "toxicity";    // fire cell: ATM_TOXICITY, 0 to 1 (IGL_HOST_KEY_TOXICITY)
+constexpr const char* kFireKeyCharcoal = "charcoal";    // fire cell: mark HUB_FIRE_CELL_CHAR, 1 or 0 (IGL_HOST_KEY_CHARCOAL)
+constexpr const char* kFireKeyBreath = "breath_state";  // fire cell: ATM_GAS_BTH_STATE, 0 to 4 (IGL_HOST_KEY_BREATH)
+constexpr const char* kFireKeyBreathNormal = "breath_normal";  // fire cell: ATM_CONST_BREATHABILITY_NORMAL, the grade of normal air
+constexpr const char* kLeftKeyAshKg = "ash_kg";         // left record: HUB_ENT_ASH_REQ_ASH, kg of ash since the cell was laid (IGL_HOST_KEY_ASH_KG)
+constexpr const char* kLeftKeyBurnLeft = "burn_left";   // left record: HUB_FIRE_CELL_BURN_LEFT, seconds the fuel lasts (IGL_HOST_KEY_BURN_LEFT)
+constexpr const char* kWeatherKeyKind = "kind";                // weather record: ATM_WEATHER_KIND (FLORA_HOST_KEY_KIND)
+constexpr const char* kWeatherKeyTemperature = "temperature";  // weather record: degrees Celsius (FLORA_HOST_KEY_TEMPERATURE)
+constexpr const char* kWeatherKeyWind = "wind";                // current record: ATM_WIND_SPEED, m/s from 0 (FLORA_HOST_KEY_WIND)
+constexpr const char* kWeatherKeyNight = "night";              // forecast record: 1 when the middle of the period lies under the horizon
+constexpr const char* kWeatherKeyRainMm = "rain_mm";           // forecast record: the millimetres that fall in the period, from 0
+constexpr const char* kWeatherCodeClear = "clear";             // code record: ATM_CONST_WEATHER_KIND_CLEAR
+constexpr const char* kWeatherCodePcloud = "pcloud";           // code record: ATM_CONST_WEATHER_KIND_PCLOUD
+constexpr const char* kWeatherCodeCloudy = "cloudy";           // code record: ATM_CONST_WEATHER_KIND_CLOUDY
+constexpr const char* kWeatherCodeDrizzle = "drizzle";         // code record: ATM_CONST_WEATHER_KIND_DRIZZLE
+constexpr const char* kWeatherCodeRain = "rain";               // code record: ATM_CONST_WEATHER_KIND_RAIN
+constexpr const char* kWeatherCodeSnow = "snow";               // code record: ATM_CONST_WEATHER_KIND_SNOW
+constexpr const char* kWeatherCodeFog = "fog";                 // code record: ATM_CONST_WEATHER_KIND_FOG
+constexpr const char* kSapKeyRunning = "running";              // sap record: 1 while the tap in the birch runs, else 0
+constexpr const char* kSapKeyHeldL = "held_l";                 // sap record: litres in the bark vessel now, from 0
+constexpr const char* kSapKeyCapL = "cap_l";                   // sap record: litres the vessel holds when full, above 0
 constexpr const char* kFigureKeyEyeHeight = "eye_height";  // rig report: eyes above the soles, m (AVATAR_HOST_KEY_EYE_HEIGHT)
 constexpr const char* kFigureKeyHeight = "height";         // rig report: body above the soles, m (AVATAR_HOST_KEY_HEIGHT)
 constexpr const char* kFigureKeyRadius = "radius";         // rig report: radius of the capsule around the whole body, m (AVATAR_HOST_KEY_RADIUS)
@@ -241,6 +317,7 @@ constexpr const char* kFigureKeyPlate = "plate";           // bind request: enti
 constexpr const char* kFigureKeySlot = "slot";      // gear record: name_id of the socket (AVATAR_HOST_KEY_SLOT)
 constexpr const char* kFigureKeyKind = "kind";      // gear record: catalog id of the thing (AVATAR_HOST_KEY_KIND)
 constexpr const char* kFigureKeyWater = "water_l";  // gear record: litres a vessel holds, only on a vessel (AVATAR_HOST_KEY_WATER)
+constexpr const char* kFigureKeyPour = "mm_per_l";  // gear record: column one litre lays in the bearer's hand, mm (AVATAR_HOST_KEY_POUR)
 constexpr const char* kFigureKeyGaitStnd = "gait_stnd";    // code record: gait of a standing figure (AVATAR_HOST_KEY_GAIT_STND)
 constexpr const char* kFigureKeyGaitWalk = "gait_walk";    // code record: gait of a walking figure (AVATAR_HOST_KEY_GAIT_WALK)
 constexpr const char* kFigureKeyGaitRun = "gait_run";      // code record: gait of a running figure (AVATAR_HOST_KEY_GAIT_RUN)
@@ -273,6 +350,8 @@ bool figure_id_of(double value, uint32_t& out) {
  * One gear record as a piece view (07.10). false for a record that misses one of its three values or carries one
  * that is no whole id: the gear port writes bearer, slot and kind of every piece (AvatarHostGearExptSystem). A
  * vessel adds water_l (07.14): a record without it is no vessel, one with a negative or endless value is broken.
+ * A vessel also carries mm_per_l, the column one of its litres lays in its bearer's hand (N0517); missing it
+ * stays 0 (the owner has not laid it yet), a negative or endless one breaks the record.
  */
 bool figure_gear_of(const KernelHostRecord& record, VivariumFigureGearView& out) {
     out = VivariumFigureGearView{};
@@ -291,6 +370,14 @@ bool figure_gear_of(const KernelHostRecord& record, VivariumFigureGearView& out)
     }
     out.vessel = true;
     out.water_l = water;
+    const double pour = record_value(record, kFigureKeyPour);
+    if (std::isnan(pour)) {
+        return true;
+    }
+    if (!std::isfinite(pour) || pour < 0.0) {
+        return false;
+    }
+    out.mm_per_l = pour;
     return true;
 }
 
@@ -492,6 +579,158 @@ bool same_streams(const std::vector<VivariumStreamView>& read, const std::vector
 }
 
 /**
+ * Whether two values of a water record are the same read. A value the ase-gis cell never answered is missing from
+ * the record and stands NaN; NaN equals nothing, so two unanswered reads count as the same, or every read of a port
+ * with an unanswered value would be a change and the view would lay its water anew each frame.
+ */
+bool same_water_value(double read, double held) {
+    return read == held || (std::isnan(read) && std::isnan(held));
+}
+
+/**
+ * One current record as a view. false for a record without its place: the current port lays curr_x and curr_z with
+ * every record it lays (ase-pl-water, WaterHostCurrExptSystem). Depth, speed and the two direction shares come only
+ * where the ase-gis cell answered them; a missing one stays NaN and fails no record.
+ */
+bool current_view_of(const KernelHostRecord& record, VivariumCurrentView& out) {
+    constexpr const char* KEY_X = "curr_x";              // WATR_HOST_KEY_CURR_X: east of the cell centre, metres
+    constexpr const char* KEY_Z = "curr_z";              // WATR_HOST_KEY_CURR_Z: north of the cell centre, metres
+    constexpr const char* KEY_DEPTH = "curr_depth_m";    // WATR_HOST_KEY_CURR_DEPTH: GIS_HYD_CELL_CURR_DEPTH, metres
+    constexpr const char* KEY_SPEED = "curr_speed_mps";  // WATR_HOST_KEY_CURR_SPEED: GIS_HYD_CELL_CURR_SPEED, m/s
+    constexpr const char* KEY_EAST = "curr_east";        // WATR_HOST_KEY_CURR_EAST: GIS_HYD_CELL_CURR_EAST, -1 to 1
+    constexpr const char* KEY_NORTH = "curr_north";      // WATR_HOST_KEY_CURR_NORTH: GIS_HYD_CELL_CURR_NORTH, -1 to 1
+    out = VivariumCurrentView{};
+    out.object_id = record.object_id;
+    out.x = record_value(record, KEY_X);
+    out.z = record_value(record, KEY_Z);
+    out.depth_m = record_value(record, KEY_DEPTH);
+    out.speed_m_s = record_value(record, KEY_SPEED);
+    out.east = record_value(record, KEY_EAST);
+    out.north = record_value(record, KEY_NORTH);
+    // what the water carries comes from the quality port and is joined afterwards; until then it is unanswered
+    out.bloom_kg_m3 = std::nan("");
+    out.rot_kg_m3 = std::nan("");
+    out.salt_kg_m3 = std::nan("");
+    return std::isfinite(out.x) && std::isfinite(out.z);
+}
+
+/**
+ * What the water of one current cell carries, out of its record on the quality port (ase-pl-water,
+ * WaterHostCurrQltyExptSystem, D2508), into the view of the same cell. A value the ase-gis cell never answered is
+ * missing from the record and stays NaN; the view computes none of them.
+ */
+void quality_into(const KernelHostRecord& record, VivariumCurrentView& cell) {
+    constexpr const char* KEY_BLOOM = "curr_bloom_kg_m3";  // WATR_HOST_KEY_CURR_BLOOM: GIS_HYD_CELL_CURR_BLOOM, kg/m3
+    constexpr const char* KEY_ROT = "curr_rot_kg_m3";      // WATR_HOST_KEY_CURR_ROT: GIS_HYD_CELL_CURR_ROT, kg/m3
+    constexpr const char* KEY_SALT = "curr_salt_kg_m3";    // WATR_HOST_KEY_CURR_SALT: GIS_HYD_CELL_CURR_SALT, kg/m3
+    cell.bloom_kg_m3 = record_value(record, KEY_BLOOM);
+    cell.rot_kg_m3 = record_value(record, KEY_ROT);
+    cell.salt_kg_m3 = record_value(record, KEY_SALT);
+}
+
+/** Whether two reads of the current port carry the same water, cell for cell in port order. */
+bool same_currents(const std::vector<VivariumCurrentView>& read, const std::vector<VivariumCurrentView>& held) {
+    if (read.size() != held.size()) {
+        return false;
+    }
+    for (std::size_t i = 0u; i < read.size(); ++i) {
+        if (read[i].object_id != held[i].object_id || read[i].x != held[i].x || read[i].z != held[i].z ||
+            !same_water_value(read[i].depth_m, held[i].depth_m) ||
+            !same_water_value(read[i].speed_m_s, held[i].speed_m_s) ||
+            !same_water_value(read[i].east, held[i].east) || !same_water_value(read[i].north, held[i].north) ||
+            !same_water_value(read[i].bloom_kg_m3, held[i].bloom_kg_m3) ||
+            !same_water_value(read[i].rot_kg_m3, held[i].rot_kg_m3) ||
+            !same_water_value(read[i].salt_kg_m3, held[i].salt_kg_m3)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * One pit record as a view. false for a record without its place: the pit port lays pit_x and pit_z with every
+ * record it lays (ase-pl-hydrogeology, HydrogeologyHostPitExptSystem). The water over the floor and over the rim
+ * come only where the ase-gis cell answered them; a missing one stays NaN and fails no record.
+ */
+bool pit_view_of(const KernelHostRecord& record, VivariumPitView& out) {
+    constexpr const char* KEY_X = "pit_x";              // HYG_HOST_KEY_PIT_X: east of the pit centre, metres
+    constexpr const char* KEY_Z = "pit_z";              // HYG_HOST_KEY_PIT_Z: north of the pit centre, metres
+    constexpr const char* KEY_DEPTH = "pit_depth_m";    // HYG_HOST_KEY_PIT_DEPTH: GIS_HYD_CELL_PIT_DEPTH, metres
+    constexpr const char* KEY_SPILL = "pit_spill_m3_s";  // HYG_HOST_KEY_PIT_SPILL: GIS_HYD_CELL_PIT_SPILL, m3/s
+    out = VivariumPitView{};
+    out.object_id = record.object_id;
+    out.x = record_value(record, KEY_X);
+    out.z = record_value(record, KEY_Z);
+    out.depth_m = record_value(record, KEY_DEPTH);
+    out.spill_m3_s = record_value(record, KEY_SPILL);
+    return std::isfinite(out.x) && std::isfinite(out.z);
+}
+
+/** Whether two reads of the pit port carry the same water, pit for pit in port order. */
+bool same_pits(const std::vector<VivariumPitView>& read, const std::vector<VivariumPitView>& held) {
+    if (read.size() != held.size()) {
+        return false;
+    }
+    for (std::size_t i = 0u; i < read.size(); ++i) {
+        if (read[i].object_id != held[i].object_id || read[i].x != held[i].x || read[i].z != held[i].z ||
+            !same_water_value(read[i].depth_m, held[i].depth_m) ||
+            !same_water_value(read[i].spill_m3_s, held[i].spill_m3_s)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * One groundwater record as a view. false for a record without its chunk: the groundwater port lays the three grid
+ * coordinates with every record it lays (ase-pl-hydrogeology, HydrogeologyHostGndwExptSystem). Table, standing
+ * water, stock and bank flow come only where the ase-gis cell answered them; a missing one stays NaN.
+ */
+bool groundwater_view_of(const KernelHostRecord& record, VivariumGroundwaterView& out) {
+    constexpr const char* KEY_CHUNK_X = "chunk_x";  // HYG_HOST_KEY_CHUNK_X: chunk grid X of the row
+    constexpr const char* KEY_CHUNK_Y = "chunk_y";  // HYG_HOST_KEY_CHUNK_Y: chunk grid Y of the row, the vertical slice
+    constexpr const char* KEY_CHUNK_Z = "chunk_z";  // HYG_HOST_KEY_CHUNK_Z: chunk grid Z of the row
+    constexpr const char* KEY_TABLE = "table_m";    // HYG_HOST_KEY_TABLE: water table below the mean ground, metres
+    constexpr const char* KEY_DEPTH = "depth_m";    // HYG_HOST_KEY_DEPTH: standing water over the lowest ground, metres
+    constexpr const char* KEY_STOCK = "stock_m3";   // HYG_HOST_KEY_STOCK: groundwater stock against the rest table, m3
+    constexpr const char* KEY_BANK = "bank_m3_s";   // HYG_HOST_KEY_BANK: water the stock gives the brooks, m3/s
+    out = VivariumGroundwaterView{};
+    out.object_id = record.object_id;
+    out.chunk_x = record_value(record, KEY_CHUNK_X);
+    out.chunk_y = record_value(record, KEY_CHUNK_Y);
+    out.chunk_z = record_value(record, KEY_CHUNK_Z);
+    out.table_m = record_value(record, KEY_TABLE);
+    out.depth_m = record_value(record, KEY_DEPTH);
+    out.stock_m3 = record_value(record, KEY_STOCK);
+    out.bank_m3_s = record_value(record, KEY_BANK);
+    // a chunk grid coordinate is a signed whole number (types::chunk_id_to_coords), and whole() takes no negative
+    // one; the grid stays far below 2^24, where ase::math::floor in float is exact
+    const auto grid = [](double value) {
+        return std::isfinite(value) && ase::math::floor(static_cast<float>(value)) == static_cast<float>(value);
+    };
+    return grid(out.chunk_x) && grid(out.chunk_y) && grid(out.chunk_z);
+}
+
+/** Whether two reads of the groundwater port carry the same water, chunk for chunk in port order. */
+bool same_groundwater(const std::vector<VivariumGroundwaterView>& read,
+                      const std::vector<VivariumGroundwaterView>& held) {
+    if (read.size() != held.size()) {
+        return false;
+    }
+    for (std::size_t i = 0u; i < read.size(); ++i) {
+        if (read[i].object_id != held[i].object_id || read[i].chunk_x != held[i].chunk_x ||
+            read[i].chunk_y != held[i].chunk_y || read[i].chunk_z != held[i].chunk_z ||
+            !same_water_value(read[i].table_m, held[i].table_m) ||
+            !same_water_value(read[i].depth_m, held[i].depth_m) ||
+            !same_water_value(read[i].stock_m3, held[i].stock_m3) ||
+            !same_water_value(read[i].bank_m3_s, held[i].bank_m3_s)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
  * Whether two reads of the terrain and ground cell ports carry the same ground, sample for sample and cell
  * for cell in port order. GODOT_TERRAIN_SCHEDULE runs whether ase-terrain changed a height or not, so a
  * read alone is no change: only a ground that differs moves terrain_generation, and the view rebuilds
@@ -650,6 +889,15 @@ bool seed_view_of(const KernelHostRecord& record, VivariumSeedView& out) {
  * number: the rack port writes x, y and z of every rack (ase-pl-toolrack, ToolrackHostBodyExptSystem), so a
  * gap is a broken port, never a rack drawn at the stem foot.
  */
+/**
+ * True when `value` is a whole number from 0 to kCampIdMax, the form of an entity or name id on a camp port. The
+ * range comes first: only then does the round trip through uint32_t decide, and it holds every id exactly, where
+ * ase::math::floor works in float and loses the ids above 2^24.
+ */
+bool camp_id(double value) {
+    return value >= 0.0 && value <= kCampIdMax && static_cast<double>(static_cast<uint32_t>(value)) == value;
+}
+
 bool rack_view_of(const KernelHostRecord& record, VivariumRackView& out) {
     out = VivariumRackView{};
     out.object_id = record.object_id;
@@ -1089,7 +1337,7 @@ bool stars_view_of(const std::vector<KernelHostRecord>& records, uint32_t writte
 }
 
 /**
- * The ports and operations every host of the Vivarium needs: patch, forecast, stem, clock, date, scene, ground, brook,
+ * The ports and operations every host of the Vivarium needs: patch, forecast, stem, autumn, clock, date, scene, ground, brook,
  * terrain, ground cell, the six organ ports, the five instance ports, the sky port, the stars port, the seed port, the
  * tile port, the sway port, the stream port, the level, the flatten, the lower, the raise and the elevation port and the two
  * template ports, irrigate, prune, level, flatten, lower, raise, shape and lay - every port boot()
@@ -1101,13 +1349,17 @@ bool ports_named(const VivariumStartConfig& config) {
     bool named = !config.patch_port.empty() && !config.forecast_port.empty() && !config.cond_port.empty() &&
                  !config.stage_port.empty() &&
                  !config.stem_port.empty() &&
+                 !config.autumn_port.empty() &&
                  !config.clock_port.empty() &&
                  !config.date_port.empty() &&
                  !config.scene_port.empty() &&
                  !config.ground_port.empty() && !config.brook_port.empty() && !config.terrain_port.empty() &&
                  !config.ground_cell_port.empty() && !config.sky_port.empty() && !config.stars_port.empty() &&
                  !config.seed_port.empty() &&
-                 !config.tile_port.empty() && !config.sway_port.empty() && !config.bark_port.empty() &&
+                 !config.tile_port.empty() && !config.sway_port.empty() && !config.bend_port.empty() &&
+                 !config.tint_port.empty() && !config.atlas_port.empty() &&
+                 !config.bark_port.empty() &&
+                 !config.knot_port.empty() && !config.foot_port.empty() && !config.scar_port.empty() &&
                  !config.stream_port.empty() &&
                  !config.level_port.empty() &&
                  !config.flatten_port.empty() && !config.lower_port.empty() && !config.raise_port.empty() &&
@@ -1149,7 +1401,8 @@ bool patches_layable(const std::vector<VivariumPatchSpec>& patches) {
 }
 
 /** The lay request of one patch: place, species id, seed, ground, where it lies in the world, the field
- * capacity of its soil and its gravity; ase-pl-flora places nothing without all nine. */
+ * capacity of its soil, its gravity and the Startstand of its plant; ase-pl-flora places nothing without
+ * all ten. */
 KernelHostInput lay_input(const VivariumPatchSpec& patch) {
     KernelHostInput input{};
     (void)put_value(input, GODOT_KEY_PLACE, static_cast<double>(patch.place));
@@ -1162,6 +1415,7 @@ KernelHostInput lay_input(const VivariumPatchSpec& patch) {
     (void)put_value(input, GODOT_KEY_HALF, patch.half_m);
     (void)put_value(input, GODOT_KEY_CAPACITY_MM, patch.capacity_mm);
     (void)put_value(input, GODOT_KEY_GRAVITY_REL, patch.gravity_rel);
+    (void)put_value(input, GODOT_KEY_AGE_DAYS, patch.age_days);
     return input;
 }
 
@@ -1627,6 +1881,7 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         patch.half_m = (*lay)[GODOT_SELFTEST_KEY_HALF].value_or(std::nan(""));
         patch.capacity_mm = (*lay)[GODOT_SELFTEST_KEY_CAPACITY].value_or(std::nan(""));
         patch.gravity_rel = (*lay)[GODOT_SELFTEST_KEY_GRAVITY].value_or(std::nan(""));
+        patch.age_days = (*lay)[GODOT_KEY_AGE_DAYS].value_or(std::nan(""));
         const std::string expected = (*lay)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
         // The adapter only sees that every number is there and finite; the bounds of capacity and gravity
         // are ase-pl-flora's (FLORA_WATER_MIN_MM..MAX_MM, GRV_CONST_AREA_REL_MIN..MAX), and a case that
@@ -1634,10 +1889,11 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         if (place < 0 || place > static_cast<int64_t>(UINT32_MAX) || seed < 0 ||
             seed > static_cast<int64_t>(UINT32_MAX) || patch.species.empty() || patch.soil >= GODOT_SOIL_COUNT ||
             !std::isfinite(patch.x) || !std::isfinite(patch.z) || !(patch.half_m > 0.0) ||
-            !std::isfinite(patch.capacity_mm) || !std::isfinite(patch.gravity_rel) || expected.empty()) {
+            !std::isfinite(patch.capacity_mm) || !std::isfinite(patch.gravity_rel) ||
+            !std::isfinite(patch.age_days) || expected.empty()) {
             report_broken(label, GODOT_SELFTEST_KEY_LAY,
                           "needs place, species, seed, a known soil, x, z, a positive half_m, capacity_mm, "
-                          "gravity_rel and status",
+                          "gravity_rel, age_days and status",
                           result, report);
             return false;
         }
@@ -1694,7 +1950,9 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
 // LIFETIME
 
 GodotHostResourceManager::GodotHostResourceManager()
-    : failure_step_(GODOT_STEP_NONE), failure_status_(ase::kernel::HostStatusOk) {}
+    : failure_step_(GODOT_STEP_NONE), failure_status_(ase::kernel::HostStatusOk) {
+    knots_ = std::make_unique<GodotKnotResourceManager>();  // the knot store lives as long as the host (N0543)
+}
 
 GodotHostResourceManager::~GodotHostResourceManager() {
     clear_all();
@@ -1821,6 +2079,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.cond_port.c_str()) &&
                    host_->has_port(config_.stage_port.c_str()) &&
                    host_->has_port(config_.stem_port.c_str()) &&
+                   host_->has_port(config_.autumn_port.c_str()) &&
                    host_->has_port(config_.clock_port.c_str()) &&
                    host_->has_port(config_.date_port.c_str()) &&
                    host_->has_port(config_.scene_port.c_str()) && host_->has_port(config_.ground_port.c_str()) &&
@@ -1828,7 +2087,11 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.ground_cell_port.c_str()) && host_->has_port(config_.sky_port.c_str()) &&
                    host_->has_port(config_.stars_port.c_str()) &&
                    host_->has_port(config_.seed_port.c_str()) && host_->has_port(config_.tile_port.c_str()) &&
-                   host_->has_port(config_.sway_port.c_str()) && host_->has_port(config_.bark_port.c_str()) &&
+                   host_->has_port(config_.sway_port.c_str()) && host_->has_port(config_.bend_port.c_str()) &&
+                   host_->has_port(config_.tint_port.c_str()) && host_->has_port(config_.atlas_port.c_str()) &&
+                   host_->has_port(config_.bark_port.c_str()) &&
+                   host_->has_port(config_.knot_port.c_str()) && host_->has_port(config_.foot_port.c_str()) &&
+                   host_->has_port(config_.scar_port.c_str()) &&
                    host_->has_port(config_.stream_port.c_str()) &&
                    host_->has_port(config_.level_port.c_str()) && host_->has_port(config_.flatten_port.c_str()) &&
                    host_->has_port(config_.lower_port.c_str()) && host_->has_port(config_.raise_port.c_str()) &&
@@ -1927,6 +2190,8 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     patches_.clear();
     places_.clear();
     clock_ = VivariumClockView{};
+    weather_ = VivariumWeatherView{};
+    sap_ = VivariumSapView{};
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         organs_[c].clear();
     }
@@ -1937,11 +2202,18 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     bark_.clear();
     bark_owed_ = false;
     bark_generation_ += 1u;
+    knots_->clear_all();
     terrain_.clear();
     ground_cells_.clear();
     terrain_generation_ += 1u;
     streams_.clear();
     stream_generation_ += 1u;
+    currents_.clear();
+    current_generation_ += 1u;
+    pits_.clear();
+    pit_generation_ += 1u;
+    groundwater_.clear();
+    groundwater_generation_ += 1u;
     template_corners_.clear();
     template_triangles_.clear();
     template_generation_ += 1u;
@@ -2275,10 +2547,14 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         view.soil_mm = record_value(record, GODOT_KEY_SOIL_MM);
         view.soil_rel = record_value(record, GODOT_KEY_SOIL_REL);
         view.capacity_mm = record_value(record, GODOT_KEY_CAPACITY_MM);
+        view.root_m = record_value(record, GODOT_KEY_ROOT_M);
         // the stage forecasts stand on the forecast port, read below; until its record for this patch
         // is read they are not measured
         view.grow_at_h = std::nan("");
         view.mtur_at_h = std::nan("");
+        // the autumn colour of the individual stands on the autumn port, read below (usecase:101646 colour the
+        // leaves in autumn); until its record for this patch is read it is not measured
+        view.autumn = std::nan("");
         // the stem base: x and z from the lay request, y once ase-terrain levelled the disc (03.11)
         view.x = record_value(record, GODOT_KEY_X);
         view.y = record_value(record, GODOT_KEY_Y);
@@ -2362,6 +2638,34 @@ HostStatus GodotHostResourceManager::read_snapshot() {
             return refuse_record(*host_, config_.stem_port, record.object_id, "stem without base_y");
         }
         found->second.base_y = base_y;
+    }
+
+    // THE AUTUMN COLOUR IS THE INDIVIDUAL'S OWN (FLORA_HOST_PORT_AUTUMN, usecase:101646 colour the leaves in autumn,
+    // CAUSA_ASE_PLANT step 6): ase-pl-flora files one record per patch whose colour ase-phytomer measured, its
+    // object id the patch, autumn the share of the way from the start of autumn to the own leaf fall the warmth of
+    // its cell moved. A patch without such a record keeps it unmeasured; a record that names no patch of the patch
+    // port, or carries no finite share, is a broken port.
+    status = snapshot_all(*host_, config_.autumn_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        patches_.clear();
+        places_.clear();
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = records_[i];
+        const auto found = patches_.find(record.object_id);
+        if (found == patches_.end()) {
+            patches_.clear();
+            places_.clear();
+            return refuse_record(*host_, config_.autumn_port, record.object_id, "autumn of no patch");
+        }
+        const double autumn = record_value(record, GODOT_KEY_AUTUMN);
+        if (!std::isfinite(autumn)) {
+            patches_.clear();
+            places_.clear();
+            return refuse_record(*host_, config_.autumn_port, record.object_id, "autumn without a share");
+        }
+        found->second.autumn = autumn;
     }
 
     std::vector<KernelHostRecord> clock_records(1u);
@@ -2658,6 +2962,10 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     if (bark != ase::kernel::HostStatusOk) {
         return bark;
     }
+    const HostStatus knots = read_knots();
+    if (knots != ase::kernel::HostStatusOk) {
+        return knots;
+    }
     const HostStatus terrain = read_terrain();
     if (terrain != ase::kernel::HostStatusOk) {
         return terrain;
@@ -2665,6 +2973,18 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     const HostStatus streams = read_streams();
     if (streams != ase::kernel::HostStatusOk) {
         return streams;
+    }
+    const HostStatus currents = read_currents();
+    if (currents != ase::kernel::HostStatusOk) {
+        return currents;
+    }
+    const HostStatus pits = read_pits();
+    if (pits != ase::kernel::HostStatusOk) {
+        return pits;
+    }
+    const HostStatus groundwater = read_groundwater();
+    if (groundwater != ase::kernel::HostStatusOk) {
+        return groundwater;
     }
     const HostStatus templates = read_templates();
     if (templates != ase::kernel::HostStatusOk) {
@@ -2685,6 +3005,50 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     const HostStatus racks = read_racks();
     if (racks != ase::kernel::HostStatusOk) {
         return racks;
+    }
+    const HostStatus bodies = read_survival_bodies();
+    if (bodies != ase::kernel::HostStatusOk) {
+        return bodies;
+    }
+    const HostStatus rests = read_survival_rests();
+    if (rests != ase::kernel::HostStatusOk) {
+        return rests;
+    }
+    const HostStatus foods = read_survival_foods();
+    if (foods != ase::kernel::HostStatusOk) {
+        return foods;
+    }
+    const HostStatus smokes = read_survival_smokes();
+    if (smokes != ase::kernel::HostStatusOk) {
+        return smokes;
+    }
+    const HostStatus fires = read_survival_fires();
+    if (fires != ase::kernel::HostStatusOk) {
+        return fires;
+    }
+    const HostStatus left = read_survival_left();
+    if (left != ase::kernel::HostStatusOk) {
+        return left;
+    }
+    const HostStatus weather = read_weather();
+    if (weather != ase::kernel::HostStatusOk) {
+        return weather;
+    }
+    const HostStatus sap = read_sap();
+    if (sap != ase::kernel::HostStatusOk) {
+        return sap;
+    }
+    const HostStatus loose = read_loose();
+    if (loose != ase::kernel::HostStatusOk) {
+        return loose;
+    }
+    const HostStatus camp_bodies = read_camp_bodies();
+    if (camp_bodies != ase::kernel::HostStatusOk) {
+        return camp_bodies;
+    }
+    const HostStatus camp_refuels = read_camp_refuels();
+    if (camp_refuels != ase::kernel::HostStatusOk) {
+        return camp_refuels;
     }
     return read_figures();
 }
@@ -2781,6 +3145,83 @@ HostStatus GodotHostResourceManager::read_organs() {
             }
         }
     }
+    // The bend of every leaf card, from the same Production run (PLAN_ASE_VIVARIUM_TREEGEN T.6): one record per bent
+    // leaf, its object id the leaf; a leaf without one keeps GODOT_BEND_NONE and is drawn flat.
+    {
+        uint32_t written = 0u;
+        const HostStatus status = snapshot_all(*host_, config_.bend_port, organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        std::vector<VivariumOrganView>& leaves = organs_[GODOT_ORGAN_LEAF];
+        std::unordered_map<uint32_t, std::size_t> leaf_at;
+        leaf_at.reserve(leaves.size());
+        for (std::size_t l = 0u; l < leaves.size(); ++l) {
+            leaf_at.emplace(leaves[l].object_id, l);
+        }
+        for (uint32_t i = 0u; i < written; ++i) {
+            const auto found = leaf_at.find(organ_records_[i].object_id);
+            if (found == leaf_at.end()) {
+                continue;  // the leaf left the leaf port in the same run; its bend has no card to lift
+            }
+            if (!leaf_bend_of(organ_records_[i], leaves[found->second])) {
+                return refuse_record(*host_, config_.bend_port, organ_records_[i].object_id,
+                                     "leaf bend missing or not finite");
+            }
+        }
+    }
+    // The colour offset of every leaf card, from the same Production run (PLAN_ASE_VIVARIUM_TREEGEN T.6, Farbe,
+    // Variante, Herbst): one record per leaf with an offset, its object id the leaf; a leaf without one keeps
+    // GODOT_TINT_NONE and the colour of its species.
+    {
+        uint32_t written = 0u;
+        const HostStatus status = snapshot_all(*host_, config_.tint_port, organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        std::vector<VivariumOrganView>& leaves = organs_[GODOT_ORGAN_LEAF];
+        std::unordered_map<uint32_t, std::size_t> leaf_at;
+        leaf_at.reserve(leaves.size());
+        for (std::size_t l = 0u; l < leaves.size(); ++l) {
+            leaf_at.emplace(leaves[l].object_id, l);
+        }
+        for (uint32_t i = 0u; i < written; ++i) {
+            const auto found = leaf_at.find(organ_records_[i].object_id);
+            if (found == leaf_at.end()) {
+                continue;  // the leaf left the leaf port in the same run; its offset has no card to colour
+            }
+            if (!leaf_tint_of(organ_records_[i], leaves[found->second])) {
+                return refuse_record(*host_, config_.tint_port, organ_records_[i].object_id,
+                                     "leaf colour offset missing or not finite");
+            }
+        }
+    }
+    // The atlas cell of every leaf card, from the same Production run (PLAN_ASE_VIVARIUM_TREEGEN T.6, Farbe,
+    // Variante, Herbst): one record per leaf with a cell, its object id the leaf; a leaf without one keeps
+    // GODOT_ATLS_CELL_NONE of GODOT_ATLS_CELLS_NONE and shows the whole texture of its species.
+    {
+        uint32_t written = 0u;
+        const HostStatus status = snapshot_all(*host_, config_.atlas_port, organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        std::vector<VivariumOrganView>& leaves = organs_[GODOT_ORGAN_LEAF];
+        std::unordered_map<uint32_t, std::size_t> leaf_at;
+        leaf_at.reserve(leaves.size());
+        for (std::size_t l = 0u; l < leaves.size(); ++l) {
+            leaf_at.emplace(leaves[l].object_id, l);
+        }
+        for (uint32_t i = 0u; i < written; ++i) {
+            const auto found = leaf_at.find(organ_records_[i].object_id);
+            if (found == leaf_at.end()) {
+                continue;  // the leaf left the leaf port in the same run; its cell has no card to show
+            }
+            if (!leaf_atlas_of(organ_records_[i], leaves[found->second])) {
+                return refuse_record(*host_, config_.atlas_port, organ_records_[i].object_id,
+                                     "leaf atlas cell missing or not finite");
+            }
+        }
+    }
     // The instances of every drawn class, from the same Production run as the organs they belong to.
     for (uint32_t c = 0u; c < GODOT_DRAWN_COUNT; ++c) {
         uint32_t written = 0u;
@@ -2858,6 +3299,73 @@ HostStatus GodotHostResourceManager::read_bark() {
     if (covered && names_the_internodes(bark_, organs_[GODOT_ORGAN_SEGMENT])) {
         bark_owed_ = false;
     }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_knots() {
+    // THE KNOTS COME PAGE BY PAGE, LIKE THE BARK (N0543). ase-render-data carries the knots of a body that ticked
+    // in GODOT_ORGAN_SCHEDULE; ase-pl-flora files the tip knots, the foot knots and the cut faces at
+    // GODOT_KNOT_ROWS_PER_PASS rows per GODOT_KNOT_SCHEDULE pass, all three ports in the same pass. Whether a read is
+    // owed and when the owed reads end is the knot store's account (GodotKnotResourceManager::due, store_read); this
+    // reader takes the three snapshots and refuses a set with a record it cannot read whole. The organ buffer is
+    // reused: the three reads run one after the other in the same snapshot, after the organs and the bark.
+    uint64_t runs = 0u;
+    const HostStatus counted = host_->schedule_runs(GODOT_ORGAN_SCHEDULE, &runs);
+    if (counted != ase::kernel::HostStatusOk) {
+        return counted;
+    }
+    uint64_t passes = 0u;
+    const HostStatus passed = host_->schedule_runs(GODOT_KNOT_SCHEDULE, &passes);
+    if (passed != ase::kernel::HostStatusOk) {
+        return passed;
+    }
+    if (!knots_->due(runs, passes)) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    HostStatus status = snapshot_all(*host_, config_.knot_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumKnotView> knots;
+    knots.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumKnotView view;
+        if (!knot_view_of(organ_records_[i], view)) {
+            return refuse_record(*host_, config_.knot_port, organ_records_[i].object_id,
+                                 "tip knot incomplete or out of range");
+        }
+        knots.push_back(view);
+    }
+    status = snapshot_all(*host_, config_.foot_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumFootView> feet;
+    feet.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumFootView view;
+        if (!foot_view_of(organ_records_[i], view)) {
+            return refuse_record(*host_, config_.foot_port, organ_records_[i].object_id,
+                                 "foot knot incomplete or out of range");
+        }
+        feet.push_back(view);
+    }
+    status = snapshot_all(*host_, config_.scar_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumScarView> scars;
+    scars.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumScarView view;
+        if (!scar_view_of(organ_records_[i], view)) {
+            return refuse_record(*host_, config_.scar_port, organ_records_[i].object_id,
+                                 "cut face incomplete or out of range");
+        }
+        scars.push_back(view);
+    }
+    knots_->store_read(std::move(knots), std::move(feet), std::move(scars), passes, organs_[GODOT_ORGAN_SEGMENT]);
     return ase::kernel::HostStatusOk;
 }
 
@@ -2947,6 +3455,121 @@ HostStatus GodotHostResourceManager::read_streams() {
     streams_ = std::move(streams);
     if (changed) {
         stream_generation_ += 1u;
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_currents() {
+    // THE RIVER CURRENT (PLAN_ASE_VIVARIUM_PHASE_10_HYDRO H.13): ase-hydro computes it per cell, ase-gis answers it and
+    // ase-pl-water lays one record per current cell on water.current.v1. The port stands only once the plugin closed
+    // its first set, so it is read once it is offered, and until then the view holds no current; that the start of
+    // the view never waits on it keeps a plugin without its range rows from holding the whole scene. Only water that
+    // differs moves current_generation, so the view lays it anew when ase-hydro changed it and not per frame.
+    if (config_.current_port.empty() || !host_->has_port(config_.current_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.current_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumCurrentView> currents;
+    currents.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumCurrentView view;
+        if (!current_view_of(organ_records_[i], view)) {
+            currents_.clear();
+            return refuse_record(*host_, config_.current_port, organ_records_[i].object_id,
+                                 "current cell without its place");
+        }
+        currents.push_back(view);
+    }
+    // WHAT THE WATER CARRIES (D2508): ase-pl-water lays the algae, rot and salt of each current cell on the quality
+    // port under the same row id. Joined here by object id, in one pass over each port; a cell without a quality
+    // record keeps NaN, so the lake shader draws no bloom where ase-hydro measured none.
+    if (!config_.quality_port.empty() && host_->has_port(config_.quality_port.c_str())) {
+        std::unordered_map<uint32_t, std::size_t> cell_at;
+        cell_at.reserve(currents.size());
+        for (std::size_t i = 0u; i < currents.size(); ++i) {
+            cell_at.emplace(currents[i].object_id, i);
+        }
+        uint32_t carried = 0u;
+        const HostStatus quality_status = snapshot_all(*host_, config_.quality_port, organ_records_, carried);
+        if (quality_status != ase::kernel::HostStatusOk) {
+            return quality_status;
+        }
+        for (uint32_t i = 0u; i < carried; ++i) {
+            const auto found = cell_at.find(organ_records_[i].object_id);
+            if (found != cell_at.end()) {
+                quality_into(organ_records_[i], currents[found->second]);
+            }
+        }
+    }
+    const bool changed = !same_currents(currents, currents_);
+    currents_ = std::move(currents);
+    if (changed) {
+        current_generation_ += 1u;
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_pits() {
+    // THE WATER OF THE DUG PITS (H.4): ase-hydro computes it over the pit floor, ase-gis answers it and
+    // ase-pl-hydrogeology lays one record per pit on hydrogeology.pit.v1. Read once the plugin offers the port, as the
+    // current; the pit surface stands depth_m over the floor the ground of the view already carries.
+    if (config_.pit_port.empty() || !host_->has_port(config_.pit_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.pit_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumPitView> pits;
+    pits.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumPitView view;
+        if (!pit_view_of(organ_records_[i], view)) {
+            pits_.clear();
+            return refuse_record(*host_, config_.pit_port, organ_records_[i].object_id, "pit without its place");
+        }
+        pits.push_back(view);
+    }
+    const bool changed = !same_pits(pits, pits_);
+    pits_ = std::move(pits);
+    if (changed) {
+        pit_generation_ += 1u;
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_groundwater() {
+    // THE GROUNDWATER OF EVERY CHUNK (H.3): ase-hydro computes table, standing water, stock and bank flow per chunk,
+    // ase-gis answers them under HUB_TERN_CHK and ase-pl-hydrogeology lays one record per chunk on
+    // hydrogeology.groundwater.v1. Read once the plugin offers the port, as the current.
+    if (config_.groundwater_port.empty() || !host_->has_port(config_.groundwater_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.groundwater_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumGroundwaterView> groundwater;
+    groundwater.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumGroundwaterView view;
+        if (!groundwater_view_of(organ_records_[i], view)) {
+            groundwater_.clear();
+            return refuse_record(*host_, config_.groundwater_port, organ_records_[i].object_id,
+                                 "groundwater without its chunk");
+        }
+        groundwater.push_back(view);
+    }
+    const bool changed = !same_groundwater(groundwater, groundwater_);
+    groundwater_ = std::move(groundwater);
+    if (changed) {
+        groundwater_generation_ += 1u;
     }
     return ase::kernel::HostStatusOk;
 }
@@ -3142,6 +3765,520 @@ HostStatus GodotHostResourceManager::read_racks() {
                                  "rack body incomplete or out of range");
         }
         racks_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_survival_bodies() {
+    // THE BODIES ARE READ EVERY SNAPSHOT (U01, U03, N0530): ase-metabolism writes the MTB_* values of a figure
+    // in every metabolism tick, and the port lays them per figure. A host without the port offers none: the
+    // bridge then draws the SHA defaults and logs its gap. A key the record does not carry stays NaN and its
+    // row is not shown; a key that stands but is not finite is refused.
+    survival_bodies_.clear();
+    if (!survival_body_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.survival_body_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    survival_bodies_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumSurvivalBodyView view;
+        view.object_id = record.object_id;
+        view.effective_temp = record_value(record, kSurvivalKeyEffectiveTemp);
+        view.temp_stress = record_value(record, kSurvivalKeyTempStress);
+        view.hunger = record_value(record, kSurvivalKeyHunger);
+        view.thirst = record_value(record, kSurvivalKeyThirst);
+        view.energy = record_value(record, kSurvivalKeyEnergy);
+        view.fatigue = record_value(record, kSurvivalKeyFatigue);
+        view.health = record_value(record, kSurvivalKeyHealth);
+        view.poisoned = record_value(record, kSurvivalKeyPoisoned);
+        view.bleeding = record_value(record, kSurvivalKeyBleeding);
+        view.emaciated = record_value(record, kSurvivalKeyEmaciated);
+        view.well_rested = record_value(record, kSurvivalKeyWellRested);
+        view.breath = record_value(record, kSurvivalKeyBreath);
+        for (const double value : {view.effective_temp, view.temp_stress, view.hunger, view.thirst, view.energy,
+                                   view.fatigue, view.health, view.poisoned, view.bleeding, view.emaciated,
+                                   view.well_rested, view.breath}) {
+            if (std::isinf(value)) {
+                survival_bodies_.clear();
+                return refuse_record(*host_, config_.survival_body_port, record.object_id,
+                                     "survival body value not finite");
+            }
+        }
+        survival_bodies_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_survival_rests() {
+    // THE RESTS ARE READ EVERY SNAPSHOT (U05, N0555): ase-metabolism writes MTB_IS_RESTING and MTB_IS_SLEEPING of a
+    // figure in every Regulation pass from the action ase-bdi chose, with MTB_REST_QUALITY and the target of good
+    // rest beside them for the side of the sleep (T.11, N0578), and the rest port lays them per figure, apart
+    // from the body port, whose record is full at the width of the host. A host without the port offers none: the
+    // bridge then keeps the mockup's pose and logs its gap. A key the record does not carry stays NaN; a key that
+    // stands but is not finite is refused.
+    survival_rests_.clear();
+    if (!survival_rest_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.survival_rest_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    survival_rests_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumSurvivalRestView view;
+        view.object_id = record.object_id;
+        view.is_resting = record_value(record, kSurvivalKeyIsResting);
+        view.sleeping = record_value(record, kSurvivalKeySleeping);
+        view.rest_quality = record_value(record, kSurvivalKeyRestQuality);
+        view.rest_target = record_value(record, kSurvivalKeyRestTarget);
+        for (const double value : {view.is_resting, view.sleeping, view.rest_quality, view.rest_target}) {
+            if (std::isinf(value)) {
+                survival_rests_.clear();
+                return refuse_record(*host_, config_.survival_rest_port, record.object_id,
+                                     "survival rest value not finite");
+            }
+        }
+        survival_rests_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_survival_foods() {
+    // THE SPOIL IS READ EVERY SNAPSHOT (T.8, U07, N0530): ase-entropy rots every piece of food in a bag by the
+    // temperature it lies at in each Coordination pass and lays the share of the bearer as ENT_FOOD_ROT_CARRIED, and
+    // ase-pl-survival lays one record per figure that carries food in Production (SurvivalHostFoodExptSystem). A host
+    // without the port offers none: the bridge then draws the mockup's ring and logs its gap. A key the record does
+    // not carry stays NaN; a key that stands but is not finite is refused.
+    survival_foods_.clear();
+    if (!survival_food_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.survival_food_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    survival_foods_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumSurvivalFoodView view;
+        view.object_id = record.object_id;
+        view.spoil = record_value(record, kSurvivalKeySpoil);
+        if (std::isinf(view.spoil)) {
+            survival_foods_.clear();
+            return refuse_record(*host_, config_.survival_food_port, record.object_id, "survival food value not finite");
+        }
+        survival_foods_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_survival_smokes() {
+    // THE SOOT IS READ EVERY SNAPSHOT (T.8, U06, D2500): ase-fire lays the soot of every fire cell on the raster cell
+    // of its fuel body in each Dissemination pass (FireSmokCellCalcSystem, HUB_GIS_SMOK_CELL_REQ), ase-gis sums it per
+    // cell under each figure as GIS_LOCAL_SOOT in Regulation (GisLyrNthrSmokCellSystem), and ase-pl-survival lays one
+    // record per figure in Production (SurvivalHostSmokExptSystem). A host without the port offers none: the bridge
+    // then leaves the plume on the owner's grade of the air and logs its gap. A key the record does not carry stays
+    // NaN; a key that stands but is not finite is refused.
+    survival_smokes_.clear();
+    if (!survival_smoke_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.survival_smoke_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    survival_smokes_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumSurvivalSmokeView view;
+        view.object_id = record.object_id;
+        view.soot = record_value(record, kSurvivalKeySoot);
+        if (std::isinf(view.soot)) {
+            survival_smokes_.clear();
+            return refuse_record(*host_, config_.survival_smoke_port, record.object_id, "survival smoke value not finite");
+        }
+        survival_smokes_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_survival_fires() {
+    // THE FIRE CELLS ARE READ EVERY SNAPSHOT (U04, B0657): ase-fire turns its HUB_FIRE_CELL rows in every fire tick,
+    // ase-atmosphere its air, and ase-pl-ingle lays one record per cell in Production (IngleHostFireExptSystem). A
+    // host without the port offers no cell: the bridge then draws the SHA defaults and logs its gap. A key the
+    // record does not carry stays NaN; a key that stands but is not finite is refused.
+    survival_fires_.clear();
+    if (!survival_fire_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.survival_fire_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    survival_fires_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumSurvivalFireView view;
+        view.object_id = record.object_id;
+        view.flame = record_value(record, kFireKeyFlame);
+        view.ember = record_value(record, kFireKeyEmber);
+        view.ash = record_value(record, kFireKeyAsh);
+        view.fuel = record_value(record, kFireKeyFuel);
+        view.fuel_laid = record_value(record, kFireKeyFuelLaid);
+        view.heat = record_value(record, kFireKeyHeat);
+        view.body = record_value(record, kFireKeyBody);
+        view.oxygen = record_value(record, kFireKeyOxygen);
+        view.toxicity = record_value(record, kFireKeyToxicity);
+        view.charcoal = record_value(record, kFireKeyCharcoal);
+        view.breath_state = record_value(record, kFireKeyBreath);
+        view.breath_normal = record_value(record, kFireKeyBreathNormal);
+        // The ash and the burn time travel on ingle.left.v1 (read_survival_left, right after this pass); until a
+        // left record names this cell, neither is measured.
+        view.ash_kg = std::nan("");
+        view.burn_left = std::nan("");
+        for (const double value : {view.flame, view.charcoal, view.ember, view.ash, view.fuel, view.fuel_laid,
+                                   view.heat, view.body, view.oxygen, view.toxicity, view.breath_state,
+                                   view.breath_normal}) {
+            if (std::isinf(value)) {
+                survival_fires_.clear();
+                return refuse_record(*host_, config_.survival_fire_port, record.object_id,
+                                     "fire cell value not finite");
+            }
+        }
+        survival_fires_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_survival_left() {
+    // THE ASH AND THE BURN TIME ARE READ EVERY SNAPSHOT, RIGHT AFTER THE FIRE CELLS (T.8, E0257): the fire record
+    // holds the twelve values a host record takes, so ase-pl-ingle lays the kg of ash (HUB_ENT_ASH_REQ_ASH) and the
+    // seconds the fuel lasts (HUB_FIRE_CELL_BURN_LEFT) on a port of its own, object id = the same fire cell
+    // (IngleHostLeftExptSystem). Each left record is joined onto the fire cell of its object id; a key it does not
+    // carry stays NaN, a key that stands but is not finite is refused, and a left record without a fire cell of
+    // the same pass belongs to no cell the card shows and is left.
+    if (!survival_left_offered() || survival_fires_.empty()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.survival_left_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        const double ash_kg = record_value(record, kLeftKeyAshKg);
+        const double burn_left = record_value(record, kLeftKeyBurnLeft);
+        if (std::isinf(ash_kg) || std::isinf(burn_left)) {
+            return refuse_record(*host_, config_.survival_left_port, record.object_id,
+                                 "fire cell ash or burn time not finite");
+        }
+        for (VivariumSurvivalFireView& view : survival_fires_) {
+            if (view.object_id == record.object_id) {
+                view.ash_kg = ash_kg;
+                view.burn_left = burn_left;
+            }
+        }
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_weather() {
+    // THE WEATHER IS READ EVERY SNAPSHOT (N0449, usecase:5606 observe the sky): ase-atmosphere computes the kind
+    // (ATM_WEATHER_KIND), the temperature and the wind (ATM_WIND_SPEED) and ase-pl-sky files them as the current
+    // record of sky.weather.v1 (SkyHostWthrExptSystem); one forecast record per coming day period is read beside
+    // it, a record no module computes yet (N0449, owed by ase-atmosphere); the record that carries a period is a
+    // forecast, the one without is the current weather. The kinds are compared against ase-atmosphere's codes on
+    // sky.weather.code.v1 (SkyHostWthrCodeExptSystem, ATM_CONST_WEATHER_KIND_*), as the condition and stage
+    // codes of ase-plant, never against a number of this adapter. A port not offered or a record not yet filed
+    // leaves the weather unknown and the HUD's bridge draws SHA's; a record that stands with a key missing, twice or
+    // out of range is refused.
+    weather_ = VivariumWeatherView{};
+    uint32_t written = 0u;
+    bool codes = false;
+    if (!config_.weather_code_port.empty() && host_->has_port(config_.weather_code_port.c_str())) {
+        const HostStatus status = snapshot_all(*host_, config_.weather_code_port, organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        if (written > 1u) {
+            return refuse_record(*host_, config_.weather_code_port, organ_records_[1].object_id,
+                                 "more than one weather code record");
+        }
+        if (written == 1u) {
+            const KernelHostRecord& record = organ_records_[0];
+            weather_.code_clear = record_value(record, kWeatherCodeClear);
+            weather_.code_pcloud = record_value(record, kWeatherCodePcloud);
+            weather_.code_cloudy = record_value(record, kWeatherCodeCloudy);
+            weather_.code_drizzle = record_value(record, kWeatherCodeDrizzle);
+            weather_.code_rain = record_value(record, kWeatherCodeRain);
+            weather_.code_snow = record_value(record, kWeatherCodeSnow);
+            weather_.code_fog = record_value(record, kWeatherCodeFog);
+            const double read_codes[] = {weather_.code_clear,   weather_.code_pcloud, weather_.code_cloudy,
+                                         weather_.code_drizzle, weather_.code_rain,   weather_.code_snow,
+                                         weather_.code_fog};
+            std::size_t whole_codes = 0u;
+            for (const double code : read_codes) {
+                whole_codes += whole(code) ? 1u : 0u;
+            }
+            if (whole_codes != std::size(read_codes)) {
+                return refuse_record(*host_, config_.weather_code_port, record.object_id,
+                                     "weather codes incomplete: the seven kinds come together as whole codes");
+            }
+            codes = true;
+        }
+    }
+    if (config_.weather_port.empty() || !host_->has_port(config_.weather_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    const HostStatus status = snapshot_all(*host_, config_.weather_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    bool current = false;
+    bool filed[GODOT_DAY_PHASES] = {};
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        const double period = record_value(record, GODOT_KEY_PERIOD);
+        const double kind = record_value(record, kWeatherKeyKind);
+        const double temperature = record_value(record, kWeatherKeyTemperature);
+        if (std::isnan(period)) {
+            const double wind = record_value(record, kWeatherKeyWind);
+            if (current) {
+                return refuse_record(*host_, config_.weather_port, record.object_id, "more than one current weather");
+            }
+            if (!whole(kind) || !std::isfinite(temperature) || !std::isfinite(wind) || wind < 0.0) {
+                return refuse_record(*host_, config_.weather_port, record.object_id,
+                                     "current weather incomplete: the kind, the temperature and the wind from 0 "
+                                     "come together");
+            }
+            weather_.kind = kind;
+            weather_.temperature = temperature;
+            weather_.wind = wind;
+            current = true;
+            continue;
+        }
+        if (!whole(period) || period < static_cast<double>(GODOT_PERIOD_FIRST) ||
+            period > static_cast<double>(GODOT_PERIOD_LAST)) {
+            return refuse_record(*host_, config_.weather_port, record.object_id, "forecast period out of range");
+        }
+        const double night = record_value(record, kWeatherKeyNight);
+        const double rain_mm = record_value(record, kWeatherKeyRainMm);
+        if (!whole(kind) || !std::isfinite(temperature) || !(night == 0.0 || night == 1.0) ||
+            !std::isfinite(rain_mm) || rain_mm < 0.0) {
+            return refuse_record(*host_, config_.weather_port, record.object_id,
+                                 "forecast incomplete: the kind, the temperature, the night as 0 or 1 and the "
+                                 "rain from 0 come together");
+        }
+        const std::size_t slot = static_cast<std::size_t>(period) - static_cast<std::size_t>(GODOT_PERIOD_FIRST);
+        if (filed[slot]) {
+            return refuse_record(*host_, config_.weather_port, record.object_id, "forecast period twice");
+        }
+        filed[slot] = true;
+        // The coming periods stand in the order the weather port files them: which period comes next is the clock of
+        // ase-time, never a rotation of this adapter.
+        weather_.forecast.push_back(VivariumWeatherPhaseView{period, kind, night, temperature, rain_mm});
+    }
+    weather_.known = codes && current;
+    weather_.forecast_known = codes && weather_.forecast.size() == GODOT_DAY_PHASES;
+    if (!weather_.forecast_known) {
+        weather_.forecast.clear();
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_sap() {
+    // THE SAP IS READ EVERY SNAPSHOT (N0457): ase-pl-flora files one record for the birch's tap on flora.sap.v1, whether
+    // it runs, the litres the bark vessel holds now and the litres it holds when full; the vessel fills on the owner's
+    // side, never in this adapter. A port not offered or no record filed leaves the sap unknown and the HUD's bridge
+    // draws SHA's tap; a second record or a key that stands out of range is refused.
+    sap_ = VivariumSapView{};
+    if (config_.sap_port.empty() || !host_->has_port(config_.sap_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.sap_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written == 0u) {
+        return ase::kernel::HostStatusOk;
+    }
+    if (written > 1u) {
+        return refuse_record(*host_, config_.sap_port, organ_records_[1].object_id, "more than one sap record");
+    }
+    const auto& record = organ_records_[0];
+    const double running = record_value(record, kSapKeyRunning);
+    const double held_l = record_value(record, kSapKeyHeldL);
+    const double cap_l = record_value(record, kSapKeyCapL);
+    const bool flag = running == 0.0 || running == 1.0;
+    if (!flag || !std::isfinite(held_l) || held_l < 0.0 || !std::isfinite(cap_l) || !(cap_l > 0.0)) {
+        return refuse_record(*host_, config_.sap_port, record.object_id,
+                             "sap incomplete: running 1 or 0, held_l from 0 and cap_l above 0 come together");
+    }
+    sap_.known = true;
+    sap_.running = running == 1.0;
+    sap_.held_l = held_l;
+    sap_.cap_l = cap_l;
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_loose() {
+    // THE LOOSENED SOIL IS THE SOIL'S OWN, READ EVERY SNAPSHOT (N0456, m.html patchLoose): the soil's owner keeps the
+    // looseness of every cell of its ase-gis raster (CAUSA_ASE_GIS LYR_LITHO_COMPACTION, 1 Hz, only changed cells),
+    // the spade raises it, rain settles it, and ase-terrain files one record per cell on terrain.loose.v1: the cell's
+    // centre x and z, its edge cell_m and loose_share 0..1. The adapter keeps the cells as the grid they form and
+    // never computes one. A port not offered or no record filed leaves the raster unknown and the HUD's loose bridge
+    // draws the mockup's grid. Cells of different edges, a share out of 0..1, a cell twice or a cell missing from the
+    // grid the records span is a broken raster and refused.
+    loose_ = VivariumLooseView{};
+    if (config_.loose_port.empty() || !host_->has_port(config_.loose_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.loose_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written == 0u) {
+        return ase::kernel::HostStatusOk;
+    }
+    const double cell_m = record_value(organ_records_[0], GODOT_KEY_CELL_M);
+    if (!std::isfinite(cell_m) || !(cell_m > 0.0)) {
+        return refuse_record(*host_, config_.loose_port, organ_records_[0].object_id, "loose cell without an edge");
+    }
+    double west_x = record_value(organ_records_[0], GODOT_KEY_X);
+    double east_x = west_x;
+    double south_z = record_value(organ_records_[0], GODOT_KEY_Z);
+    double north_z = south_z;
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        const double x = record_value(record, GODOT_KEY_X);
+        const double z = record_value(record, GODOT_KEY_Z);
+        const double share = record_value(record, GODOT_KEY_LOOSE_SHARE);
+        if (!std::isfinite(x) || !std::isfinite(z) || record_value(record, GODOT_KEY_CELL_M) != cell_m ||
+            !std::isfinite(share) || share < 0.0 || share > 1.0) {
+            return refuse_record(*host_, config_.loose_port, record.object_id,
+                                 "loose cell incomplete: x, z, the raster's cell_m and loose_share 0..1 come together");
+        }
+        west_x = ase::math::min(west_x, x);
+        east_x = ase::math::max(east_x, x);
+        south_z = ase::math::min(south_z, z);
+        north_z = ase::math::max(north_z, z);
+    }
+    const int64_t columns = std::llround((east_x - west_x) / cell_m) + 1;
+    const int64_t rows = std::llround((north_z - south_z) / cell_m) + 1;
+    if (columns * rows != static_cast<int64_t>(written)) {
+        return refuse_record(*host_, config_.loose_port, organ_records_[0].object_id,
+                             "loose raster with gaps: every cell of its grid comes exactly once");
+    }
+    std::vector<double> loose(static_cast<size_t>(written), std::nan(""));
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        const int64_t column = std::llround((record_value(record, GODOT_KEY_X) - west_x) / cell_m);
+        const int64_t row = std::llround((record_value(record, GODOT_KEY_Z) - south_z) / cell_m);
+        const size_t cell = static_cast<size_t>(row * columns + column);
+        if (!std::isnan(loose[cell])) {
+            return refuse_record(*host_, config_.loose_port, record.object_id, "loose cell filed twice");
+        }
+        loose[cell] = record_value(record, GODOT_KEY_LOOSE_SHARE);
+    }
+    loose_.known = true;
+    loose_.loose = std::move(loose);
+    loose_.columns = columns;
+    loose_.rows = rows;
+    loose_.west_x = west_x;
+    loose_.south_z = south_z;
+    loose_.cell_m = cell_m;
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_camp_bodies() {
+    // THE CAMP BODIES ARE READ EVERY SNAPSHOT (T.3): ase-physics drops, tips and rests every part in its kinetic
+    // steps, and ase-pl-ingle lays one record per part body in Production (IngleHostBodyExptSystem). A host
+    // without the plugin offers no body port: no part drawn, nothing broken. A body whose place, turn, patch or
+    // make is missing or not a whole id is refused: the plugin lays all of them for every body it files.
+    camp_bodies_.clear();
+    if (!camp_body_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.camp_body_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    camp_bodies_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumCampBodyView view;
+        view.object_id = record.object_id;
+        const double patch = record_value(record, kCampKeyPatch);
+        const double make = record_value(record, kCampKeyMake);
+        view.x = record_value(record, GODOT_KEY_X);
+        view.y = record_value(record, GODOT_KEY_Y);
+        view.z = record_value(record, GODOT_KEY_Z);
+        view.tx = record_value(record, kCampKeyTurnX);
+        view.ty = record_value(record, kCampKeyTurnY);
+        view.tz = record_value(record, kCampKeyTurnZ);
+        const bool finite = std::isfinite(view.x) && std::isfinite(view.y) && std::isfinite(view.z) &&
+                            std::isfinite(view.tx) && std::isfinite(view.ty) && std::isfinite(view.tz);
+        if (!camp_id(patch) || !camp_id(make) || !finite) {
+            camp_bodies_.clear();
+            return refuse_record(*host_, config_.camp_body_port, record.object_id,
+                                 "camp body incomplete or out of range");
+        }
+        view.patch = static_cast<uint32_t>(patch);
+        view.make = static_cast<uint32_t>(make);
+        camp_bodies_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_camp_refuels() {
+    // THE KEEPERS ARE READ EVERY SNAPSHOT (T.7): ase-bdi sets a keeper's action to laying wood, and ase-pl-ingle
+    // lays one record per such keeper in Production (IngleHostFuelExptSystem): the body he tends and, while
+    // ase-fire names one, its fire cell. A record without a whole body id is refused; a missing cell stays apart.
+    camp_refuels_.clear();
+    if (!camp_refuel_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.camp_refuel_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    camp_refuels_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumCampRefuelView view;
+        view.keeper = record.object_id;
+        const double body = record_value(record, kCampKeyBody);
+        const double cell = record_value(record, kCampKeyCell);
+        if (!camp_id(body)) {
+            camp_refuels_.clear();
+            return refuse_record(*host_, config_.camp_refuel_port, record.object_id, "refuel without a body");
+        }
+        view.body = static_cast<uint32_t>(body);
+        if (!std::isnan(cell)) {
+            if (!camp_id(cell)) {
+                camp_refuels_.clear();
+                return refuse_record(*host_, config_.camp_refuel_port, record.object_id, "refuel cell out of range");
+            }
+            view.celled = true;
+            view.cell = static_cast<uint32_t>(cell);
+        }
+        camp_refuels_.push_back(view);
     }
     return ase::kernel::HostStatusOk;
 }
@@ -3368,6 +4505,80 @@ HostStatus GodotHostResourceManager::hold_figure(uint32_t figure, uint32_t item)
     return host_->submit(config_.figure_hold_port.c_str(), config_.op_hold.c_str(), &input);
 }
 
+HostStatus GodotHostResourceManager::stock_figure(uint32_t figure, uint32_t item, double kg) {
+    // One piece of the start stock (T.8, usecase:5378): the item travels as the hash of its item_art.json key, the
+    // mass in kg; whether the figure stands and the piece is whole is ase-pl-survival's and ase-equipment's to check.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (config_.survival_stock_port.empty() || !host_->has_port(config_.survival_stock_port.c_str())) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kSurvivalKeyKind, static_cast<double>(item));
+    (void)put_value(input, kSurvivalKeyKg, kg);
+    return host_->submit(config_.survival_stock_port.c_str(), config_.op_stock.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::lay_camp(uint32_t place, double east, double north) {
+    // The camp place (T.0): measured on the height cells of ase-terrain and laid in the start file; the plugin lays
+    // one camp entity per request, and whether the place is inside the world is its own check.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!camp_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = place;
+    (void)put_value(input, kCampKeyEast, east);
+    (void)put_value(input, kCampKeyNorth, north);
+    return host_->submit(config_.camp_place_port.c_str(), config_.op_lay.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::file_hull(uint32_t corner, uint32_t make, double hx, double hy, double hz) {
+    // One corner of the convex hull of a make (T.1): the export carries it in the node extras of the recipe
+    // variant, the plugin lays it as a corner row and ase-physics builds the collision form from all of them.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!camp_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = corner;
+    (void)put_value(input, kCampKeyMake, static_cast<double>(make));
+    (void)put_value(input, kCampKeyHullX, hx);
+    (void)put_value(input, kCampKeyHullY, hy);
+    (void)put_value(input, kCampKeyHullZ, hz);
+    return host_->submit(config_.camp_hull_port.c_str(), config_.op_lay.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::file_part(uint32_t patch, double east, double north, double drop, double fall,
+                                               double mass, uint32_t make, bool fuel) {
+    // One part of the camp as a rigid body (T.3): the plugin files HUB_PHYS_REG_BODY_ADD_CAMP and ase-physics drops
+    // it under gravity onto the height field; fuel travels only on a part that burns, its presence is the mark.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!camp_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = patch;
+    (void)put_value(input, kCampKeyEast, east);
+    (void)put_value(input, kCampKeyNorth, north);
+    (void)put_value(input, kCampKeyDrop, drop);
+    (void)put_value(input, kCampKeyFall, fall);
+    (void)put_value(input, kCampKeyMass, mass);
+    (void)put_value(input, kCampKeyMake, static_cast<double>(make));
+    if (fuel) {
+        (void)put_value(input, kCampKeyFuel, kCampFuelMark);
+    }
+    return host_->submit(config_.camp_part_port.c_str(), config_.op_lay.c_str(), &input);
+}
+
 HostStatus GodotHostResourceManager::drop_figure(uint32_t figure) {
     // The hand of Phase 06 let its thing go (07.10): no value, the port names the slot it empties.
     if (!running()) {
@@ -3394,8 +4605,9 @@ HostStatus GodotHostResourceManager::fill_figure(uint32_t figure) {
     return host_->submit(config_.figure_fill_port.c_str(), config_.op_fill.c_str(), &input);
 }
 
-HostStatus GodotHostResourceManager::drain_figure(uint32_t figure, double litres) {
-    // The release of the can (07.14): the litres travel as they are; their range is ase-pl-avatar's to check.
+HostStatus GodotHostResourceManager::drain_figure(uint32_t figure, double litres, uint32_t patch) {
+    // The release of the can (07.14): the litres and the patch they fall on travel as they are; their range is
+    // ase-pl-avatar's to check, and the soil column of the patch is ase-equipment's (N0517).
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
@@ -3405,6 +4617,7 @@ HostStatus GodotHostResourceManager::drain_figure(uint32_t figure, double litres
     KernelHostInput input{};
     input.object_id = figure;
     (void)put_value(input, kFigureKeyLitres, litres);
+    (void)put_value(input, kFigureKeyPatch, static_cast<double>(patch));
     return host_->submit(config_.figure_drain_port.c_str(), config_.op_drain.c_str(), &input);
 }
 
@@ -3551,6 +4764,24 @@ HostStatus GodotHostResourceManager::raise(double x, double z, double radius_m, 
     return host_->submit(config_.raise_port.c_str(), config_.op_raise.c_str(), &input);
 }
 
+HostStatus GodotHostResourceManager::loosen(double x, double z, double half_m, double depth_m) {
+    // A hoe stroke names a place, no patch: ase-pl-flora files it as a cultivation order, ase-terrain loosens the
+    // topsoil of the block (B0649). The port is asked first: a plugin set without it answers NotFound, never a
+    // refused submit, and the view keeps its bridge (N0456).
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (config_.loosen_port.empty() || !host_->has_port(config_.loosen_port.c_str())) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_X, x);
+    (void)put_value(input, GODOT_KEY_Z, z);
+    (void)put_value(input, GODOT_KEY_HALF, half_m);
+    (void)put_value(input, GODOT_KEY_DEPTH, depth_m);
+    return host_->submit(config_.loosen_port.c_str(), config_.op_loosen.c_str(), &input);
+}
+
 HostStatus GodotHostResourceManager::pace(double factor) {
     // The request names no object: the clock is the one clock of this host. The view sends the factor
     // only; the base pace it multiplies and the highest pace that is valid are ase-time's, read from the
@@ -3663,6 +4894,30 @@ const VivariumClockView& GodotHostResourceManager::get_clock() const {
     return clock_;
 }
 
+const VivariumWeatherView& GodotHostResourceManager::get_weather() const {
+    return weather_;
+}
+
+const VivariumSapView& GodotHostResourceManager::get_sap() const {
+    return sap_;
+}
+
+const VivariumLooseView& GodotHostResourceManager::get_loose() const {
+    return loose_;
+}
+
+double GodotHostResourceManager::loose_at(double x, double z) const {
+    if (!loose_.known) {
+        return std::nan("");
+    }
+    const int64_t column = std::llround((x - loose_.west_x) / loose_.cell_m);
+    const int64_t row = std::llround((z - loose_.south_z) / loose_.cell_m);
+    if (column < 0 || row < 0 || column >= loose_.columns || row >= loose_.rows) {
+        return std::nan("");
+    }
+    return loose_.loose[static_cast<size_t>(row * loose_.columns + column)];
+}
+
 const std::vector<VivariumOrganView>& GodotHostResourceManager::get_organs(uint32_t organ_class) const {
     // An unknown class answers the empty set no_organs_: never an index past the store.
     return organ_class < GODOT_ORGAN_COUNT ? organs_[organ_class] : no_organs_;
@@ -3684,6 +4939,10 @@ uint64_t GodotHostResourceManager::bark_generation() const {
     return bark_generation_;
 }
 
+const GodotKnotResourceManager& GodotHostResourceManager::knots() const {
+    return *knots_;
+}
+
 const std::vector<VivariumTerrainView>& GodotHostResourceManager::get_terrain() const {
     return terrain_;
 }
@@ -3702,6 +4961,30 @@ const std::vector<VivariumStreamView>& GodotHostResourceManager::get_streams() c
 
 uint64_t GodotHostResourceManager::stream_generation() const {
     return stream_generation_;
+}
+
+const std::vector<VivariumCurrentView>& GodotHostResourceManager::get_currents() const {
+    return currents_;
+}
+
+uint64_t GodotHostResourceManager::current_generation() const {
+    return current_generation_;
+}
+
+const std::vector<VivariumPitView>& GodotHostResourceManager::get_pits() const {
+    return pits_;
+}
+
+uint64_t GodotHostResourceManager::pit_generation() const {
+    return pit_generation_;
+}
+
+const std::vector<VivariumGroundwaterView>& GodotHostResourceManager::get_groundwater() const {
+    return groundwater_;
+}
+
+uint64_t GodotHostResourceManager::groundwater_generation() const {
+    return groundwater_generation_;
 }
 
 const std::vector<VivariumTemplateCornerView>& GodotHostResourceManager::get_template_corners() const {
@@ -3732,6 +5015,72 @@ bool GodotHostResourceManager::rack_offered() const {
     // both rack ports of the configuration, or none: a rack laid where it cannot be read is no rack
     return host_ && !config_.toolrack_scene_port.empty() && !config_.toolrack_rack_port.empty() &&
            host_->has_port(config_.toolrack_scene_port.c_str()) && host_->has_port(config_.toolrack_rack_port.c_str());
+}
+
+const std::vector<VivariumSurvivalBodyView>& GodotHostResourceManager::get_survival_bodies() const {
+    return survival_bodies_;
+}
+
+bool GodotHostResourceManager::survival_body_offered() const {
+    return host_ && !config_.survival_body_port.empty() && host_->has_port(config_.survival_body_port.c_str());
+}
+
+const std::vector<VivariumSurvivalRestView>& GodotHostResourceManager::get_survival_rests() const {
+    return survival_rests_;
+}
+
+bool GodotHostResourceManager::survival_rest_offered() const {
+    return host_ && !config_.survival_rest_port.empty() && host_->has_port(config_.survival_rest_port.c_str());
+}
+
+const std::vector<VivariumSurvivalFoodView>& GodotHostResourceManager::get_survival_foods() const {
+    return survival_foods_;
+}
+
+bool GodotHostResourceManager::survival_food_offered() const {
+    return host_ && !config_.survival_food_port.empty() && host_->has_port(config_.survival_food_port.c_str());
+}
+
+const std::vector<VivariumSurvivalSmokeView>& GodotHostResourceManager::get_survival_smokes() const {
+    return survival_smokes_;
+}
+
+bool GodotHostResourceManager::survival_smoke_offered() const {
+    return host_ && !config_.survival_smoke_port.empty() && host_->has_port(config_.survival_smoke_port.c_str());
+}
+
+bool GodotHostResourceManager::camp_offered() const {
+    return host_ && !config_.camp_place_port.empty() && !config_.camp_hull_port.empty() &&
+           !config_.camp_part_port.empty() && host_->has_port(config_.camp_place_port.c_str()) &&
+           host_->has_port(config_.camp_hull_port.c_str()) && host_->has_port(config_.camp_part_port.c_str());
+}
+
+const std::vector<VivariumCampBodyView>& GodotHostResourceManager::get_camp_bodies() const {
+    return camp_bodies_;
+}
+
+bool GodotHostResourceManager::camp_body_offered() const {
+    return host_ && !config_.camp_body_port.empty() && host_->has_port(config_.camp_body_port.c_str());
+}
+
+const std::vector<VivariumCampRefuelView>& GodotHostResourceManager::get_camp_refuels() const {
+    return camp_refuels_;
+}
+
+bool GodotHostResourceManager::camp_refuel_offered() const {
+    return host_ && !config_.camp_refuel_port.empty() && host_->has_port(config_.camp_refuel_port.c_str());
+}
+
+const std::vector<VivariumSurvivalFireView>& GodotHostResourceManager::get_survival_fires() const {
+    return survival_fires_;
+}
+
+bool GodotHostResourceManager::survival_fire_offered() const {
+    return host_ && !config_.survival_fire_port.empty() && host_->has_port(config_.survival_fire_port.c_str());
+}
+
+bool GodotHostResourceManager::survival_left_offered() const {
+    return host_ && !config_.survival_left_port.empty() && host_->has_port(config_.survival_left_port.c_str());
 }
 
 const std::vector<VivariumFigureView>& GodotHostResourceManager::get_figures() const {
@@ -3924,6 +5273,7 @@ void GodotHostResourceManager::clear_all() {
     patches_.clear();
     places_.clear();
     clock_ = VivariumClockView{};
+    weather_ = VivariumWeatherView{};
     records_.clear();
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         organs_[c].clear();
@@ -3940,6 +5290,7 @@ void GodotHostResourceManager::clear_all() {
     bark_passes_ = 0u;
     bark_owed_ = false;
     bark_generation_ += 1u;   // and its bark tubes
+    knots_->clear_all();      // and the knots, feet and cut faces of those tubes
     terrain_.clear();
     ground_cells_.clear();
     terrain_runs_ = 0u;
@@ -3947,12 +5298,25 @@ void GodotHostResourceManager::clear_all() {
     terrain_generation_ += 1u;  // and the ground of the old host
     streams_.clear();
     stream_generation_ += 1u;   // and the water of its brooks
+    currents_.clear();
+    current_generation_ += 1u;  // and its river current
+    pits_.clear();
+    pit_generation_ += 1u;      // and the water of its pits
+    groundwater_.clear();
+    groundwater_generation_ += 1u;  // and its groundwater
     template_corners_.clear();
     template_triangles_.clear();
     template_generation_ += 1u;  // and its templates
     sky_ = VivariumSkyView{};   // and its light
     seeds_.clear();             // and its seeds
     racks_.clear();             // and its tool racks
+    survival_bodies_.clear();   // and its figures' bodies
+    survival_rests_.clear();    // and their rest
+    survival_foods_.clear();    // and the spoil of their food
+    survival_smokes_.clear();   // and the soot in the air of their cells
+    survival_fires_.clear();    // and its fire cells
+    camp_bodies_.clear();       // and the bodies of its camp
+    camp_refuels_.clear();      // and the keepers laying wood
     figures_.clear();           // and its figures
     figure_camera_ = VivariumFigureCameraView{};  // and the camera following one
     figure_gear_.clear();       // and what the figures carry

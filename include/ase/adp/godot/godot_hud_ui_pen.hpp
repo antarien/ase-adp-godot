@@ -152,15 +152,6 @@ private:
     /** A width in the shapes' units at screen pixels; a width below 0 stays the hairline. */
     float pixels(float width) const;
 
-    /**
-     * The core Godot draws for a stroke of `width` screen pixels so that core plus feather covers `width`; a width
-     * below 0 stays the hairline.
-     */
-    float core(float width) const;
-
-    /** The feather Godot attaches to a line's or polyline's core of `core` screen pixels, at each side and end. */
-    float feather(float core) const;
-
     /** An open run of screen points with its first and last point pulled in by half the end feather of `core`. */
     ::godot::PackedVector2Array trimmed(const ::godot::PackedVector2Array& points, float core) const;
 

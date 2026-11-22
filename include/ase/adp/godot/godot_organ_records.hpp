@@ -23,7 +23,7 @@
  * @usecase     usecase:100974 - lay out organ records
  * @actor       Vivarium Steward (VIVARIUSTE)
  * @created     2026-11-05
- * @modified    2026-11-05
+ * @modified    2026-11-21
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -31,7 +31,9 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_bark_view.hpp>
+#include <ase/adp/godot/godot_host_organ_view.hpp>
+#include <ase/adp/godot/tube/godot_knot_resource_manager.hpp>
 #include <ase/kernel/kernel_host_port.hpp>
 
 namespace ase::adp::godot {
@@ -48,10 +50,28 @@ bool segment_tile_of(const ase::kernel::KernelHostRecord& record, VivariumOrganV
 /** The sway of a sway record into the view of its organ; false without seven finite values and a frequency >= 0. */
 bool organ_sway_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
 
+/** The bend of a bend record into the view of its leaf; false without two finite values (ase-pl-flora checked their range). */
+bool leaf_bend_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
+
+/** The colour offset of a tint record into the view of its leaf; false without a finite value (ase-pl-flora checked its range). */
+bool leaf_tint_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
+
+/** The atlas cell of an atlas record into the view of its leaf; false without two finite values (ase-pl-flora checked their bounds). */
+bool leaf_atlas_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
+
 /** One instance record as a view; false for a record that misses one of the twelve rows. */
 bool instance_view_of(const ase::kernel::KernelHostRecord& record, VivariumInstanceView& out);
 
 /** One bark record as the view of one tube vertex; false for a gap, a value that is no finite number, or a link that is no object id. */
 bool bark_vertex_view_of(const ase::kernel::KernelHostRecord& record, VivariumBarkVertexView& out);
+
+/** One knot record as the view of the tip knot of one internode; false for a gap, a value that is no finite number, a negative radius or a link that is no object id. */
+bool knot_view_of(const ase::kernel::KernelHostRecord& record, VivariumKnotView& out);
+
+/** One foot record as the view of the foot knot of one axis; false for a gap, a value that is no finite number or a negative radius. */
+bool foot_view_of(const ase::kernel::KernelHostRecord& record, VivariumFootView& out);
+
+/** One scar record as the view of the cut face of one stub; false for a body that is no object id. */
+bool scar_view_of(const ase::kernel::KernelHostRecord& record, VivariumScarView& out);
 
 }  // namespace ase::adp::godot

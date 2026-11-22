@@ -16,8 +16,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-10-25
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-21
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -253,6 +253,13 @@ bool VivariumView::load_texts(const ::godot::Dictionary& root) {
         {"error", &texts_.error},
         {"separator", &texts_.separator},
         {"loading", &texts_.loading},
+        {"hold_patches", &texts_.hold_patches},
+        {"hold_brooks", &texts_.hold_brooks},
+        {"hold_scene", &texts_.hold_scene},
+        {"hold_sky_clock", &texts_.hold_sky_clock},
+        {"hold_figure", &texts_.hold_figure},
+        {"hold_jump", &texts_.hold_jump},
+        {"hold_render", &texts_.hold_render},
     };
     for (const auto& entry : wanted) {
         if (!read_text(texts, entry.key, *entry.out)) {

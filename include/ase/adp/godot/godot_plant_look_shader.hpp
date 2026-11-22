@@ -43,6 +43,7 @@ constexpr const char* GODOT_ORGAN_SHADER_FILE = "res://shaders/plant_organ.gdsha
 constexpr const char* GODOT_BARK_SHADER_FILE = "res://shaders/plant_bark.gdshader";          // the continuous bark tube of every axis, white and stem-base mixed, swinging by its includes
 constexpr const char* GODOT_BARK_SHOWN_ORDERS = "shown_orders";  // uniform of the bark shader: a ring of a higher order closes onto its axis (OrderBudget::shown)
 constexpr const char* GODOT_BARK_COARSE = "coarse";              // uniform of the bark shader: true on the twig tube, where a ring up to the shown orders closes onto its axis instead
+constexpr const char* GODOT_BARK_CUT_FACE = "cut_face";          // uniform of the bark shader: true on the wood disk of a cut stub, whose UV is sampled once over the disk instead of by the tiles of the bark
 constexpr const char* GODOT_BARK_LEAST_PIXELS = "least_pixels";  // uniform of the bark shader: screen pixels a ring of the own tube is held at when it is narrower (view.least_ring_px)
 constexpr const char* GODOT_GROUND_SHADER_FILE = "res://shaders/plant_ground.gdshader";      // the ground of one soil
 
@@ -56,6 +57,7 @@ constexpr int32_t GODOT_ORGAN_SWAY_SURFACES = 1;              // surfaces of a b
 constexpr const char* GODOT_SHADER_SOIL_REL = "soil_rel";     // instance uniform of the ground material: soil water over field capacity of the focused patch, 0..1
 constexpr const char* GODOT_SHADER_WILTED = "wilted";         // instance uniform of the leaf material: 1 while ase-plant marks the plant's patch wilted (VivariumPatchView::wilted)
 constexpr const char* GODOT_SHADER_DEAD = "dead";             // instance uniform of the leaf material: 1 while ase-plant marks the plant's patch dead (VivariumPatchView::dead)
+constexpr const char* GODOT_SHADER_AUTUMN = "autumn";         // instance uniform of the leaf material: the autumn colour of the plant's individual, 0..1 (VivariumPatchView::autumn, usecase:101646 colour the leaves in autumn)
 
 // plant_stand_in.gdshader (operator order of 2026-10-23).
 constexpr const char* GODOT_STAND_IN_COLOR = "stand_in_color";            // stand-in shader uniform: the colour of the name

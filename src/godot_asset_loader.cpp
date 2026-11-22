@@ -43,7 +43,8 @@
  */
 
 #include <ase/adp/godot/godot_asset_loader.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 
 #include <gdextension_interface.h>
 #include <godot_cpp/classes/base_material3d.hpp>

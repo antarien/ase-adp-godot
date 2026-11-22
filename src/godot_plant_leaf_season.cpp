@@ -22,7 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_plant_leaf_season.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/math.hpp>
@@ -52,6 +52,7 @@ void light_plant_leaf_season(const LeafSeasonShade& shade) {
     now.push_back(used.dry.g);
     now.push_back(used.dry.b);
     now.push_back(used.dry.a);
+    now.push_back(used.autumn);
     const ::godot::PackedFloat32Array noted = server->get_meta(GODOT_LEAF_NOTE_META, ::godot::PackedFloat32Array());
     bool moved = noted.size() != now.size();
     for (int64_t i = 0; !moved && i < now.size(); ++i) {
@@ -61,10 +62,13 @@ void light_plant_leaf_season(const LeafSeasonShade& shade) {
         server->set_meta(GODOT_LEAF_NOTE_META, now);
         ::godot::UtilityFunctions::print(::godot::String("[") + GODOT_LOG_SOURCE + "] leaf season shown=" +
                                          (shade.shown ? "1" : "0") + " season=" + used.season.to_html(true) +
-                                         " dry=" + used.dry.to_html(true));
+                                         " dry=" + used.dry.to_html(true) +
+                                         " autumn=" + ::godot::String::num(used.autumn));
     }
     server->global_shader_parameter_set(GODOT_LEAF_SEASON_COLOR, used.season);
     server->global_shader_parameter_set(GODOT_LEAF_DRY_COLOR, used.dry);
+    // autumn: each leaf whose body carries its own autumn colour turns by it (usecase:101646 colour the leaves in autumn)
+    server->global_shader_parameter_set(GODOT_LEAF_SEASON_AUTUMN, used.autumn);
 }
 
 }  // namespace ase::adp::godot

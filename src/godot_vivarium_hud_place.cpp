@@ -33,7 +33,8 @@
 
 #include <ase/adp/godot/godot_hud_compose_place.hpp>
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>

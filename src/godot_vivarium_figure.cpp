@@ -13,11 +13,14 @@
  *              (07.6). A thumb on the phone's stick (godot_vivarium_figure_controls.cpp, 07.9) leads over the keys:
  *              its deflection is sent through the same stick port in their place, running from run_share on.
  *              Nothing about the figure is computed here; ase-player moves it, ase-camera places its camera.
+ *              The scene gets the rest port and the places of the ring stones as ase-physics holds them, so a
+ *              resting figure sits on a stone or the ground and a sleeping one lies (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP
+ *              T.11); ase-metabolism says whether it rests and sleeps.
  *              The hand of Phase 06 (07.10): whenever the thing in the hand changes, a hold request with its
  *              catalog id or a drop request goes out for the figure led; ase-equipment puts it on at
  *              socket_hand_r, and the gear port brings the piece back for the scene to hang under the socket.
- *              The two rims of 07-G are written as lines on each edge: the figure held on the circle of its area
- *              (figure edge, RAND DES AREALS) and the player camera held on it (figure bound, cam.bound).
+ *              The two rims of 07-G are written as lines on each edge: the figure held at a chunk border of the
+ *              loaded raster (figure edge, RAND DES AREALS) and the player camera held on it (figure bound, cam.bound).
  *              The start configuration the view reads once stands in godot_vivarium_figure_config.cpp.
  *
  * @module      ase-adp-godot
@@ -27,8 +30,8 @@
  * @usecase     usecase:101554 - receive player input
  * @actor       Player Input Warden (PLAYINPWAR)
  * @created     2026-11-13
- * @modified    2026-11-17
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-20
+ * @version     00.00.26.00026 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -38,7 +41,7 @@
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_figure_scene.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 #include <ase/kernel/kernel_embedded_host.hpp>
 #include <ase/math/math.hpp>
 
@@ -62,6 +65,17 @@ namespace {
 constexpr double kFigureAxisFull = 1.0;          // a pressed key moves its stick axis to the end of its range
 constexpr double kFigureLevelOn = 1.0;           // sprint and jump: the level of a pressed key
 constexpr double kFigurePlaceStepM = 0.25;       // metres the led figure moves before its place line is written again
+constexpr const char* kFigureCampStoneRole = "camp.stone";  // the role of the ring stones in camp.parts (T.3, T.11)
+
+/** true when `make` is one of the makes the export of the ring stones carries. */
+bool stone_make(const CampRoleLoad& stones, uint32_t make) {
+    for (const CampMake& candidate : stones.makes) {
+        if (candidate.make == make) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /** The level of one key: kFigureAxisFull while it is held, else 0. */
 double held(const ::godot::Input* input, ::godot::Key key) {
@@ -95,9 +109,20 @@ void VivariumView::follow_figure(double elapsed_s) {
     }
     const std::vector<VivariumFigureView>& figures = resources_.get_figures();
     const VivariumFigureCodeView& codes = resources_.get_figure_code();
-    fill_figures(scene_, figures, resources_.get_figure_gear(), figure_look_, codes);
-    // 07.13: the red glass pane where a walking body bumped the chunk edge, from the boundary port, no message with it
-    flash_figure_edges(scene_, resources_.get_figure_bumps(), figures, figure_glass_, elapsed_s);
+    // the ring stones of the camp fire where ase-physics holds their bodies (T.3), in the frame of the scene as the
+    // camp view draws them; a resting figure over one of them sits on it (T.11)
+    std::vector<FigureSceneStone> stones;
+    const auto stone_load = camp_.loads.find(kFigureCampStoneRole);
+    if (stone_load != camp_.loads.end()) {
+        for (const VivariumCampBodyView& body : resources_.get_camp_bodies()) {
+            const VivariumPatchView* frame = resources_.get_patch(body.patch);
+            if (frame != nullptr && stone_make(stone_load->second, body.make)) {
+                stones.push_back(FigureSceneStone{frame->x + body.x, frame->z + body.z});
+            }
+        }
+    }
+    fill_figures(scene_, figures, resources_.get_figure_gear(), figure_look_, codes, resources_.get_survival_rests(),
+                 stones);
 
     // the rig of every figure node, once per node (07.6): eye height, height and body radius of the skeleton the
     // scene built go to the rig port, so the face landing of ase-camera aims at the eyes of this file and the capsule
@@ -115,32 +140,26 @@ void VivariumView::follow_figure(double elapsed_s) {
         }
     }
 
-    // the area of every figure, once per figure (07.7, usecase:101612 keep figure in loaded area): the patch whose
-    // levelled disc the figure first stands on becomes its plate. ase-player bounds the figure to that disc and
-    // marks its rim, which the camera record carries back as edge. A figure on no disc is bound to none.
+    // the area of every figure, once per figure (07.7, usecase:101612 keep figure in loaded area): the plate is a
+    // relation the start config names (figure.place), never found by where the figure stands (B0447). The view hands
+    // only the object id of that patch's plate on; ase-player bounds the figure to the four chunk borders of the
+    // loaded raster around it (PlayerSimBndySystem, HUB_GIS_GRND) and marks its rim, which the camera record carries
+    // back as edge. Until the plate stands in the scene the figure waits unbound.
+    const VivariumPatchView* plate = resources_.get_patch_at(start_.figure_place);
     for (const VivariumFigureView& figure : figures) {
+        if (plate == nullptr) {
+            break;
+        }
         if (std::find(figure_area_bound_.begin(), figure_area_bound_.end(), figure.object_id) !=
             figure_area_bound_.end()) {
             continue;
         }
-        for (const VivariumPatchSpec& spec : start_.patches) {
-            const VivariumPatchView* patch = resources_.get_patch_at(spec.place);
-            if (patch == nullptr) {
-                continue;
-            }
-            const double dx = figure.x - patch->x;
-            const double dz = figure.z - patch->z;
-            if (dx * dx + dz * dz > spec.half_m * spec.half_m) {
-                continue;
-            }
-            const ase::kernel::HostStatus bound = resources_.bind_figure_area(figure.object_id, patch->object_id);
-            note(::godot::String("figure area figure=") + ::godot::String::num_uint64(figure.object_id) + " plate " +
-                 ::godot::String::num_uint64(patch->object_id) + " place " + ::godot::String::num_uint64(spec.place) +
-                 " status " + ::godot::String::num_int64(bound));
-            if (bound == ase::kernel::HostStatusOk) {
-                figure_area_bound_.push_back(figure.object_id);
-            }
-            break;
+        const ase::kernel::HostStatus bound = resources_.bind_figure_area(figure.object_id, plate->object_id);
+        note(::godot::String("figure area figure=") + ::godot::String::num_uint64(figure.object_id) + " plate " +
+             ::godot::String::num_uint64(plate->object_id) + " place " +
+             ::godot::String::num_uint64(start_.figure_place) + " status " + ::godot::String::num_int64(bound));
+        if (bound == ase::kernel::HostStatusOk) {
+            figure_area_bound_.push_back(figure.object_id);
         }
     }
 
@@ -170,7 +189,7 @@ void VivariumView::follow_figure(double elapsed_s) {
         figure_edge_shown_ = edge;
     }
 
-    // the rim of the camera (07-G, cam.bound): ase-camera holds the player camera on the circle of the loaded area
+    // the rim of the camera (07-G, cam.bound): ase-camera holds the player camera at the chunk borders of the loaded raster
     // (HUB_CAM_OWNR_BNDY, usecase:101612 keep figure in loaded area) and ase-pl-avatar hands that mark over as the
     // key bound of the camera record; the line is written on each edge, never per frame. The fixed view of
     // Phase 06 is no player camera and stands on no rim.
@@ -180,6 +199,11 @@ void VivariumView::follow_figure(double elapsed_s) {
              (bound ? "1" : "0"));
         figure_bound_shown_ = bound;
     }
+
+    // 07.13 and M0157: the red glass pane where a walking body bumped the chunk edge, from the boundary port, no
+    // message with it; it stands at full glow for as long as the rim holds the followed figure (edge or bound above)
+    flash_figure_edges(scene_, resources_.get_figure_bumps(), figures, figure_glass_, camera.figure,
+                       figure_edge_shown_ || figure_bound_shown_, elapsed_s);
 
     // the figure of this seat: the one it held last frame while that still stands, else the first of this frame
     // whose soul is SS/PC. A figure handed to the AI (soul.mode, 07.11) stays the seat's, so cam.mode and
@@ -234,6 +258,32 @@ void VivariumView::follow_figure(double elapsed_s) {
     if (led != nullptr && take_figure_level(scene_, led->object_id, drawn_level)) {
         note(::godot::String("figure lod figure=") + ::godot::String::num_uint64(led->object_id) + " level " +
              ::godot::String::num_int64(drawn_level));
+    }
+
+    // the water the figure led carries, at the first sight of its vessel and then per change (07.14): ase-equipment
+    // fills the can at the brook and empties it at the birch, so a rise is the fill and a fall the pour - under SS/PC
+    // by the player's tap and under AI/PC by the acts of the BDI alike; the acceptance reads both from this line
+    double carried_litres = 0.0;
+    if (led != nullptr && take_figure_water(scene_, led->object_id, carried_litres)) {
+        note(::godot::String("figure water figure=") + ::godot::String::num_uint64(led->object_id) + " litres " +
+             ::godot::String::num(carried_litres, 3));
+    }
+
+    // the start stock of the bag (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP T.8, usecase:5378 - regulate basic needs): once
+    // per figure of this seat, one stock request per piece of figure.stock. The item travels as the catalog id of its
+    // item_art.json key; ase-pl-survival files it as HUB_EQP_FOOD_REQ, ase-equipment lays it into the pouch and
+    // ase-entropy spoils it there, and the ring ESTRAGO reads the share back from survival.food.v1. A host without the
+    // stock port answers NotFound for each piece once and lays nothing; a stock is laid once, never resent.
+    if (led != nullptr &&
+        std::find(figure_stocked_.begin(), figure_stocked_.end(), led->object_id) == figure_stocked_.end()) {
+        for (const VivariumStockSpec& piece : start_.stock) {
+            const uint32_t item = ase::kernel::KernelEmbeddedHost::name_id(piece.item.c_str());
+            const ase::kernel::HostStatus stocked = resources_.stock_figure(led->object_id, item, piece.kg);
+            note(::godot::String("figure stock figure=") + ::godot::String::num_uint64(led->object_id) + " item=" +
+                 ::godot::String::utf8(piece.item.c_str()) + " kg " + ::godot::String::num(piece.kg, 3) + " status " +
+                 ::godot::String::num_int64(stocked));
+        }
+        figure_stocked_.push_back(led->object_id);
     }
 
     // the hand of Phase 06 (07.10): what it holds the figure carries at socket_hand_r. One request per change of

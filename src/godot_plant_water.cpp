@@ -10,13 +10,14 @@
  *              in the bed of each brook at its bed plus that depth. The bed of a station is the lowest ground
  *              vertex of its section within the reach of the bed (stream_levels); from the lower end upstream
  *              the level never sinks under the level below it, the rule of the ribbon, nor under the
- *              groundwater table the brook runs in (table_of). Beside a bed the plane stands at the
- *              groundwater level ase-hydro gives that brook, within the reach the stream port carries
- *              (groundwater_level_m, groundwater_reach_m; beside_bed, B0286), so a pit dug below it fills to
- *              it. Everywhere else, and beside a brook whose record carries no groundwater yet (N0484), the
- *              table stands at NN0 (GODOT_WATER_TABLE_M), the datum ase-terrain generates its ground around:
- *              B0281 had taken that table out, and the groundwater was seen nowhere, neither in the brook nor
- *              in any hollow (operator 2026-11-13, a regression). Where the ground stands
+ *              groundwater table ase-hydro gives the brook it runs in (table_of); a record without that table
+ *              (N0484) lifts nothing. THE WATER OF A PIT IS ASE-HYDRO'S TOO (D2506,
+ *              PLAN_ASE_VIVARIUM_PHASE_10_HYDRO H.3): HydroCellPitCalcSystem fills every pit cell from the
+ *              chunk table and the brook ase-gis finds in reach, hydrogeology.pit.v1 carries its open water,
+ *              and pit_water_levels (godot_plant_water_pit.cpp) lays it at the floor of the cell plus that
+ *              depth. The view lays no table of its own: no NN0 plane and no reach beside a bed, the B0286
+ *              guess that filled every hollow near a brook to its record whether ase-hydro filled it or not.
+ *              A vertex in no bed and no pit carries no water. Where the ground stands
  *              above the plane it hides it, so the shore is where ground and plane cross. The plane shares the
  *              corners of the ground, one vertex per ground vertex a wet cell names, the depth of the water
  *              above that vertex in its colour; it reads the ground mesh as build_ground laid it and
@@ -47,7 +48,7 @@
  * @usecase     usecase:101339 - show the ground around plant
  * @actor       Worldkeeper Perception Relay (WORLPERREL)
  * @created     2026-11-01
- * @modified    2026-11-13
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -56,7 +57,7 @@
  */
 
 #include <ase/adp/godot/godot_plant_water.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <cmath>
@@ -138,37 +139,17 @@ bool station_of(const VivariumStreamView& stream, float x, float z, std::size_t&
 }
 
 /**
- * Whether (x, z) lies within the groundwater ase-hydro reckons beside `stream`: no farther from the line between
- * its ends, held within its ends, than the reach the stream port carries (groundwater_reach_m). false for a stream
- * whose record carries no finite level or no positive reach: then ase-hydro gives no water beside that brook.
+ * The groundwater table under `stream`, world metres, into `table`: the level ase-hydro gives the brook on its
+ * record. The water of a bed never stands below it: the brook is fed by the groundwater it runs in. false while
+ * the stream port carries no level (N0484): then the bed holds its own depth and nothing below it, never a table
+ * the view puts in itself (D2506, PLAN_ASE_VIVARIUM_PHASE_10_HYDRO H.3: no level refers to NN0).
  */
-bool beside_bed(const VivariumStreamView& stream, float x, float z) {
-    const auto reach = static_cast<float>(stream.groundwater_reach_m);
-    if (!std::isfinite(stream.groundwater_level_m) || !std::isfinite(stream.groundwater_reach_m) || !(reach > 0.0f)) {
+bool table_of(const VivariumStreamView& stream, float& table) {
+    if (!std::isfinite(stream.groundwater_level_m)) {
         return false;
     }
-    const auto ax = static_cast<float>(stream.end_x - stream.x);
-    const auto az = static_cast<float>(stream.end_z - stream.z);
-    const float length2 = ax * ax + az * az;
-    const float along =
-        length2 > 0.0f ? ((x - static_cast<float>(stream.x)) * ax + (z - static_cast<float>(stream.z)) * az) / length2
-                       : 0.0f;
-    const float t = along < 0.0f ? 0.0f : (along > 1.0f ? 1.0f : along);
-    const float dx = x - (static_cast<float>(stream.x) + t * ax);
-    const float dz = z - (static_cast<float>(stream.z) + t * az);
-    return dx * dx + dz * dz <= reach * reach;
-}
-
-/**
- * The groundwater table under `stream`, world metres: the level its record carries, or NN0
- * (GODOT_WATER_TABLE_M, the datum ase-terrain generates its ground around) while the stream port carries none
- * (N0484). The water of a bed never stands below it: the brook is fed by the groundwater it runs in, and the
- * table at NN0 stood in the brook and in every hollow below it until B0281 took it out (operator 2026-11-13:
- * the groundwater NN0 is seen nowhere any more, neither in the brook nor anywhere, a regression).
- */
-float table_of(const VivariumStreamView& stream) {
-    return std::isfinite(stream.groundwater_level_m) ? static_cast<float>(stream.groundwater_level_m)
-                                                     : GODOT_WATER_TABLE_M;
+    table = static_cast<float>(stream.groundwater_level_m);
+    return true;
 }
 
 /**
@@ -217,17 +198,22 @@ void stream_levels(const VivariumStreamView& stream, const PlantMeshArrays& grou
         }
         const float level = levels[first + station] + depth_m;
         below = wet && below > level ? below : level;
-        // the brook stands at least at the groundwater table it runs in (table_of)
-        const float table = table_of(stream);
-        levels[first + station] = below > table ? below : table;
+        // the brook stands at least at the groundwater table ase-hydro gives it (table_of), where it gives one
+        float table = 0.0f;
+        levels[first + station] = table_of(stream, table) && table > below ? table : below;
         wet = true;
     }
 }
 
 }  // namespace
 
-uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const PlantMeshArrays& ground,
-                           PlantMeshArrays& out) {
+uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const std::vector<VivariumPitView>& pits,
+                           const PlantMeshArrays& ground, PlantMeshArrays& out) {
+    return build_water_table(streams, pits, ground, out, out);
+}
+
+uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const std::vector<VivariumPitView>& pits,
+                           const PlantMeshArrays& ground, PlantMeshArrays& brook_out, PlantMeshArrays& pit_out) {
     // the level ase-hydro gives every station of every stream, stream after stream
     const std::size_t stations = static_cast<std::size_t>(GODOT_WATER_STATIONS) + 1u;
     std::vector<float> levels(streams.size() * stations, 0.0f);
@@ -257,31 +243,16 @@ uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const
             }
         }
     }
-    // the groundwater beside every bed: a vertex in no bed, within the reach ase-hydro gives a stream, takes the
-    // highest groundwater level of those streams, so a pit dug below that level fills to it (usecase:101339,
-    // B0286); the ground around the pit stands above the plane and hides it. Everywhere else, and beside a brook
-    // whose record carries no groundwater (N0484), the table stands at NN0 (GODOT_WATER_TABLE_M), so every
-    // hollow below NN0 holds water as before B0281
-    for (std::size_t v = 0u; v < ground_vertices; ++v) {
-        if (flooded[v] != 0u) {
-            continue;
-        }
-        level_of[v] = GODOT_WATER_TABLE_M;
-        flooded[v] = 1u;
-        bool carried = false;
-        for (const VivariumStreamView& stream : streams) {
-            if (!beside_bed(stream, ground.positions[v * 3u], ground.positions[v * 3u + 2u])) {
-                continue;
-            }
-            const auto level = static_cast<float>(stream.groundwater_level_m);
-            if (!carried || level > level_of[v]) {
-                level_of[v] = level;
-                carried = true;
-            }
-        }
-    }
-    // one plane vertex per ground vertex a wet cell names, laid when the first cell names it; -1 not yet laid
+    // the water of every pit ase-hydro fills, beside a bed or anywhere (usecase:101339, D2506): its floor plus the
+    // depth of its record; the ground around the pit stands above the plane and hides it. A vertex in no bed and
+    // no pit carries no water: the view puts no table of its own anywhere
+    pit_water_levels(pits, ground, level_of, flooded);
+    // one plane vertex per ground vertex a wet cell names, laid when the first cell names it; -1 not yet laid. A
+    // cell with a bed corner is brook water, a cell only a pit floods is groundwater in the pit (D2508): each kind
+    // goes to its own arrays, drawn by its own shader, and each arrays keeps its own vertices unless both are one
+    const bool one_kind = &brook_out == &pit_out;
     std::vector<int32_t> vertex_of(ground_vertices, -1);
+    std::vector<int32_t> pit_vertex_of(one_kind ? 0u : ground_vertices, -1);
     uint32_t drawn = 0u;
     for (std::size_t first = 0u; first + 6u <= ground.indices.size(); first += 6u) {
         // the cell's corners sw, se, ne, nw out of its triangles (sw, se, ne) and (sw, ne, nw)
@@ -291,6 +262,8 @@ uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const
         bool wet = false;
         float cell_level = 0.0f;
         bool cell_bed = false;
+        float cell_low = 0.0f;  // the lowest water of the cell's flooded corners, a bed's or a pit's
+        bool cell_flooded = false;
         for (const int32_t corner : corners) {
             if (corner < 0 || static_cast<std::size_t>(corner) >= ground_vertices) {
                 known = false;
@@ -301,6 +274,8 @@ uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const
                 continue;
             }
             wet = wet || ground.positions[at * 3u + 1u] < level_of[at];
+            cell_low = cell_flooded && cell_low < level_of[at] ? cell_low : level_of[at];
+            cell_flooded = true;
             if (in_bed[at] != 0u) {
                 cell_level = cell_bed && cell_level < level_of[at] ? cell_level : level_of[at];
                 cell_bed = true;
@@ -309,28 +284,32 @@ uint32_t build_water_table(const std::vector<VivariumStreamView>& streams, const
         if (!known || !wet) {
             continue;  // an index past the ground, or a cell in no bed or wholly above its water: no water over it
         }
+        PlantMeshArrays& out = cell_bed ? brook_out : pit_out;
+        std::vector<int32_t>& laid_of = cell_bed || one_kind ? vertex_of : pit_vertex_of;
         int32_t vertex[4] = {0, 0, 0, 0};
         for (std::size_t corner = 0u; corner < 4u; ++corner) {
             const auto at = static_cast<std::size_t>(corners[corner]);
-            if (vertex_of[at] >= 0) {
-                vertex[corner] = vertex_of[at];
+            if (laid_of[at] >= 0) {
+                vertex[corner] = laid_of[at];
                 continue;
             }
             const float x = ground.positions[at * 3u];
             const float height = ground.positions[at * 3u + 1u];
             const float z = ground.positions[at * 3u + 2u];
             // a corner on the bank, outside every bed, carries the lowest water of the cell's bed corners, so no
-            // bank is flooded by the level of the station upstream and the brook does not sink to the table across
-            // its own cell; where its groundwater stands higher it carries that. Its ground above hides it
-            const bool bank = in_bed[at] == 0u && cell_bed && cell_level > level_of[at];
-            const float level = bank ? cell_level : level_of[at];
+            // bank is flooded by the level of the station upstream; where a pit's water stands higher there it
+            // carries that. A corner neither bed nor pit names carries the lowest water of the cell's flooded
+            // corners, the bed's first. Its ground above hides it
+            const bool dry = flooded[at] == 0u;
+            const bool bank = in_bed[at] == 0u && cell_bed && (dry || cell_level > level_of[at]);
+            const float level = bank ? cell_level : (dry ? cell_low : level_of[at]);
             const float green = channel_of(level - height, GODOT_WATER_DEPTH_FULL_M);
             float red = 0.0f;
             float course_x = 0.0f;
             float course_z = 0.0f;
             flow_at(x, z, streams, red, course_x, course_z);
             vertex[corner] = static_cast<int32_t>(out.positions.size() / 3u);
-            vertex_of[at] = vertex[corner];
+            laid_of[at] = vertex[corner];
             append3(out.positions, x, level, z);
             append3(out.normals, 0.0f, 1.0f, 0.0f);
             out.uvs.push_back(x);

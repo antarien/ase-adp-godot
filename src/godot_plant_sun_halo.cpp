@@ -25,6 +25,7 @@
 
 #include <ase/adp/godot/godot_plant_shader.hpp>
 #include <ase/adp/godot/godot_plant_sun_halo.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
 

@@ -19,8 +19,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-15
- * @modified    2026-11-15
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-20
+ * @version     00.00.26.00026 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -45,6 +45,8 @@ inline constexpr const char* kFigureMetaPlaceNoted = "figure_place_noted";  // m
 inline constexpr const char* kFigureMetaGaitNoted = "figure_gait_noted";    // meta of a figure's node: the gait value last handed to the view's gait line
 inline constexpr const char* kFigureMetaLevelDrawn = "figure_lod_drawn";    // meta of a figure's node: the detail level its meshes are drawn on this frame
 inline constexpr const char* kFigureMetaLevelNoted = "figure_lod_noted";    // meta of a figure's node: the detail level last handed to the view's level line
+inline constexpr const char* kFigureMetaWater = "figure_vessel_water_l";    // meta of a figure's node: litres of the carried vessel the gear port showed last, so a rise reads as one draw
+inline constexpr const char* kFigureMetaWaterNoted = "figure_water_noted";  // meta of a figure's node: the litres last handed to the view's water line
 inline constexpr const char* kFigureMetaLevel = "figure_lod";      // meta of a mesh of the figure file: its detail level
 
 /** The node of `parent` with that name, cast to its class; nullptr when it has none. */

@@ -37,19 +37,21 @@
  * @usecase     usecase:101120 - clock the growth cycle
  * @actor       Plant Keeper (PLNTKEEPER), Growth Clock Controller (GROWCLOCON)
  * @created     2026-11-06
- * @modified    2026-11-14
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-21
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
+#include <ase/adp/godot/godot_start_hold.hpp>
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/time.hpp>
 
 #include <cstdint>
 
@@ -184,8 +186,45 @@ void VivariumView::follow_initialisation() {
     // the figure file loads in a task of the WorkerThreadPool (godot_figure_load.hpp); its figures and its
     // pipelines belong to the first visible frame, so the screen holds until follow_figure took the pack
     const bool figure_loading = figure_load_running(figure_look_.load);
-    if (!patches_announced_ || !brooks_carried || !scene_built || !sky_and_clock || compiled || jumping ||
-        figure_loading) {
+    // THE LOG NAMES THE STEP THAT HOLDS THE SCREEN (B0357): the first step of the bar still missing, in the
+    // order of initialisation_progress, chosen once by start_hold_step (godot_start_hold.hpp); a line stands
+    // each time that step changes, never per frame. The new pipelines and the quiet frames are one step,
+    // render: a compilation restarts the quiet frames, so the two alternate inside that step and name no new hold.
+    StartHoldReading reading;
+    reading.patches_announced = patches_announced_;
+    reading.brooks_carried = brooks_carried;
+    reading.scene_built = scene_built;
+    reading.sky_and_clock = sky_and_clock;
+    reading.figure_loading = figure_loading;
+    reading.jumping = jumping;
+    const uint8_t step = start_hold_step(reading);
+    const char* hold = start_hold_name(step);
+    // the bar names the same step in the keeper's words: the word of texts.hold_*, one per step in the order of
+    // the GODOT_HOLD_* values
+    const ::godot::String* const words[GODOT_HOLD_STEPS] = {
+        &texts_.hold_patches, &texts_.hold_brooks, &texts_.hold_scene, &texts_.hold_sky_clock,
+        &texts_.hold_figure,  &texts_.hold_jump,   &texts_.hold_render};
+    init_hold_word_ = *words[step];
+    // THE LINE CARRIES THE DURATION OF THE STEP BEFORE (B0357): prev= names the step that held until this
+    // frame and held_ms= its wall-clock time since it began, so a run compares figure against the other steps
+    // from the log alone; the first line of a boot has no step before it and names none
+    const ::godot::Time* wall = ::godot::Time::get_singleton();
+    const uint64_t now_ms = wall == nullptr ? 0u : wall->get_ticks_msec();
+    if (init_hold_ != ::godot::String(hold)) {
+        const ::godot::String before =
+            init_hold_.is_empty() ? ::godot::String()
+                                  : " prev=" + init_hold_ + " held_ms=" +
+                                        ::godot::String::num_uint64(now_ms - init_hold_since_ms_);
+        init_hold_ = ::godot::String(hold);
+        init_hold_since_ms_ = now_ms;
+        note("start_screen held_by=" + init_hold_ + before + " brooks=" +
+             ::godot::String::num_uint64(resources_.get_streams().size()) + "/" +
+             ::godot::String::num_uint64(start_.brooks.size()) + " parts=" +
+             ::godot::String::num_uint64(scene_parts_built()) + "/" +
+             ::godot::String::num_uint64(GODOT_INIT_SCENE_PARTS) + " figure=" +
+             ::godot::String::num(figure_load_share(figure_look_.load), 2) + " " + measure(GODOT_NO_PLACE));
+    }
+    if (step != GODOT_HOLD_RENDER || compiled) {
         init_render_frames_ = 0u;
         return;
     }
@@ -196,7 +235,9 @@ void VivariumView::follow_initialisation() {
     initialised_ = true;
     // the figure file compiled its pipelines behind the screen (warm_figure); its warming instance leaves now
     end_figure_warmth(scene_);
-    note("start_screen lifted brooks=" + ::godot::String::num_uint64(resources_.get_streams().size()) +
+    note("start_screen lifted prev=" + init_hold_ + " held_ms=" +
+         ::godot::String::num_uint64(now_ms - init_hold_since_ms_) +
+         " brooks=" + ::godot::String::num_uint64(resources_.get_streams().size()) +
          " frames=" + ::godot::String::num_uint64(init_render_frames_) +
          " pipelines=" + ::godot::String::num_uint64(pipelines) + " " + measure(selected_place_));
     node_->queue_redraw();

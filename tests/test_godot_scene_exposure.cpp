@@ -25,7 +25,7 @@
 #include <doctest/doctest.h>
 
 #include <ase/adp/godot/godot_scene_exposure.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 namespace ase::adp::godot {
 

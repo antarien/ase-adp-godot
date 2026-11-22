@@ -13,6 +13,8 @@
  *              BACKEND GAPS OF THE REQUESTS (register carrier N0448): N0451 take, equip and sow;
  *              N0452 stow and send; N0456 loosen; N0457 trunk and plug;
  *              N0458 the can filled at the brook (closed while avatar.fill.v1 takes the fill); N0464 measure.
+ *              The can's pour goes to the drain port of the figure led with its patch, and ase-equipment lays
+ *              its column (N0517 closed on this edge, godot_vivarium_water.cpp:water_from_can).
  *
  *              THE EDGE LINES OF A TAP name the mode and the hit it answers: "hud sap trunk" for the bore,
  *              "hud plug trunk" for the peg, each "done: " or "refused: " with the bridge's reason; the window
@@ -27,8 +29,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-15
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-20
+ * @version     00.00.25.00025 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -39,7 +41,9 @@
 #include <ase/adp/godot/godot_figure_hand.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/godot_plant_clouds.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
 #include <ase/math/math.hpp>
 
@@ -169,13 +173,14 @@ void VivariumView::tick_hud(double elapsed_s) {
         fail_hud(failed);
         return;
     }
-    // flora.sap.v1 carries no flow yet (N0457): while the bridge's tap runs on a living birch the trough fills by the
-    // mockup's tick at the pace the hourglass shows, 'COCHO CHEIO' once it is full.
+    // While flora.sap.v1 files no record (N0457) the bridge's tap fills the trough on a living birch by the mockup's
+    // tick at the pace the hourglass shows, 'COCHO CHEIO' once it is full. Once the record stands, the owner fills the
+    // vessel and VivariumView::bridge_patch takes its litres and toasts the crossing; the adapter computes nothing.
     bool dead = false;
     for (const std::string& sign : hud_now_.game.signs) {
         dead = dead || sign == "dead";
     }
-    if (hud_bridge_sap_running_ && !dead) {
+    if (!resources_.get_sap().known && hud_bridge_sap_running_ && !dead) {
         const double factor = hud_now_.sheet.glass.factor;  // bridge_pace: flora.pace.v1, else asked, else S.factor
         // THE CROSSING IS AN EDGE: the line "hud sap full" names the litres and the factor the trough filled at,
         // so the toast 'COCHO CHEIO' is read from the log and not guessed from the time since the bore.
@@ -195,9 +200,9 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
     for (const VivariumHudRequest& request : requests) {
         const std::string kind = request.kind != nullptr ? request.kind : "";
         // THE CAN POURS ONCE, AT ITS RELEASE (m.html 1014-1015). A measure only grows the pour the HUD previews
-        // (S.pour); the release sends the litres held times hud_bridge_hand_mm_per_l to Regar's port in one
-        // irrigation, the patch in focus selected first where none is, and only a pour the port took leaves the can
-        // (it.fill -= round(mm / 25)). Whether the can is empty after it picks the toast of the arrival.
+        // (S.pour); the release sends the litres held to the drain port of the figure led with the patch in focus,
+        // selected first where none is (water_from_can), and ase-equipment lowers the can and lays the column on
+        // that patch. Whether the can is empty after it picks the toast of the arrival.
         if (kind == VivariumHudRequest::ASK_POUR || kind == VivariumHudRequest::ASK_POUR_END) {
             if (selected_place_ == GODOT_NO_PLACE && !start_.patches.empty()) {
                 select(patch_focus_place(selected_place_, start_.patches.front().place));
@@ -210,11 +215,10 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
             const double fill_l = can != nullptr ? can->fill_l : 0.0;
             const double litres = hud_hand_.pour_end(fill_l);
             const bool emptied = litres > 0.0 && litres >= fill_l;
-            const bool taken = water(litres * hud_hand_.mm_per_l(), emptied);
-            // The litres leave the can in ase-equipment (07.14): the drain port of the figure led, the level comes
-            // back on the gear port (engine_fill); the bridge subtracts nothing.
-            const bool left = taken && can != nullptr && litres > 0.0 && figure_controls_.led_known &&
-                              resources_.drain_figure(figure_controls_.led, litres) == ase::kernel::HostStatusOk;
+            // N0517: the patch travels with the litres and ase-equipment lays the column itself
+            // (EquipmentReqWatrSystem, poured_mm = litres / (wet area x spread)); the bridge irrigates nothing of its
+            // own and subtracts nothing, the level comes back on the gear port (engine_fill).
+            const bool left = can != nullptr && water_from_can(litres, emptied);
             note("hud pour end litres=" + ::godot::String::num(litres, 0) + (left ? " from the can" : "") +
                  (left && emptied ? ", the can empty" : ""));
         } else if (kind == VivariumHudRequest::ASK_CUT) {

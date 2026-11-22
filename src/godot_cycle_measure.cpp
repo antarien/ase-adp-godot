@@ -27,7 +27,8 @@
  */
 
 #include <ase/adp/godot/godot_cycle_measure.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
 
 #include <ase/fileio/text_reader.hpp>
 #include <ase/utils/strops.hpp>

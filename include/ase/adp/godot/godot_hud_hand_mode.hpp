@@ -42,7 +42,7 @@
  *              delivered it. While a port is silent the bridge writes the mockup's value into the frame
  *              (VivariumHandBridge, VivariumCarryBridge) and VivariumView::open_gap marks the gap on its edge:
  *              the soil water, the pour and the preview after it N0454 (flora.patch.v1), the rain N0449
- *              (flora.weather.v1), the shoots to cut N0462, whether the birch is dead N0461, the root zone N0463
+ *              (sky.weather.v1), the shoots to cut N0462, whether the birch is dead N0461, the root zone N0463
  *              (flora.root.v1), the sap in the trough N0457, the height and the slope under the brush N0464.
  *
  * @module      ase-adp-godot
@@ -51,11 +51,11 @@
  * @category    ecs/module
  * @usecase     usecase:100367 - water a patch
  * @actor       Plant Keeper (PLNTKEEPER)
- * @register    N0454 (flora.patch.v1), N0449 (flora.weather.v1), N0462, N0461, N0463 (flora.root.v1), N0457,
+ * @register    N0454 (flora.patch.v1), N0449 (sky.weather.v1), N0462, N0461, N0463 (flora.root.v1), N0457,
  *              N0464 (height and slope under the brush), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-22
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -93,6 +93,7 @@ struct HandThing {
     double cap_l = 0.0;              // the litres a vessel takes
     std::vector<std::string> verbs;  // D.verbs: what a ground tool does, each the key of verbs.<v>
     double level = 0.0;              // the held share 0..1 as D.art(o) draws it (VivariumHudThing::level)
+    double mm_per_l = 0.0;           // the column one litre of a vessel lays in this hand, mm (HUB_EQP_ITEM_POUR_MM_PER_L, N0517)
 };
 
 /** The hand slot this frame. */

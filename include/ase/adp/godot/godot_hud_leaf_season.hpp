@@ -44,6 +44,7 @@ namespace ase::adp::godot {
 /** What the leaf's colour follows this frame. */
 struct LeafSeasonFrame {
     int32_t season = -1;  // REQUIRED: the season, CAL_CONST_SEASON_GLACIX .. HALITRIX: the clock's, else the bridge's (N0460)
+    bool autumn = false;  // REQUIRED: the season equals CAL_CONST_SEASON_HALITRIX by the codes of the date record: each leaf whose body carries its own autumn colour turns by it (usecase:101646 colour the leaves in autumn)
 };
 
 /** The colour of the leaf by season and drought. */

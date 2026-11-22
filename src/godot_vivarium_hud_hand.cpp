@@ -11,11 +11,11 @@
  * @category    ecs/module
  * @usecase     usecase:100367 - water a patch
  * @actor       Plant Keeper (PLNTKEEPER)
- * @register    N0454 (flora.patch.v1 preview after the pour), N0463 (flora.root.v1 zone and segments), N0462
+ * @register    N0454 (flora.patch.v1 preview after the pour), N0463 (root zone, flora.organ.root.v1 segments), N0462
  *              (flora.scene.v1 cuttable, usecase:100365 prune a branch), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-19
- * @version     00.00.24.00024 [init]
+ * @modified    2026-11-20
+ * @version     00.00.25.00025 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -24,7 +24,8 @@
 
 #include <ase/adp/godot/godot_vivarium_hud_hand.hpp>
 #include <ase/adp/godot/godot_hud_ui_rng.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -42,15 +43,10 @@ bool VivariumHandBridge::load(const UiTheme& theme, std::string& failed) {
     pouring_ = false;
     measures_ = 0;
     soil_start_ = 0.0;
-    for (const std::pair<const char*, double*>& slot : std::initializer_list<std::pair<const char*, double*>>{
-             {"hud_bridge_hand_mm_per_l", &mm_per_l_},
-             {"hud_bridge_hand_rel_per_mm", &rel_per_mm_},
-             {"hud_bridge_hand_root_m", &root_m_},
-             {"hud_bridge_hand_slope_step_m", &slope_step_m_}}) {
-        if (!theme.measure(slot.first, *slot.second) || !(*slot.second > 0.0)) {
-            failed = std::string(slot.first) + ": a number above 0";
-            return false;
-        }
+    zone_m_ = 0.0;
+    if (!theme.measure("hud_bridge_hand_slope_step_m", slope_step_m_) || !(slope_step_m_ > 0.0)) {
+        failed = "hud_bridge_hand_slope_step_m: a number above 0";
+        return false;
     }
     // TREE.cand's rule: whole counts, a step of at least one, a phase below the step, at least one shoot.
     chosen_.clear();
@@ -157,16 +153,24 @@ void VivariumHandBridge::frame(HandSlotFrame& hand, const VivariumPatchView* pat
     }
     hand.soil_rel = pouring_ ? soil_start_ : soil;
     hand.poured_l = pouring_ ? litres(fill_l) : 0.0;
-    hand.pour_mm = hand.poured_l * mm_per_l_;
-    const double preview_mm = pouring_ ? hand.pour_mm : fill_l > 0.0 ? mm_per_l_ : 0.0;
+    // A litre lays the column ase-equipment states for this can in this bearer's hand (N0517): the wetted area of
+    // the vessel over the spread of the bearer's skill. A can whose record carries none yet previews nothing.
+    const double mm_per_l = hand.thing != nullptr ? hand.thing->mm_per_l : 0.0;
+    hand.pour_mm = hand.poured_l * mm_per_l;
+    const double preview_mm = pouring_ ? hand.pour_mm : fill_l > 0.0 ? mm_per_l : 0.0;
     // ase-hydro keeps the soil water as water_mm over capacity_mm (HydroBlncCalcSystem), so a millimetre poured
     // raises the share by the reciprocal of the field capacity the patch record carries in this frame: a soil that
-    // holds more rises less. The mockup's per cent per millimetre stands in only while the record carries no
-    // capacity (NaN and 0 fail the test); the preview of the owner itself is N0454.
+    // holds more rises less. A patch whose record carries no capacity yet (NaN and 0 fail the test) previews no
+    // rise, as a can without its column does: the capacity is ase-hydro's HYD_FIELD_CAPACITY, filed by ase-pl-flora
+    // (FloraHostPtchExptSystem, FloraInpSoilComponent.capacity_mm), never a number of this bridge. N0454.
     const double capacity_mm = patch != nullptr ? patch->capacity_mm : 0.0;
-    const double rel_per_mm = capacity_mm > 0.0 ? 1.0 / capacity_mm : rel_per_mm_;
+    const double rel_per_mm = capacity_mm > 0.0 ? 1.0 / capacity_mm : 0.0;
     hand.after_rel = ase::math::min(1.0, hand.soil_rel + preview_mm * rel_per_mm);
     hand.dead = patch != nullptr && patch->dead;
+    // THE ROOT ZONE: the reach of the farthest living root tip of the patch's body, ase-radix's RDX_SPREAD as the
+    // patch record carries it (root_m, FloraInpSoilComponent.spread_m). A record without it (NaN) or a body without
+    // a living tip (0) has no zone: no brush lies in the roots, no ring is drawn. N0463.
+    zone_m_ = patch != nullptr && patch->root_m > 0.0 ? patch->root_m : 0.0;
     ground(hand, reticle);
 
     // THE SAP of a running tap: the bridge's.
@@ -174,7 +178,7 @@ void VivariumHandBridge::frame(HandSlotFrame& hand, const VivariumPatchView* pat
 }
 
 void VivariumHandBridge::ground(HandSlotFrame& hand, const GroundReticleFrame& reticle) const {
-    // THE GROUND under the brush: the terrain port's height, the slope across slopeAt's step, the mockup's roots.
+    // THE GROUND under the brush: the terrain port's height, the slope across slopeAt's step, the patch's root zone.
     hand.brush_on = reticle.brush_on;
     hand.in_roots = false;
     if (reticle.brush_on) {
@@ -197,8 +201,8 @@ void VivariumHandBridge::ground(HandSlotFrame& hand, const GroundReticleFrame& r
         }
         const double ex = x - reticle.patch_x;
         const double ez = z - reticle.patch_z;
-        const double reach = root_m_ + hand.brush_m;
-        hand.in_roots = ex * ex + ez * ez < reach * reach;
+        const double reach = zone_m_ + hand.brush_m;
+        hand.in_roots = zone_m_ > 0.0 && ex * ex + ez * ez < reach * reach;
     }
 }
 
@@ -303,23 +307,52 @@ bool VivariumHandBridge::cut_changed(std::string& line) {
 }
 
 double VivariumHandBridge::zone_m() const {
-    return root_m_;
+    return zone_m_;
 }
 
-const std::vector<RootSegment>& VivariumHandBridge::roots(const VivariumPatchView* patch, const UiAnchor& anchor,
-                                                          const PlantOrigin& origin) {
-    // THE ROOTS: drawRootCut's root(TX, by + 2, PI / 2, 16 + SCALE[S.stage] * 16, 0) under the projected trunk.
+const std::vector<RootSegment>& VivariumHandBridge::roots(const VivariumPatchView* patch,
+                                                          const std::vector<VivariumOrganView>& organs,
+                                                          const UiAnchor& anchor, const PlantOrigin& origin) {
     roots_.clear();
-    ::godot::Vector2 trunk;
-    if (root_scale_.size() < GODOT_STAGE_COUNT || !anchor.trunk(origin, trunk)) {
+    const ::godot::Vector3 base(origin.x, origin.y, origin.z);
+    // THE PORT IS SILENT: no root record of any body stands on flora.organ.root.v1. The drawing stays whole, so the
+    // cut shows the mockup's tree, drawRootCut's root(TX, by + 2, PI / 2, 16 + SCALE[S.stage] * 16, 0) under the
+    // projected trunk, until the owner's segments replace it (ARCH_ASE_KERNEL_EMBEDDED, Bridge to the Drawing).
+    if (organs.empty()) {
+        ::godot::Vector2 trunk;
+        if (root_scale_.size() < GODOT_STAGE_COUNT || !anchor.trunk(origin, trunk)) {
+            return roots_;
+        }
+        const uint32_t stage =
+            patch != nullptr && patch->stage < GODOT_STAGE_COUNT ? static_cast<uint32_t>(patch->stage) : root_stage_;
+        uint32_t state = root_seed_;
+        branch(anchor, base, trunk + ::godot::Vector2(0.0f, static_cast<float>(root_dy_)),
+               static_cast<double>(ase::math::HALF_PI), root_length_ + root_length_grown_ * root_scale_[stage], 0,
+               state);
         return roots_;
     }
-    const uint32_t stage =
-        patch != nullptr && patch->stage < GODOT_STAGE_COUNT ? static_cast<uint32_t>(patch->stage) : root_stage_;
-    uint32_t state = root_seed_;
-    branch(anchor, ::godot::Vector3(origin.x, origin.y, origin.z),
-           trunk + ::godot::Vector2(0.0f, static_cast<float>(root_dy_)), static_cast<double>(ase::math::HALF_PI),
-           root_length_ + root_length_grown_ * root_scale_[stage], 0, state);
+    // THE PORT DELIVERS: the segments ase-radix grows for the patch's body, as ase-pl-flora files them
+    // (FloraHostRootExptSystem, GODOT_ORGAN_ROOT, N0463). Each begins at its plant-local place beside the stem base
+    // and runs along the local y of its frame over its length. A body that grew no root carries none, and the cut
+    // shows none: that is the state of the body, not a silent port.
+    if (patch == nullptr) {
+        return roots_;
+    }
+    for (const VivariumOrganView& organ : organs) {
+        if (organ.body != patch->object_id) {
+            continue;
+        }
+        // The local y of the unit frame (qx, qy, qz, qw) in plant axes: the column y of its rotation.
+        const ::godot::Vector3 along(static_cast<float>(2.0 * (organ.qx * organ.qy - organ.qw * organ.qz)),
+                                     static_cast<float>(1.0 - 2.0 * (organ.qx * organ.qx + organ.qz * organ.qz)),
+                                     static_cast<float>(2.0 * (organ.qy * organ.qz + organ.qw * organ.qx)));
+        RootSegment segment;
+        segment.order = static_cast<uint32_t>(ase::math::max(0.0, organ.order));
+        segment.from = base + ::godot::Vector3(static_cast<float>(organ.x), static_cast<float>(organ.y),
+                                               static_cast<float>(organ.z));
+        segment.to = segment.from + along * static_cast<float>(organ.length);
+        roots_.push_back(segment);
+    }
     return roots_;
 }
 

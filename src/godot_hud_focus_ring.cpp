@@ -22,7 +22,8 @@
 
 #include <ase/adp/godot/godot_hud_focus_ring.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/patch/types.hpp>
 
 #include <ase/math/math.hpp>
 

@@ -12,16 +12,19 @@
  *
  *              THE WATER. The soil water is the patch record's (flora.patch.v1). Its preview after the pour
  *              (N0454) is the mockup's: a press pours one litre at once and one more with each measure the
- *              held can asks, never more than the can holds; each litre is hud_bridge_hand_mm_per_l, and the
+ *              held can asks, never more than the can holds; each litre is the column ase-equipment states for
+ *              the can in its bearer's hand (HandThing::mm_per_l, HUB_EQP_ITEM_POUR_MM_PER_L, N0517), and the
  *              soil after is the soil at the press plus the millimetres over the field capacity the patch
  *              record carries in this frame (capacity_mm, ase-hydro's HYD_FIELD_CAPACITY), as ase-hydro keeps
- *              the share; the mockup's per cent (hud_bridge_hand_rel_per_mm) stands in only while the record
- *              carries none. While no finger holds the can the preview is one litre.
+ *              the share; a record that carries none yet previews no rise. While no finger holds the can the
+ *              preview is one litre.
  *
  *              THE GROUND. Height and slope under the brush are the terrain port's samples (UiGround), the
  *              slope read hud_bridge_hand_slope_step_m to each side as the mockup's slopeAt. The root zone
- *              (N0463) is the mockup's ring of hud_bridge_hand_root_m around the patch: the brush lies in it
- *              while its distance is under that ring plus the brush.
+ *              (N0463) is the ring of the patch record's root_m around the patch: the reach of the farthest
+ *              living root tip of the patch's body, ase-radix's RDX_SPREAD as ase-pl-flora files it
+ *              (FloraInpSoilComponent.spread_m). The brush lies in it while its distance is under that ring plus
+ *              the brush; a record without the reach, or a body without a living tip, has no zone.
  *
  *              THE SAP. The litres of a running tap are the bridge's tap (VivariumView, hud_bridge_patch_sap_l).
  *
@@ -34,7 +37,13 @@
  *              stays in focus, as the mockup keeps TREE: a cut removes its shoot from the organ port, and the
  *              marks and the reading prune_left count the chosen shoots still standing.
  *
- *              THE ROOTS IN THE CUT. While flora.root.v1 grows no segment (N0463), the cut under the trunk
+ *              THE ROOTS IN THE CUT. The port flora.organ.root.v1 (N0463) carries ase-radix's root organs as
+ *              ase-pl-flora files them (FloraHostRootExptSystem, GODOT_ORGAN_ROOT): each record names its body,
+ *              its order, its begin in plant-local metres, its frame (local y along the organ) and its length.
+ *              While it holds a record, the cut shows the segments of the patch's body, each laid from the stem
+ *              base plus its begin along its frame over its length, its order the record's; a body that grew no
+ *              root shows none. While the port is silent (no record at all), the bridge stands in for it as
+ *              ARCH_ASE_KERNEL_EMBEDDED's Bridge to the Drawing asks, and the cut under the trunk
  *              shows the tree of the mockup's drawRootCut(): from the centre of the cut, hud_root_cut_dy below
  *              the trunk, straight down, hud_bridge_root_length plus hud_bridge_root_length_grown times the
  *              stage's scale (hud_bridge_root_stage_<n>_scale) long; each segment forks into two down to
@@ -52,18 +61,19 @@
  * @category    ecs/module
  * @usecase     usecase:100367 - water a patch
  * @actor       Plant Keeper (PLNTKEEPER)
- * @register    N0454 (flora.patch.v1 preview after the pour), N0463 (flora.root.v1 zone and segments), N0462
+ * @register    N0454 (flora.patch.v1 preview after the pour), N0463 (root zone, flora.organ.root.v1 segments), N0462
  *              (flora.scene.v1 cuttable), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-19
- * @version     00.00.24.00024 [init]
+ * @modified    2026-11-20
+ * @version     00.00.25.00025 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_organ_view.hpp>
+#include <ase/adp/godot/godot_host_patch_view.hpp>
 #include <ase/adp/godot/godot_hud_ground_reticle.hpp>
 #include <ase/adp/godot/godot_hud_hand_mode.hpp>
 #include <ase/adp/godot/godot_hud_root_cut.hpp>
@@ -75,7 +85,7 @@
 
 namespace ase::adp::godot {
 
-/** The hand's readings while flora.patch.v1 previews no pour and flora.root.v1 reports no root zone. */
+/** The hand's readings while flora.patch.v1 previews no pour; the root zone is the patch record's root_m. */
 class VivariumHandBridge {
 public:
     /** Reads the hud_bridge_hand_* rules of SHA; false with the missing token in `failed`. */
@@ -86,9 +96,6 @@ public:
 
     /** ASK_POUR_END: the finger left the can; the litres the pour took from the can of `fill_l`. */
     double pour_end(double fill_l);
-
-    /** The millimetres one litre of the can adds on the patch (hud_bridge_hand_mm_per_l): the pour's amount. */
-    double mm_per_l() const { return mm_per_l_; }
 
     /**
      * Writes the soil now and after, the pour, height, slope, root zone and the tap into `hand`, from the
@@ -119,15 +126,17 @@ public:
      */
     bool cut_changed(std::string& line);
 
-    /** The radius of the root zone, metres: the mockup's RROOT while flora.root.v1 reports none (N0463). */
+    /** The radius of the root zone of the last frame, metres: the patch record's root_m, 0 without one (N0463). */
     [[nodiscard]] double zone_m() const;
 
     /**
-     * The mockup's root tree under the stem base `origin` of the plant on `patch`, lifted into the world
-     * through `anchor`; empty while the trunk lies behind the camera.
+     * The roots in the cut under the stem base `origin` of the plant on `patch`, in world units. While `organs`
+     * (the GODOT_ORGAN_ROOT records of flora.organ.root.v1) holds a record, the segments of the patch's body, each
+     * from its begin along its frame over its length, none when the body grew no root; while the port is silent,
+     * the mockup's root tree lifted into the world through `anchor`, empty while the trunk lies behind the camera.
      */
-    const std::vector<RootSegment>& roots(const VivariumPatchView* patch, const UiAnchor& anchor,
-                                          const PlantOrigin& origin);
+    const std::vector<RootSegment>& roots(const VivariumPatchView* patch, const std::vector<VivariumOrganView>& organs,
+                                          const UiAnchor& anchor, const PlantOrigin& origin);
 
 private:
     /** The litres of the pour held now for a can of `fill_l`: one at the press, one more per measure. */
@@ -143,9 +152,7 @@ private:
     void branch(const UiAnchor& anchor, const ::godot::Vector3& base, const ::godot::Vector2& at, double angle,
                 double length, uint32_t depth, uint32_t& state);
 
-    double mm_per_l_ = 0.0;      // hud_bridge_hand_mm_per_l: 1 L = 25 MM
-    double rel_per_mm_ = 0.0;    // hud_bridge_hand_rel_per_mm: the mockup's per cent of soil water per millimetre, while the patch record carries no capacity_mm
-    double root_m_ = 0.0;        // hud_bridge_hand_root_m: RROOT of the mockup's field
+    double zone_m_ = 0.0;        // the root zone of the patch in the last frame: its record's root_m, 0 without one
     double slope_step_m_ = 0.0;  // hud_bridge_hand_slope_step_m: slopeAt's e of the mockup's field
     bool pouring_ = false;       // a held can pours since its press
     uint32_t measures_ = 0;      // the measures the held can asked since its press

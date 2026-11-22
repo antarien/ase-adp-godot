@@ -12,7 +12,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-10
+ * @modified    2026-11-21
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -21,7 +21,8 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/godot_hud_ui_stroke.hpp>
+#include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -65,6 +66,26 @@ void svg_stroke(UiPen& canvas, const UiSvgOutline& outline, const ::godot::Color
         return;
     }
     canvas.draw_polyline(points, color, static_cast<float>(width), true);
+}
+
+void svg_stroke_round(UiPen& canvas, const ::godot::Transform2D& frame, const UiSvgOutline& outline,
+                      const ::godot::Color& color, double width) {
+    if (outline.closed) {
+        // A closed outline has no end: stroke-linecap does not reach it, and its knees keep the path's miter.
+        svg_stroke(canvas, outline, color, width);
+        return;
+    }
+    ui_stroke(canvas, frame, outline.points, false, color, width);
+}
+
+void svg_stroke_joined(UiPen& canvas, const ::godot::Transform2D& frame, const UiSvgOutline& outline,
+                       const ::godot::Color& color, double width) {
+    ui_stroke(canvas, frame, outline.points, outline.closed, color, width);
+}
+
+void svg_polyline_round(UiPen& canvas, const ::godot::Transform2D& frame, const ::godot::PackedVector2Array& points,
+                        const ::godot::Color& color, double width) {
+    ui_stroke(canvas, frame, points, false, color, width);
 }
 
 void svg_stroke_dashed(UiPen& canvas, const UiSvgOutline& outline, const ::godot::Color& color,

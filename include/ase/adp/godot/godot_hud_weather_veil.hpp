@@ -30,7 +30,7 @@
  *              particles are spread linearly from the area they filled onto the new one.
  *
  *              BRIDGE GAP N0449. The kind of weather and the wind are state of the weather simulation on
- *              flora.weather.v1. The veil always draws them in full from its frame: while the port files no
+ *              sky.weather.v1. The veil always draws them in full from its frame: while the port files no
  *              record the bridge writes the mockup's weather from hud_bridge_weather_* of SHA and logs the gap once on its
  *              edge (godot_vivarium_hud_bridge.cpp, bridge_weather); the veil never asks whether a port
  *              delivered.
@@ -41,9 +41,9 @@
  * @category    ecs/module
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
- * @register    N0449 (flora.weather.v1), carrier N0448
+ * @register    N0449 (sky.weather.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-10
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.

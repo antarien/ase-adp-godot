@@ -22,7 +22,7 @@
  *              band's frame, and light_plant_clouds (godot_plant_clouds.hpp) stands each in the sky of the 3D
  *              scene on the camera's ray through its point of the picture.
  *
- *              BRIDGE GAP N0449. The kind of weather is state of the weather simulation on flora.weather.v1; the
+ *              BRIDGE GAP N0449. The kind of weather is state of the weather simulation on sky.weather.v1; the
  *              block reads it from its frame, which the bridge fills from hud_bridge_weather_* of SHA while the port
  *              files no record (godot_vivarium_hud_bridge.cpp, bridge_weather). The block never asks whether a
  *              port delivered.
@@ -33,9 +33,9 @@
  * @category    ecs/module
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
- * @register    N0449 (flora.weather.v1), carrier N0448
+ * @register    N0449 (sky.weather.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
+ * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.

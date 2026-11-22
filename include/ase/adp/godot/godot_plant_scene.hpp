@@ -56,7 +56,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_host_resource_manager.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/godot_plant_geometry.hpp>
 #include <ase/adp/godot/godot_plant_ground.hpp>
@@ -64,7 +64,9 @@
 #include <ase/adp/godot/godot_plant_environment.hpp>  // SkyOvercastShade, the shade of an overcast sky
 #include <ase/adp/godot/godot_plant_look.hpp>
 #include <ase/adp/godot/godot_plant_tubes.hpp>
-#include <ase/adp/godot/types.hpp>
+#include <ase/adp/godot/leaf/types.hpp>
+#include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/material.hpp>
