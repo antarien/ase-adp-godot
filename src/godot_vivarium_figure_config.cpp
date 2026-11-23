@@ -140,6 +140,10 @@ bool VivariumView::load_figure_config(const ::godot::Dictionary& root) {
         return fail_config("ports.figure_drop");
     }
     start_.figure_drop_port = utf8_of(text);
+    if (!read_text(ports, "figure_don", text)) {
+        return fail_config("ports.figure_don");
+    }
+    start_.figure_don_port = utf8_of(text);
     if (!read_text(ports, "figure_fill", text)) {
         return fail_config("ports.figure_fill");
     }
@@ -210,6 +214,10 @@ bool VivariumView::load_figure_config(const ::godot::Dictionary& root) {
         return fail_config("operations.drop");
     }
     start_.op_drop = utf8_of(text);
+    if (!read_text(operations, "don", text)) {
+        return fail_config("operations.don");
+    }
+    start_.op_don = utf8_of(text);
     if (!read_text(operations, "fill", text)) {
         return fail_config("operations.fill");
     }
@@ -288,6 +296,13 @@ bool VivariumView::load_figure_config(const ::godot::Dictionary& root) {
         }
         start_.stock.push_back(piece);
     }
+    // The pack on the back (N0590, usecase:101332 - wear equipment in slots): the item key of the piece the figure
+    // wears from its first stand, the same key the hand of Phase 06 sends and vivarium_assets.json binds as
+    // hand.<key>. An empty key means a figure without a pack and is a valid product; a missing entry is not.
+    if (!read_text(figure, "don", text)) {
+        return fail_config("figure.don");
+    }
+    start_.don = utf8_of(text);
     return true;
 }
 

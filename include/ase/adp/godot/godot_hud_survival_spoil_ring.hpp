@@ -49,7 +49,7 @@ namespace ase::adp::godot {
 
 /** The food of the bag for the spoil ring, written by the bridge from the owner's port or the SHA defaults. */
 struct SurvivalSpoilFrame {
-    static constexpr const char* GAP_SPOIL = "N0530";  // the bridge gap: no port carries the spoil of the bag's food
+    static constexpr const char* GAP_SPOIL = "N0530";  // the bridge gap: no survival.food.v1 offered, or no spoil on it
     bool shown = false;  // st.food != null: the bag carries food, the ring shows
     double spoil = 0.0;  // st.food: the share the food has spoiled, 0 fresh to 1 spoiled through
 };

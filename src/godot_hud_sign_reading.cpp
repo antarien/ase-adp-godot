@@ -45,7 +45,7 @@ bool SignReading::bind_sign(const UiTheme& theme, const HudSignSpec& spec, Sign&
         failed = "DOMAIN_" + code;
         return false;
     }
-    if (!theme.token_text(stem + "_bar", text)) {
+    if (!theme.token_text(stem + "_bar", text) || text.is_empty()) {
         failed = stem + "_bar";
         return false;
     }

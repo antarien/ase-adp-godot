@@ -43,7 +43,8 @@
  *                thirst   MTB_THIRST of level_full, DOMAIN_WATER, survival.body.percent
  *                energy   MTB_ENERGY of level_full, DOMAIN_TIME, survival.body.of_full
  *                fatigue  MTB_FATIGUE as a share 0 to 1, DOMAIN_SKY, survival.body.percent of the share
- *                health   MTB_HEALTH of level_full, DOMAIN_ALERT under hud_survival_rail_health_alert, otherwise
+ *                health   MTB_HEALTH as a share 0 to 1, DOMAIN_ALERT while the share times level_full lies under
+ *                         hud_survival_rail_health_alert, otherwise
  *                         DOMAIN_LIFE, survival.body.percent
  *              The rail draws what its frame says counts; it never asks a port and never decides whether the
  *              owner delivered (the bridge writes the frame, gap N0530 under the carrier N0448).
@@ -95,14 +96,14 @@ struct SurvivalBodyValue {
 
 /** The body of the figure for the rail, written by the bridge from the owner's port or the SHA defaults. */
 struct SurvivalBodyFrame {
-    static constexpr const char* GAP_BODY = "N0530";  // the bridge gap: no host port reports the figure's MTB_* yet
+    static constexpr const char* GAP_BODY = "N0530";  // the bridge gap: no survival.body.v1 record of the seat figure
     SurvivalBodyValue temp;    // MTB_EFFECTIVE_TEMP: the felt temperature in degrees
     double temp_stress = 0.0;  // MTB_TEMP_STRESS: 0 to 1, the heat row's fill and its cold or hot tone
     SurvivalBodyValue hunger;  // MTB_HUNGER: 0 to hud_survival_rail_level_full
     SurvivalBodyValue thirst;  // MTB_THIRST: 0 to level_full
     SurvivalBodyValue energy;  // MTB_ENERGY: 0 to level_full
     SurvivalBodyValue fatigue; // MTB_FATIGUE: a share 0 to 1
-    SurvivalBodyValue health;  // MTB_HEALTH: 0 to level_full
+    SurvivalBodyValue health;  // MTB_HEALTH: a share 0 to 1, shown on the scale of level_full
     bool poisoned = false;     // TAG_MTB_POISONED, 1 by the rule of hub_thresholds.json: the state on the rail SINAIS (U02)
     bool bleeding = false;     // TAG_MTB_BLEEDING
     bool emaciated = false;    // TAG_MTB_EMACIATED

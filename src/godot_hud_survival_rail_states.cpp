@@ -51,6 +51,10 @@ bool read_part(const UiTheme& theme, const std::string& name, std::vector<UiSvgO
         failed = name;
         return false;
     }
+    outlines.clear();
+    if (text.is_empty()) {
+        return true;
+    }
     if (!read_svg_path(text.utf8().get_data(), outlines, failed)) {
         failed = name + ": " + failed;
         return false;

@@ -106,6 +106,8 @@ TEST_CASE("B0295 point 4: the stem of a birch at MADURA is one tube, its rings m
     }
     CAPTURE(mature_h);
     CAPTURE(frames);
+    CAPTURE(bark_size);  // 0: the bark port never paged a vertex after the jump; growing: it never held still
+    CAPTURE(resources.get_organs(GODOT_ORGAN_SEGMENT).size());
     REQUIRE(still >= kStillFrames);
 
     const std::vector<VivariumOrganView>& internodes = resources.get_organs(GODOT_ORGAN_SEGMENT);

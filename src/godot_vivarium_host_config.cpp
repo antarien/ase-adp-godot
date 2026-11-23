@@ -54,6 +54,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.forecast");
     }
     start_.forecast_port = utf8_of(text);
+    // The soil water of ase-hydrology (usecase:101340 - show the bed condition): a port of its own beside the
+    // patch port, whose record holds no further value; one record per patch whose soil row stands.
+    if (!read_text(ports, "soil", text)) {
+        return fail_config("ports.soil");
+    }
+    start_.soil_port = utf8_of(text);
     // The condition codes of ase-plant (usecase:101340 - show the bed condition): one record with the healthy,
     // the wilted and the dead code, so the view compares the condition of a patch against them and holds no
     // number of ase-plant of its own (D2454).
@@ -313,8 +319,11 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.sap");
     }
     start_.sap_port = utf8_of(text);
-    // The loosened soil after the spade (N0456): one record per patch with loose_share; a port of its own because
-    // the patch record is full. The HUD reads it once ase-pl-flora offers the port.
+    // The looseness raster of the soil (N0456, CAUSA_ASE_TERRAIN loosened soil): one record per macro cell with x, z,
+    // cell_m and cpct_share 0..1, the compaction ase-terrain owns (TerrainStaMcroCpctComponent, ase-gis
+    // GIS_CAT_LITHO_CPCT), filed by FloraHostCpctExptSystem of ase-pl-flora; the looseness is its complement.
+    // GodotHostResourceManager::read_loose reads it; until the port is offered the
+    // HUD's loose bridge keeps the share of SHA.
     if (!read_text(ports, "loose", text)) {
         return fail_config("ports.loose");
     }

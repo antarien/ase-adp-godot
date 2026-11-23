@@ -32,8 +32,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-11-19
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-23
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -91,6 +91,9 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // The stage forecasts (usecase:101120): read_snapshot merges them into the patches by object id, so
     // boot() asks the set for this port as well.
     config.forecast_port = "flora.forecast.v1";
+    // The soil water (usecase:101340): read_snapshot merges it into the patches by object id, so boot() asks
+    // the set for this port as well.
+    config.soil_port = "flora.soil.v1";
     // The condition codes of ase-plant (usecase:101340 - show the bed condition, D2454): read_snapshot compares
     // every patch condition against this one record, so boot() asks the set for this port as well.
     config.cond_port = "flora.cond.v1";
@@ -142,6 +145,11 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.atlas_port = "flora.atlas.v1";
     // The bark tube of every axis (usecase:101613): boot() asks the set for this port as well.
     config.bark_port = "flora.mesh.bark.v1";
+    // The knot, foot and scar records of the bark tubes (usecase:101613, N0543); boot() asks the set for
+    // these ports as well and refuses a configuration without them (ports_named).
+    config.knot_port = "flora.mesh.knot.v1";
+    config.foot_port = "flora.mesh.foot.v1";
+    config.scar_port = "flora.mesh.scar.v1";
     // The water of the brooks (usecase:100399): boot() asks the set for this port as well.
     config.stream_port = "flora.stream.v1";
     // The water of every kind beside the brooks (PLAN_ASE_VIVARIUM_PHASE_10_HYDRO): read once its plugin offers it,
@@ -173,6 +181,14 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.organ_ports[GODOT_ORGAN_ROOT] = "flora.organ.root.v1";
     // The ground cells beside the terrain samples (03.11 step 2): boot() asks the set for the port.
     config.ground_cell_port = "flora.ground.cell.v1";
+    // The camp ports of ase-pl-ingle (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP T.0 to T.7): run_camp_action refuses
+    // every camp step while camp_place_port is empty, so the fixture names all six, as the start set does.
+    config.camp_place_port = "ingle.camp.v1";
+    config.camp_hull_port = "ingle.hull.v1";
+    config.camp_part_port = "ingle.part.v1";
+    config.camp_body_port = "ingle.body.v1";
+    config.camp_refuel_port = "ingle.refuel.v1";
+    config.survival_fire_port = "ingle.fire.v1";
     // The instance ports of the drawn classes (03.11 step 2): boot() asks the set for them as well.
     config.instance_ports[GODOT_ORGAN_SEGMENT] = "flora.instance.segment.v1";
     config.instance_ports[GODOT_ORGAN_LEAF] = "flora.instance.leaf.v1";

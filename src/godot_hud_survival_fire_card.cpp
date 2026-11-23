@@ -54,7 +54,7 @@ bool read_color(const UiTheme& theme, const char* name, ::godot::Color& out, std
 /** Reads the path data of the token `name` into `outlines`; false with the reason in `failed`. */
 bool read_glyph(const UiTheme& theme, const char* name, std::vector<UiSvgOutline>& outlines, std::string& failed) {
     ::godot::String text;
-    if (!theme.token_text(name, text)) {
+    if (!theme.token_text(name, text) || text.is_empty()) {
         failed = name;
         return false;
     }
@@ -343,6 +343,7 @@ void SurvivalFireCard::draw(UiPen& canvas, const ::godot::Transform2D& frame, do
     title.at = at(bx, ey + title_dy_);
     title.size = title_size_;
     title.anchor = GODOT_TEXT_ANCHOR_START;
+    title.bare = true;  // s.html T writes class o.c without sh: no outline
     title.color = cut_;
     title.opacity = 1.0;
     title.fade = true;
@@ -377,6 +378,7 @@ void SurvivalFireCard::draw(UiPen& canvas, const ::godot::Transform2D& frame, do
     fuel.at = at(bx + fuel_dx_, ly + fuel_dy_);
     fuel.size = fuel_size_;
     fuel.anchor = GODOT_TEXT_ANCHOR_START;
+    fuel.bare = true;  // s.html T writes class o.c without sh: no outline; burn copies it
     fuel.color = soft_;
     fuel.opacity = 1.0;
     fuel.fade = true;
@@ -409,6 +411,7 @@ void SurvivalFireCard::draw(UiPen& canvas, const ::godot::Transform2D& frame, do
     UiTextPlace word;
     word.size = row_word_size_;
     word.anchor = GODOT_TEXT_ANCHOR_START;
+    word.bare = true;  // s.html T writes class o.c without sh: no outline
     word.opacity = 1.0;
     word.fade = true;
     word.elapsed = elapsed;

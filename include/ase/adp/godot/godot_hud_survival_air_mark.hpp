@@ -51,7 +51,7 @@ namespace ase::adp::godot {
 
 /** The rating of the air for the air mark, written by the bridge from the owner's port or the SHA defaults. */
 struct SurvivalAirFrame {
-    static constexpr const char* GAP_AIR = "N0530";     // the bridge gap: no port carries ATM_GAS_BTH_STATE
+    static constexpr const char* GAP_AIR = "N0530";     // the bridge gap: no survival.body.v1 record or no breath on it
     static constexpr const char* GAP_SOOT = "D2500";    // the bridge gap: no port carries GIS_LOCAL_SOOT
     bool toxic = false;  // st.air: the owner rates the air worse than normal, the mark shows
     double soot = 0.0;   // GIS_LOCAL_SOOT of the seat's figure (survival.smoke.v1): kg of soot in the air of its cell; the plume stands above 0

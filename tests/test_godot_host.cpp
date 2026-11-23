@@ -24,8 +24,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-11-19
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-23
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -83,11 +83,35 @@ TEST_CASE("L1: the game host starts once - the whole set from the bundle, four p
     // fill with the first runs of the modules - eight frames, two Dissemination runs.
     advance_frames(resources, 8u);
     CHECK(resources.patch_count() == 4u);
+    // THE SOIL WATER COMES THROUGH THE CELL OF ase-gis (usecase:100364): ase-hydro files HYD_SOIL_WATER_REL,
+    // GisHydSoilSynSystem lays it into GIS_CAT_HYDRO_SOIL, the enrichment files GIS_SOIL_WATER for the patch,
+    // and only then FloraHubSoilSyncSystem lays the soil row the soil port carries - one Dissemination run
+    // per link, once in four frames. The case waits for the soil record of every patch, bounded - and for
+    // the capacity of its soil class: the lay capacity test::kPatchCapacityMm is a number too, and it stands
+    // on the port until HydroSoilCapCalcSystem replaced it with the class value, some Dissemination runs on
+    // (measured 2026-11-23 in build 7: the module set 48 mm while the view still showed 100 mm).
+    constexpr uint32_t kSoilBoundFrames = 32u;
+    for (uint32_t frame = 0u; frame < kSoilBoundFrames; ++frame) {
+        bool all = resources.patch_count() == 4u;
+        for (uint32_t place = 0u; all && place < 4u; ++place) {
+            const VivariumPatchView* waiting = resources.get_patch_at(place);
+            all = waiting != nullptr && !std::isnan(waiting->capacity_mm) &&
+                  waiting->capacity_mm != test::kPatchCapacityMm;
+        }
+        if (all) {
+            break;
+        }
+        advance_frames(resources, 1u);
+    }
     for (uint32_t place = 0u; place < 4u; ++place) {
         const VivariumPatchView& patch = patch_at(resources, place);
         CHECK(patch.place == place);
         CHECK(resources.get_patch(patch.object_id) == resources.get_patch_at(place));
-        CHECK(patch.capacity_mm == doctest::Approx(100.0));
+        // THE CAPACITY IS THE ONE OF THE SOIL CLASS, never the one of the lay request (HydroSoilCapCalcSystem,
+        // PLAN_ASE_VIVARIUM_PHASE_10_HYDRO H.1): the root depth HYD_SOIL_ROOT_DEPTH_MM (400 mm) times the nFK of
+        // the KA5 class the seed draws for the chunk of the four patches, 12 Vol.-% (PED_*_NFK_PCT), is 48 mm.
+        // The 100 mm of the lay request stand only until the class reaches the cell.
+        CHECK(patch.capacity_mm == doctest::Approx(48.0));
         CHECK(patch.soil_mm <= 20.0);
         CHECK(patch.seed);  // the stage of a fresh patch equals stage_seed of flora.stage.v1 (usecase:101635)
         CHECK(patch.stage < GODOT_STAGE_COUNT);
@@ -144,7 +168,9 @@ TEST_CASE("L3: a pour arrives as more soil water of that patch - after the modul
     // Four Dissemination runs: the plugin takes the pour, ase-hydro takes and balances it.
     advance_frames(resources, 16u);
     CHECK(patch_at(resources, 0u).soil_mm > before_poured.soil_mm + 20.0);  // 25 mm, less evaporation
-    CHECK(patch_at(resources, 1u).soil_mm <= before_other.soil_mm);         // the other one only loses
+    // The other one takes no pour: it starts dry at HYDRO_WATER_MIN_MM, cannot evaporate below it, and only the
+    // groundwater moves it, by micrometres (CAUSA_ASE_HYDRO, the water balance per patch) - never by a pour.
+    CHECK(patch_at(resources, 1u).soil_mm < before_other.soil_mm + 1.0);
 
     // An object the plugin does not know is taken by the port and poured nowhere.
     CHECK(resources.irrigate(GODOT_NO_OBJECT - 1u, amount_mm) == ase::kernel::HostStatusOk);
@@ -314,6 +340,13 @@ TEST_CASE("03.6: the cycle line counts the organs on the ports and the time the 
     // The seed of the sprout case grew a shoot: a segment record of order 0 stands on the port.
     CHECK(line.find(" segment=0 ") == std::string::npos);
     CHECK(line.find(" orders 0=") != std::string::npos);
+    // That segment record is an internode: it carries the bark value, and the nodes of order 0 count it
+    // (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.0); the nodes stand after the orders and before the time.
+    const std::size_t nodes_at = line.find(" nodes 0=");
+    CHECK(nodes_at != std::string::npos);
+    CHECK(nodes_at > line.find(" orders "));
+    CHECK(nodes_at < line.find(" time_us "));
+    CHECK(line.find(" nodes 0=0 ") == std::string::npos);
     // Time was spent in the four frames, and the line sums it.
     CHECK(line.find(" time_us ") != std::string::npos);
     CHECK(line.find(" time_us_cycle=0 ") == std::string::npos);
@@ -358,11 +391,29 @@ TEST_CASE("L5 without a window: a long frame is one tick and one filed real posi
     REQUIRE(resources.advance(10.0) == ase::kernel::HostStatusOk);
     CHECK(resources.last_steps() == 1u);
     CHECK(resources.backlog_seconds() > 0.0);
+    // Every frame names the real position the clock record shows laid (real_laid_s, TIM_REAL_LAID_S through
+    // ase-pl-flora's clock record) and the backlog after it: a backlog left standing prints the frame at which
+    // ase-time laid the position and the frame the record carried it, the measured chain of the return.
+    // THE BOUND IS THE CHAIN, NEVER A NUMBER OF FRAMES. ase-pl-flora takes the filed position in Reception
+    // (FloraHostRealSystem), ase-time lays it at its next Dissemination run (1 Hz) unless its own Reception read
+    // (TimeHubPaceSyncSystem) came first in that tick, then at the run after. ase-pl-flora takes TIM_REAL_LAID_S at
+    // its Modulation run (2 Hz, FloraHubTimSyncSystem), files the clock record in the Production of the tick after,
+    // and the port publishes it with its next set: the hops lie within one more Dissemination interval. So the
+    // frames run until three Dissemination runs passed since the long frame: a late lay at the second, the hops
+    // up to the third.
+    uint64_t runs_before = 0u;
+    REQUIRE(resources.schedule_runs("Dissemination", &runs_before) == ase::kernel::HostStatusOk);
+    uint64_t runs = runs_before;
+    std::string laid_by_frame = "laid before=" + std::to_string(resources.get_clock().real_laid_s);
     uint32_t frames = 0u;
-    for (; frames < 8u && resources.backlog_seconds() > 0.0; ++frames) {
+    for (; runs - runs_before < 3u && resources.backlog_seconds() > 0.0; ++frames) {
         REQUIRE(resources.advance(0.25) == ase::kernel::HostStatusOk);
         CHECK(resources.last_steps() == 1u);
+        REQUIRE(resources.schedule_runs("Dissemination", &runs) == ase::kernel::HostStatusOk);
+        laid_by_frame += " f" + std::to_string(frames) + "=" + std::to_string(resources.get_clock().real_laid_s) +
+                         "/" + std::to_string(resources.backlog_seconds()) + "@" + std::to_string(runs - runs_before);
     }
+    INFO(laid_by_frame);
     CHECK(resources.backlog_seconds() == 0.0);
     CHECK(resources.tick_count() - ticks_before == 1u + frames);  // one tick per frame, the long one too
     CHECK(resources.simulation_seconds() - simulated_before == doctest::Approx(10.0 + 0.25 * frames));

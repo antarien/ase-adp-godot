@@ -79,8 +79,11 @@ namespace {
  */
 constexpr const char* kFigureRole = "figure";              // the role of the stage the figure asset is named under (vivarium_assets.json)
 constexpr const char* kFigureWarm = "FigureWarm";           // the instance of the figure file that stands behind the start screen while its pipelines compile
-constexpr const char* kFigureSocketBone = "socket_hand_r";  // the socket bone of the rig of villager_body (ase-assgen recipe), the right hand
-constexpr const char* kFigureSocket = "FigureSocketHandR";  // name of the BoneAttachment3D that follows the socket bone; what the hand carries hangs below it
+constexpr const char* kFigureSocketBone = "socket_hand_r";  // the socket bone of the right hand (ase-assgen figure.py), the one place the stand-in body carries
+constexpr const char* kFigureSocketBonePrefix = "socket_";  // every bone of the rig named so is a place a piece is worn at; the gear port names the place by the bone
+constexpr const char* kFigureSocket = "FigureSocket";       // name stem of a node that follows a socket bone; FigureSocket_<bone>, what is worn there hangs below it
+constexpr const char* kFigureSocketPattern = "FigureSocket*";  // the pattern the frame finds every socket node of a body by
+constexpr const char* kFigureMetaSocketBone = "socket_bone";   // meta of a socket node: the bone it follows, the place the gear port asks for
 constexpr const char* kFigureLodMark = "_lod";              // a mesh name carries its level as _lod<k>_ (villager_body_lod0_Tunic)
 constexpr int32_t kFigureLodLevels = 4;                    // detail levels of the figure file, 0 the finest
 constexpr float kFigureStandInRadius = 0.3f;                // stand-in body: radius of the capsule, metres
@@ -184,9 +187,11 @@ void show_level(::godot::Node* node, int32_t level) {
 }
 
 /**
- * The socket of the figure file: a BoneAttachment3D under the Skeleton3D of the rig that follows the bone
- * socket_hand_r, so a thing carried in the right hand hangs below it and moves with every clip. false when the
- * file carries no Skeleton3D or its skeleton no socket bone.
+ * The sockets of the figure file: one BoneAttachment3D under the Skeleton3D of the rig for every bone named
+ * socket_<place>, so a piece worn there hangs below it and moves with every clip - the right hand
+ * (socket_hand_r) and every place the rig adds, such as the back a pack is worn on (mockup ranzen, worn;
+ * usecase:101332 - wear equipment in slots). The rig decides the places and the gear port decides what hangs
+ * at each; the adapter names neither. false when the file carries no Skeleton3D or its skeleton no socket bone.
  */
 bool add_socket(::godot::Node* model) {
     const ::godot::TypedArray<::godot::Node> skeletons = model->find_children("*", "Skeleton3D", true, false);
@@ -194,14 +199,24 @@ bool add_socket(::godot::Node* model) {
         return false;
     }
     auto* skeleton = ::godot::Object::cast_to<::godot::Skeleton3D>(skeletons[0]);
-    if (skeleton == nullptr || skeleton->find_bone(kFigureSocketBone) < 0) {
+    if (skeleton == nullptr) {
         return false;
     }
-    ::godot::BoneAttachment3D* socket = memnew(::godot::BoneAttachment3D);
-    socket->set_name(kFigureSocket);
-    skeleton->add_child(socket);
-    socket->set_bone_name(kFigureSocketBone);
-    return true;
+    const ::godot::String prefix(kFigureSocketBonePrefix);
+    bool laid = false;
+    for (int32_t bone = 0; bone < skeleton->get_bone_count(); ++bone) {
+        const ::godot::String name = skeleton->get_bone_name(bone);
+        if (!name.begins_with(prefix)) {
+            continue;
+        }
+        ::godot::BoneAttachment3D* socket = memnew(::godot::BoneAttachment3D);
+        socket->set_name(::godot::String(kFigureSocket) + "_" + name);
+        socket->set_meta(kFigureMetaSocketBone, name);
+        skeleton->add_child(socket);
+        socket->set_bone_name(name);
+        laid = true;
+    }
+    return laid;
 }
 
 /**
@@ -230,7 +245,8 @@ void add_stand_in(::godot::Node3D* body, const ::godot::Ref<::godot::Material>& 
 
     // the hand socket of the stand-in: what the right hand carries hangs below it as below the rig's socket
     ::godot::Node3D* hand = memnew(::godot::Node3D);
-    hand->set_name(kFigureSocket);
+    hand->set_name(::godot::String(kFigureSocket) + "_" + kFigureSocketBone);
+    hand->set_meta(kFigureMetaSocketBone, ::godot::String(kFigureSocketBone));
     hand->set_position(::godot::Vector3(kFigureHandSide, kFigureHandLift, 0.0f));
     body->add_child(hand);
 }
@@ -433,11 +449,15 @@ void fill_figures(::godot::Node3D* scene, const std::vector<VivariumFigureView>&
         body->set_meta(kFigureMetaLevelDrawn, level);  // the level line of the view reads it per change (07-G)
         show_level(body, level);
 
-        // what the right hand carries by the gear port, below the socket of the rig or of the stand-in
-        const ::godot::TypedArray<::godot::Node> sockets = body->find_children(kFigureSocket, "Node3D", true, false);
-        if (!sockets.is_empty()) {
-            carry_tool(::godot::Object::cast_to<::godot::Node3D>(sockets[0]),
-                       hand_kind(figure.object_id, gear, kFigureSocketBone), look.tools, look.stand_in);
+        // what the gear port hangs at each place of the body, below the socket of that bone (rig or stand-in)
+        const ::godot::TypedArray<::godot::Node> sockets = body->find_children(kFigureSocketPattern, "Node3D", true, false);
+        for (int32_t i = 0; i < sockets.size(); ++i) {
+            auto* socket = ::godot::Object::cast_to<::godot::Node3D>(sockets[i]);
+            if (socket == nullptr || !socket->has_meta(kFigureMetaSocketBone)) {
+                continue;
+            }
+            const ::godot::CharString bone = ::godot::String(socket->get_meta(kFigureMetaSocketBone)).utf8();
+            carry_tool(socket, hand_kind(figure.object_id, gear, bone.get_data()), look.tools, look.stand_in);
         }
     }
     // a figure the port no longer carries leaves the scene

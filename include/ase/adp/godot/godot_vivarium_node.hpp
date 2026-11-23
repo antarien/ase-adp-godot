@@ -358,6 +358,7 @@ private:
     VivariumHourLength       hour_length_;     // ase-time's clock constants and the measured rate of the clock, read by the jump
     VivariumMeasurement      measurement_;
     VivariumGroundWatch      ground_watch_;    // the frames after the last ground act (P0690)
+    VivariumSurvivalWatch    survival_watch_;  // the survival states the HUD last logged (U0245)
     ViewSurface              drawn_surface_;   // the surface the last frame was placed on
     ViewPlacement            placement_;       // the layout's placement on that surface
     uint32_t                 play_stage_ = 0;  // play stage whose asset names the view binds (play_stage)
@@ -378,7 +379,7 @@ private:
     bool                     figure_edge_shown_ = false;   // ase-physics held the followed figure at a chunk border last frame (07-G, RAND DES AREALS)
     bool                     figure_bound_shown_ = false;  // ase-camera held the player camera on the rim of the area last frame (07-G, cam.bound, usecase:101612)
     std::vector<uint32_t>    figure_area_bound_;           // the figures bound to the area plate they first stood on (07.7), each once
-    std::vector<uint32_t>    figure_stocked_;              // the figures of this seat the start stock was laid into (T.8), each once
+    std::vector<uint32_t>    figure_stocked_;              // the figures of this seat given their start outfit (T.8 stock, N0590 pack), each once
     bool                     figure_switch_held_ = false;  // the key of cam.mode was held last frame: one switch per press
     bool                     figure_steered_ = false;      // the stick was off its rest last frame: a released stick is sent once at rest
     bool                     figure_zoomed_ = false;       // a zoom key was held last frame: the eye the rail settled at is noted once on release (07.6)

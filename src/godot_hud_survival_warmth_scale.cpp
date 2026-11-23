@@ -185,6 +185,7 @@ void SurvivalWarmthScale::draw(UiPen& canvas, const ::godot::Transform2D& frame,
     UiTextPlace tick;
     tick.size = tick_size_;
     tick.anchor = GODOT_TEXT_ANCHOR_MIDDLE;
+    tick.bare = true;  // s.html T writes class o.c without sh: no outline
     tick.color = faint_;
     tick.opacity = 1.0;
     tick.fade = true;
@@ -200,6 +201,7 @@ void SurvivalWarmthScale::draw(UiPen& canvas, const ::godot::Transform2D& frame,
     word.at = at(left_, scale_y - label_dy_);
     word.size = label_size_;
     word.anchor = GODOT_TEXT_ANCHOR_START;
+    word.bare = true;  // s.html T writes class o.c without sh: no outline
     word.color = soft_;
     word.opacity = 1.0;
     word.fade = true;

@@ -147,6 +147,7 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/scene/types.hpp
     include/ase/adp/godot/asset/types.hpp
     include/ase/adp/godot/patch/types.hpp
+    include/ase/adp/godot/loose/types.hpp
     include/ase/adp/godot/host/types.hpp
     include/ase/adp/godot/hud/types.hpp
     include/ase/adp/godot/godot_vivarium_hud_sample.hpp  # VivariumHudSample: the last HUD sample the view holds as hud_shown_, cut from godot_vivarium_node.hpp (R0217)

@@ -48,6 +48,14 @@ inline constexpr double kFigureSpawnX = 16.5;
 inline constexpr double kFigureSpawnZ = 13.6;
 /** Frames the plugin gets to answer a request, a quarter second each. */
 inline constexpr uint32_t kFigureBoundFrames = 32u;
+/**
+ * The skeleton of the figure as the scene measures it, metres. The Godot host measures it on every figure it
+ * spawns (rig port); until then ase-physics gives the walking body no capsule, and without a capsule
+ * PhysicsWalkBndySystem never holds it at a chunk border.
+ */
+inline constexpr double kFigureEyeHeight = 1.62;
+inline constexpr double kFigureHeight = 1.78;
+inline constexpr double kFigureRadius = 0.19;  // half the span of the shoulder joints of villager_body (L/R_Upperarm, glb_bones.out)
 
 /** The figure ports and operations as the client's start configuration names them. */
 inline void add_figure_ports(VivariumStartConfig& config) {
@@ -61,6 +69,7 @@ inline void add_figure_ports(VivariumStartConfig& config) {
     config.figure_seize_port = "avatar.seize.v1";
     config.figure_hold_port = "avatar.hold.v1";
     config.figure_drop_port = "avatar.drop.v1";
+    config.figure_don_port = "avatar.don.v1";  // N0590: the pack on the back
     config.figure_fill_port = "avatar.fill.v1";
     config.figure_drain_port = "avatar.drain.v1";
     config.figure_gear_port = "avatar.gear.v1";
@@ -77,6 +86,7 @@ inline void add_figure_ports(VivariumStartConfig& config) {
     config.op_seize = "seize";
     config.op_hold = "hold";
     config.op_drop = "drop";
+    config.op_don = "don";
     config.op_fill = "fill";
     config.op_drain = "drain";
     config.op_measure = "measure";

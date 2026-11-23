@@ -69,6 +69,13 @@ public:
     /** The mode the switches stand on now. */
     uint8_t chosen() const;
 
+    /**
+     * The place of the start chip, once after a draw placed it anew (usecase:100387): true with its centre and
+     * radius in mockup units, false while it stands where it was announced. The view names it in its log, so a
+     * run that taps like the keeper finds the chip on the screen as drawn.
+     */
+    bool take_begin_place(::godot::Vector2& centre, double& radius);
+
 private:
     UiHexChip online_;                  // start.online, start_glyph.online
     UiHexChip offline_;                 // start.offline, start_glyph.offline
@@ -88,6 +95,9 @@ private:
     bool offline_chosen_ = true;        // the first row stands on offline
     bool resume_chosen_ = true;         // the second row stands on the last kept state
     bool placed_ = false;               // a draw placed the chips
+    ::godot::Vector2 begin_announced_;  // the centre of the start chip take_begin_place last answered
+    double begin_announced_radius_ = 0.0;
+    bool begin_announced_once_ = false;  // take_begin_place answered at least once
 };
 
 }  // namespace ase::adp::godot

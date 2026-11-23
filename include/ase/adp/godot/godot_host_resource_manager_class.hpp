@@ -400,6 +400,13 @@ public:
     /** The hand of Phase 06 let its thing go (07.10): a drop request on the drop port, object id the figure. */
     ase::kernel::HostStatus drop_figure(uint32_t figure);
     /**
+     * The pack of the seat goes on the back (N0590, usecase:101332 - wear equipment in slots): a don request on the
+     * don port, object id the figure, with the item as its catalog id (KernelEmbeddedHost::name_id of the item key,
+     * never of its asset name). ase-pl-avatar files it as HUB_EQP_SLOT_REQ at socket_back; which item is valid is
+     * the plugin's to check, and the gear port shows the result.
+     */
+    ase::kernel::HostStatus don_figure(uint32_t figure, uint32_t item);
+    /**
      * brookTap under SS/PC (07.14, usecase:100399 carry brook water): a fill request on the fill port, object id the
      * figure, no value. ase-pl-avatar files it as HUB_EQP_WATR_REQ under HUB_EQP_WATR_DRAW, ase-equipment fills the
      * vessel in the hand to its room; the level comes back on the gear port as water_l.

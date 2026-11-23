@@ -52,7 +52,7 @@ bool read_color(const UiTheme& theme, const char* name, ::godot::Color& out, std
 /** Reads the path data of the token `name` into `outlines`; false with the reason in `failed`. */
 bool read_glyph(const UiTheme& theme, const char* name, std::vector<UiSvgOutline>& outlines, std::string& failed) {
     ::godot::String text;
-    if (!theme.token_text(name, text)) {
+    if (!theme.token_text(name, text) || text.is_empty()) {
         failed = name;
         return false;
     }
@@ -192,6 +192,7 @@ void SurvivalRestCard::draw_snore(UiPen& canvas, const ::godot::Transform2D& fra
     letter.at = place;
     letter.size = size;
     letter.anchor = GODOT_TEXT_ANCHOR_START;
+    letter.bare = true;  // s.html T writes class o.c without sh: no outline
     letter.color = color;
     letter.opacity = 1.0;
     letter.fade = true;
@@ -222,6 +223,7 @@ void SurvivalRestCard::draw(UiPen& canvas, const ::godot::Transform2D& frame, do
     title.at = at(bx, ey + title_dy_);
     title.size = title_size_;
     title.anchor = GODOT_TEXT_ANCHOR_START;
+    title.bare = true;  // s.html T writes class o.c without sh: no outline
     title.color = sky_;
     title.opacity = 1.0;
     title.fade = true;
@@ -251,6 +253,7 @@ void SurvivalRestCard::draw(UiPen& canvas, const ::godot::Transform2D& frame, do
     UiTextPlace word;
     word.size = word_size_;
     word.anchor = GODOT_TEXT_ANCHOR_START;
+    word.bare = true;  // s.html T writes class o.c without sh: no outline
     word.color = soft_;
     word.opacity = 1.0;
     word.fade = true;

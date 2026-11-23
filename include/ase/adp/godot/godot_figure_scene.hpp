@@ -33,8 +33,10 @@
  *              the ground, and the mix plays the passages between them. Of the four detail levels
  *              (meshes named _lod<k>_) the one drawn follows the figure's share of the frame height against
  *              the three bands the port carries (RND_CONST_FIGURE_LOD_NEAR/_MID/_FAR). Under the Skeleton3D of
- *              the rig a BoneAttachment3D (FigureSocketHandR) follows the socket bone socket_hand_r: what the
- *              right hand carries (07.10, ase-equipment) hangs below it and moves with every clip.
+ *              the rig one BoneAttachment3D (FigureSocket_<bone>) follows every bone named socket_<place>:
+ *              what the gear port hangs at that place (07.10, ase-equipment; usecase:101332 - wear equipment
+ *              in slots) hangs below it and moves with every clip - the right hand at socket_hand_r, a worn
+ *              pack at the back bone the rig carries for it. The rig names the places, the port what hangs.
  *
  *              THE TOOL IN THE HAND (07.10): the gear port of ase-pl-avatar (avatar.gear.v1) carries one
  *              record per piece a figure bears; the piece at socket_hand_r hangs below the socket as an

@@ -109,6 +109,7 @@
 #include <ase/adp/godot/godot_organ_records.hpp>
 #include <ase/adp/godot/godot_terrain_samples.hpp>
 #include <ase/adp/godot/host/types.hpp>
+#include <ase/adp/godot/loose/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/adp/godot/types.hpp>
@@ -122,6 +123,8 @@
 
 #include <toml++/toml.hpp>
 
+#include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -295,9 +298,9 @@ constexpr const char* kFireKeyBreath = "breath_state";  // fire cell: ATM_GAS_BT
 constexpr const char* kFireKeyBreathNormal = "breath_normal";  // fire cell: ATM_CONST_BREATHABILITY_NORMAL, the grade of normal air
 constexpr const char* kLeftKeyAshKg = "ash_kg";         // left record: HUB_ENT_ASH_REQ_ASH, kg of ash since the cell was laid (IGL_HOST_KEY_ASH_KG)
 constexpr const char* kLeftKeyBurnLeft = "burn_left";   // left record: HUB_FIRE_CELL_BURN_LEFT, seconds the fuel lasts (IGL_HOST_KEY_BURN_LEFT)
-constexpr const char* kWeatherKeyKind = "kind";                // weather record: ATM_WEATHER_KIND (FLORA_HOST_KEY_KIND)
-constexpr const char* kWeatherKeyTemperature = "temperature";  // weather record: degrees Celsius (FLORA_HOST_KEY_TEMPERATURE)
-constexpr const char* kWeatherKeyWind = "wind";                // current record: ATM_WIND_SPEED, m/s from 0 (FLORA_HOST_KEY_WIND)
+constexpr const char* kWeatherKeyKind = "kind";                // weather record: ATM_WEATHER_KIND (SKY_HOST_KEY_KIND of ase-pl-sky)
+constexpr const char* kWeatherKeyTemperature = "temperature";  // weather record: degrees Celsius (SKY_HOST_KEY_TEMPERATURE of ase-pl-sky)
+constexpr const char* kWeatherKeyWind = "wind";                // current record: ATM_WIND_SPEED, m/s from 0 (SKY_HOST_KEY_WIND of ase-pl-sky)
 constexpr const char* kWeatherKeyNight = "night";              // forecast record: 1 when the middle of the period lies under the horizon
 constexpr const char* kWeatherKeyRainMm = "rain_mm";           // forecast record: the millimetres that fall in the period, from 0
 constexpr const char* kWeatherCodeClear = "clear";             // code record: ATM_CONST_WEATHER_KIND_CLEAR
@@ -1346,7 +1349,8 @@ bool stars_view_of(const std::vector<KernelHostRecord>& records, uint32_t writte
  * configuration check could have refused before a host existed.
  */
 bool ports_named(const VivariumStartConfig& config) {
-    bool named = !config.patch_port.empty() && !config.forecast_port.empty() && !config.cond_port.empty() &&
+    bool named = !config.patch_port.empty() && !config.forecast_port.empty() && !config.soil_port.empty() &&
+                 !config.cond_port.empty() &&
                  !config.stage_port.empty() &&
                  !config.stem_port.empty() &&
                  !config.autumn_port.empty() &&
@@ -1604,7 +1608,11 @@ double read_value(KernelEmbeddedHost& host, const VivariumStartConfig& config, c
         }
         return record_value(state.records[0], key.c_str());
     }
-    if (snapshot_all(host, config.patch_port, state.records, written) != ase::kernel::HostStatusOk) {
+    // the soil water stands on the soil port (usecase:101340), one record per patch that carries its place
+    const std::string& port = spec[GODOT_SELFTEST_KEY_RECORD].value_or(std::string()) == GODOT_SELFTEST_RECORD_SOIL
+                                  ? config.soil_port
+                                  : config.patch_port;
+    if (snapshot_all(host, port, state.records, written) != ase::kernel::HostStatusOk) {
         return std::nan("");
     }
     const KernelHostRecord* record =
@@ -1673,6 +1681,236 @@ bool frame(KernelEmbeddedHost& host, const VivariumStartConfig& config, Vivarium
     }
     state.real_s += state.frame_s;
     return file_real(host, config, state.real_s) == ase::kernel::HostStatusOk;
+}
+
+/** The host port of the start file's port name `name` the digest of the camp walk folds; empty for another name. */
+std::string camp_walk_port(const VivariumStartConfig& config, const std::string& name) {
+    return name == GODOT_SELFTEST_PORT_FIRE        ? config.survival_fire_port
+           : name == GODOT_SELFTEST_PORT_CAMP_BODY ? config.camp_body_port
+                                                   : std::string();
+}
+
+/** The FNV-1a digest `digest` with `bytes` bytes at `data` folded in, byte by byte. */
+uint64_t fold_bytes(uint64_t digest, const void* data, size_t bytes) {
+    const unsigned char* at = static_cast<const unsigned char*>(data);
+    for (size_t i = 0u; i < bytes; ++i) {
+        digest ^= static_cast<uint64_t>(at[i]);
+        digest *= GODOT_WALK_DIGEST_PRIME;
+    }
+    return digest;
+}
+
+/** The state of one record the walk folds: every key up to its end with the bits of its value, in the record's
+ *  order, without the keys `ids` names. The object id and those keys carry an entity id of the host registry,
+ *  which follows the order the run made entities and means nothing on another host. */
+std::vector<std::pair<std::string, uint64_t>> walk_state(const KernelHostRecord& record,
+                                                         const std::vector<std::string>& ids) {
+    std::vector<std::pair<std::string, uint64_t>> state;
+    for (uint32_t i = 0u; i < record.value_count; ++i) {
+        size_t length = 0u;
+        while (length < ase::kernel::HostKeyBytes && record.values[i].key[length] != '\0') {
+            ++length;
+        }
+        std::string key(record.values[i].key, length);
+        if (std::find(ids.begin(), ids.end(), key) == ids.end()) {
+            state.emplace_back(std::move(key), std::bit_cast<uint64_t>(record.values[i].value));
+        }
+    }
+    return state;
+}
+
+/** The digest with the first `written` records folded in, each as its walk_state, the records in the order of
+ *  those states - the fold of the Linux reader (avt_headless_camp.cpp, fold_records), so the two lines "camp walk
+ *  digest" carry the same bits when the two hosts reported the same state, whatever ids their registries gave. */
+uint64_t fold_snapshot(uint64_t digest, const std::vector<KernelHostRecord>& snapshot, uint32_t written,
+                       const std::vector<std::string>& ids) {
+    std::vector<KernelHostRecord> records(snapshot.begin(), snapshot.begin() + written);
+    std::vector<std::vector<std::pair<std::string, uint64_t>>> states;
+    states.reserve(records.size());
+    for (const KernelHostRecord& record : records) {
+        states.push_back(walk_state(record, ids));
+    }
+    std::sort(states.begin(), states.end());
+    for (const std::vector<std::pair<std::string, uint64_t>>& state : states) {
+        for (const std::pair<std::string, uint64_t>& value : state) {
+            digest = fold_bytes(digest, value.first.data(), value.first.size());
+            digest = fold_bytes(digest, &value.second, sizeof(value.second));
+        }
+    }
+    return digest;
+}
+
+/** `value` in lower-case hexadecimal without leading zeros, as std::hex prints it on the Linux reader. */
+std::string hex_of(uint64_t value) {
+    constexpr const char* digits = "0123456789abcdef";
+    std::string text;
+    do {
+        text.insert(text.begin(), digits[value & 0xfull]);
+        value >>= 4u;
+    } while (value != 0u);
+    return text;
+}
+
+/**
+ * One camp action of the table (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP T.10): camp, hull, part or digest, through
+ * the same ports and with the same values as the Linux reader (clients/avt-client-android/tests/avt_headless_camp.cpp)
+ * and as the game host lays its camp (lay_camp, file_hull, file_part). `handled` false when the action names none
+ * of them; the answer is that of run_action.
+ */
+bool run_camp_action(KernelEmbeddedHost& host, const toml::table& action, const VivariumStartConfig& config,
+                     const std::string& label, VivariumSelfTestState& state, VivariumSelfTestResult& result,
+                     std::vector<std::string>& report, bool& handled) {
+    handled = true;
+    const std::string check = action[GODOT_SELFTEST_KEY_CHECK].value_or(std::string());
+    if (const toml::table* camp = action[GODOT_SELFTEST_KEY_CAMP].as_table()) {
+        const int64_t place = (*camp)[GODOT_SELFTEST_KEY_PLACE].value_or(int64_t{-1});
+        const double east = (*camp)[GODOT_SELFTEST_KEY_X].value_or(std::nan(""));
+        const double north = (*camp)[GODOT_SELFTEST_KEY_Z].value_or(std::nan(""));
+        const std::string expected = (*camp)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
+        if (place < 0 || place > static_cast<int64_t>(UINT32_MAX) || !std::isfinite(east) || !std::isfinite(north) ||
+            expected.empty() || config.camp_place_port.empty()) {
+            report_broken(label, GODOT_SELFTEST_KEY_CAMP, "needs place, a finite x and z, status and the camp_place port",
+                          result, report);
+            return false;
+        }
+        KernelHostInput input{};
+        input.object_id = static_cast<uint32_t>(place);
+        (void)put_value(input, kCampKeyEast, east);
+        (void)put_value(input, kCampKeyNorth, north);
+        const std::string actual = GodotHostResourceManager::status_name(
+            host.submit(config.camp_place_port.c_str(), config.op_lay.c_str(), &input));
+        report_check(check, "place=" + std::to_string(place) + " action=camp", actual, expected, actual == expected,
+                     result, report);
+        return true;
+    }
+    if (const toml::table* hull = action[GODOT_SELFTEST_KEY_HULL].as_table()) {
+        const std::string make = (*hull)[GODOT_SELFTEST_KEY_MAKE].value_or(std::string());
+        const toml::array* corners = (*hull)[GODOT_SELFTEST_KEY_CORNERS].as_array();
+        const std::string expected = (*hull)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
+        if (make.empty() || corners == nullptr || corners->empty() || expected.empty() ||
+            config.camp_hull_port.empty()) {
+            report_broken(label, GODOT_SELFTEST_KEY_HULL, "needs make, corners, status and the camp_hull port", result,
+                          report);
+            return false;
+        }
+        const double make_id = static_cast<double>(KernelEmbeddedHost::name_id(make.c_str()));
+        const char* const axes[GODOT_SELFTEST_HULL_AXES] = {kCampKeyHullX, kCampKeyHullY, kCampKeyHullZ};
+        for (size_t corner = 0u; corner < corners->size(); ++corner) {
+            const toml::array* at = (*corners)[corner].as_array();
+            if (at == nullptr || at->size() != GODOT_SELFTEST_HULL_AXES) {
+                report_broken(label, GODOT_SELFTEST_KEY_HULL, "a corner is no [hx, hy, hz]", result, report);
+                return false;
+            }
+            KernelHostInput input{};
+            input.object_id = static_cast<uint32_t>(corner);
+            (void)put_value(input, kCampKeyMake, make_id);
+            for (uint32_t axis = 0u; axis < GODOT_SELFTEST_HULL_AXES; ++axis) {
+                const double value = (*at)[axis].value_or(std::nan(""));
+                if (!std::isfinite(value)) {
+                    report_broken(label, GODOT_SELFTEST_KEY_HULL, "a corner carries no finite number", result, report);
+                    return false;
+                }
+                (void)put_value(input, axes[axis], value);
+            }
+            const std::string actual = GodotHostResourceManager::status_name(
+                host.submit(config.camp_hull_port.c_str(), config.op_lay.c_str(), &input));
+            report_check(check, "corner=" + std::to_string(corner) + " action=hull make=" + make, actual, expected,
+                         actual == expected, result, report);
+        }
+        return true;
+    }
+    if (const toml::table* part = action[GODOT_SELFTEST_KEY_PART].as_table()) {
+        const std::string make = (*part)[GODOT_SELFTEST_KEY_MAKE].value_or(std::string());
+        const int64_t place = (*part)[GODOT_SELFTEST_KEY_PLACE].value_or(int64_t{-1});
+        const double east = (*part)[GODOT_SELFTEST_KEY_X].value_or(std::nan(""));
+        const double north = (*part)[GODOT_SELFTEST_KEY_Z].value_or(std::nan(""));
+        const double drop = (*part)[GODOT_SELFTEST_KEY_DROP].value_or(std::nan(""));
+        const double fall = (*part)[GODOT_SELFTEST_KEY_FALL].value_or(std::nan(""));
+        const double mass = (*part)[GODOT_SELFTEST_KEY_MASS].value_or(std::nan(""));
+        const bool fuel = (*part)[GODOT_SELFTEST_KEY_FUEL].value_or(false);
+        const std::string expected = (*part)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
+        const uint32_t patch = object_at(host, config, place, state);
+        if (make.empty() || patch == GODOT_NO_OBJECT || !std::isfinite(east) || !std::isfinite(north) ||
+            !std::isfinite(drop) || !std::isfinite(fall) || !(mass > 0.0) || expected.empty() ||
+            config.camp_part_port.empty()) {
+            report_broken(label, GODOT_SELFTEST_KEY_PART,
+                          "needs make, the place of a laid patch, finite x, z, drop and fall, a positive mass, status "
+                          "and the camp_part port",
+                          result, report);
+            return false;
+        }
+        KernelHostInput input{};
+        input.object_id = patch;
+        (void)put_value(input, kCampKeyEast, east);
+        (void)put_value(input, kCampKeyNorth, north);
+        (void)put_value(input, kCampKeyDrop, drop);
+        (void)put_value(input, kCampKeyFall, fall);
+        (void)put_value(input, kCampKeyMass, mass);
+        (void)put_value(input, kCampKeyMake, static_cast<double>(KernelEmbeddedHost::name_id(make.c_str())));
+        if (fuel) {
+            (void)put_value(input, kCampKeyFuel, kCampFuelMark);
+        }
+        const std::string actual = GodotHostResourceManager::status_name(
+            host.submit(config.camp_part_port.c_str(), config.op_lay.c_str(), &input));
+        report_check(check, "place=" + std::to_string(place) + " action=part make=" + make, actual, expected,
+                     actual == expected, result, report);
+        return true;
+    }
+    if (const toml::table* digest = action[GODOT_SELFTEST_KEY_DIGEST].as_table()) {
+        // The walk of the camp: after every frame each record of each named port folded into one digest, the
+        // line set beside the line of the Linux reader by data/probes/t10_fire_digest_compare.py.
+        const toml::array* names = (*digest)[GODOT_SELFTEST_KEY_RECORDS].as_array();
+        const int64_t frames = (*digest)[GODOT_SELFTEST_KEY_FRAMES].value_or(int64_t{0});
+        const toml::array* id_keys = (*digest)[GODOT_SELFTEST_KEY_IDS].as_array();
+        std::vector<std::string> ports;
+        for (size_t i = 0u; names != nullptr && i < names->size(); ++i) {
+            const std::string port = camp_walk_port(config, (*names)[i].value_or(std::string()));
+            if (!port.empty()) {
+                ports.push_back(port);
+            }
+        }
+        std::vector<std::string> ids;
+        for (size_t i = 0u; id_keys != nullptr && i < id_keys->size(); ++i) {
+            const std::string key = (*id_keys)[i].value_or(std::string());
+            if (!key.empty()) {
+                ids.push_back(key);
+            }
+        }
+        if (names == nullptr || names->empty() || ports.size() != names->size() || id_keys == nullptr ||
+            ids.size() != id_keys->size() || frames <= 0) {
+            report_broken(label, GODOT_SELFTEST_KEY_DIGEST,
+                          "needs records naming survival_fire or camp_body ports of the start file, ids naming the "
+                          "keys that carry an entity id, and frames",
+                          result, report);
+            return false;
+        }
+        uint64_t walk = GODOT_WALK_DIGEST_BASIS;
+        uint64_t folded = 0u;
+        for (int64_t i = 0; i < frames; ++i) {
+            if (!frame(host, config, state)) {
+                report_broken(label, GODOT_STEP_ADVANCE, "a frame was refused", result, report);
+                return false;
+            }
+            for (const std::string& port : ports) {
+                uint32_t written = 0u;
+                const HostStatus status = snapshot_all(host, port, state.records, written);
+                if (status != ase::kernel::HostStatusOk) {
+                    report_broken(label, GODOT_STEP_SNAPSHOT, GodotHostResourceManager::status_name(status), result,
+                                  report);
+                    return false;
+                }
+                folded += written;
+                walk = fold_snapshot(walk, state.records, written, ids);
+            }
+        }
+        report_check(check, "action=digest frames=" + std::to_string(frames), std::to_string(folded) + " records",
+                     "more than 0 records", folded > 0u, result, report);
+        report.push_back("camp walk digest 0x" + hex_of(walk) + " over " + std::to_string(frames) + " frames, " +
+                         std::to_string(folded) + " records");
+        return true;
+    }
+    handled = false;
+    return false;
 }
 
 /**
@@ -1822,7 +2060,10 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         const std::string subject =
             (*expect)[GODOT_SELFTEST_KEY_RECORD].value_or(std::string()) == GODOT_SELFTEST_RECORD_CLOCK
                 ? std::string("clock")
-                : "place=" + std::to_string((*expect)[GODOT_SELFTEST_KEY_PLACE].value_or(int64_t{-1}));
+                : ((*expect)[GODOT_SELFTEST_KEY_RECORD].value_or(std::string()) == GODOT_SELFTEST_RECORD_SOIL
+                       ? std::string("soil ")
+                       : std::string()) +
+                      "place=" + std::to_string((*expect)[GODOT_SELFTEST_KEY_PLACE].value_or(int64_t{-1}));
         report_check(check, subject + " key=" + key, decimal(actual), op + " " + decimal(value), ok, result, report);
         return true;
     }
@@ -1837,6 +2078,7 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         const int64_t bound = (*count)[GODOT_SELFTEST_KEY_MAX_FRAMES].value_or(int64_t{0});
         const uint32_t organ_class = organ_class_of(record);
         const std::string& port = record == GODOT_SELFTEST_RECORD_CLOCK   ? config.clock_port
+                                  : record == GODOT_SELFTEST_RECORD_SOIL   ? config.soil_port
                                   : organ_class < GODOT_ORGAN_COUNT        ? config.organ_ports[organ_class]
                                                                            : config.patch_port;
         bool known = true;
@@ -1939,8 +2181,14 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         return true;
     }
 
+    bool handled = false;
+    const bool ran = run_camp_action(host, action, config, label, state, result, report, handled);
+    if (handled) {
+        return ran;
+    }
     report_broken(label, GODOT_SELFTEST_KEY_DO,
-                  "an action names none of frames, remember, irrigate, wait, catch_up, expect, records, lay, view",
+                  "an action names none of frames, remember, irrigate, wait, catch_up, expect, records, lay, view, "
+                  "camp, hull, part, digest",
                   result, report);
     return false;
 }
@@ -2076,6 +2324,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     }
 
     bool offered = host_->has_port(config_.patch_port.c_str()) && host_->has_port(config_.forecast_port.c_str()) &&
+                   host_->has_port(config_.soil_port.c_str()) &&
                    host_->has_port(config_.cond_port.c_str()) &&
                    host_->has_port(config_.stage_port.c_str()) &&
                    host_->has_port(config_.stem_port.c_str()) &&
@@ -2544,10 +2793,12 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         const double stage = record_value(record, GODOT_KEY_STAGE);
         const double condition = record_value(record, GODOT_KEY_CONDITION);
         view.coverage = record_value(record, GODOT_KEY_COVERAGE);
-        view.soil_mm = record_value(record, GODOT_KEY_SOIL_MM);
-        view.soil_rel = record_value(record, GODOT_KEY_SOIL_REL);
-        view.capacity_mm = record_value(record, GODOT_KEY_CAPACITY_MM);
-        view.root_m = record_value(record, GODOT_KEY_ROOT_M);
+        // the soil water stands on the soil port, read below (usecase:101340 - show the bed condition); until
+        // its record for this patch is read it is not measured
+        view.soil_mm = std::nan("");
+        view.soil_rel = std::nan("");
+        view.capacity_mm = std::nan("");
+        view.root_m = std::nan("");
         // the stage forecasts stand on the forecast port, read below; until its record for this patch
         // is read they are not measured
         view.grow_at_h = std::nan("");
@@ -2610,6 +2861,31 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         }
         found->second.grow_at_h = record_value(record, GODOT_KEY_GROW_AT_H);
         found->second.mtur_at_h = record_value(record, GODOT_KEY_MTUR_AT_H);
+    }
+
+    // THE SOIL WATER HAS A PORT OF ITS OWN (FLORA_HOST_PORT_SOIL, usecase:101340 - show the bed condition): the
+    // patch record is full (HUB_CONST_HOST_VALUES_MAX), so ase-pl-flora files soil_mm, soil_rel, capacity_mm and
+    // root_m of ase-hydrology as one record per patch whose soil row stands, its object id the patch. A patch
+    // without such a record keeps all four unmeasured; a record that names no patch of the patch port is a
+    // broken port.
+    status = snapshot_all(*host_, config_.soil_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        patches_.clear();
+        places_.clear();
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = records_[i];
+        const auto found = patches_.find(record.object_id);
+        if (found == patches_.end()) {
+            patches_.clear();
+            places_.clear();
+            return refuse_record(*host_, config_.soil_port, record.object_id, "soil of no patch");
+        }
+        found->second.soil_mm = record_value(record, GODOT_KEY_SOIL_MM);
+        found->second.soil_rel = record_value(record, GODOT_KEY_SOIL_REL);
+        found->second.capacity_mm = record_value(record, GODOT_KEY_CAPACITY_MM);
+        found->second.root_m = record_value(record, GODOT_KEY_ROOT_M);
     }
 
     // THE STEM FOOT IS A BODY OF ASE-PHYSICS (FLORA_HOST_PORT_STEM, usecase:100708 land the dispersed seeds,
@@ -4135,13 +4411,14 @@ HostStatus GodotHostResourceManager::read_sap() {
 }
 
 HostStatus GodotHostResourceManager::read_loose() {
-    // THE LOOSENED SOIL IS THE SOIL'S OWN, READ EVERY SNAPSHOT (N0456, m.html patchLoose): the soil's owner keeps the
-    // looseness of every cell of its ase-gis raster (CAUSA_ASE_GIS LYR_LITHO_COMPACTION, 1 Hz, only changed cells),
-    // the spade raises it, rain settles it, and ase-terrain files one record per cell on terrain.loose.v1: the cell's
-    // centre x and z, its edge cell_m and loose_share 0..1. The adapter keeps the cells as the grid they form and
-    // never computes one. A port not offered or no record filed leaves the raster unknown and the HUD's loose bridge
-    // draws the mockup's grid. Cells of different edges, a share out of 0..1, a cell twice or a cell missing from the
-    // grid the records span is a broken raster and refused.
+    // THE LOOSENED SOIL IS THE SOIL'S OWN, READ EVERY SNAPSHOT (N0456, m.html patchLoose): ase-terrain keeps the
+    // compaction of every macro cell (TerrainStaMcroCpctComponent, ase-gis GIS_CAT_LITHO_CPCT), the spade lowers it,
+    // rain settles it back, and its rows HUB_TERN_MCRO reach the host through ase-pl-flora (FloraHostCpctExptSystem):
+    // one record per cell on terrain.loose.v1 with the cell's centre x and z, its edge cell_m and cpct_share 0..1.
+    // The looseness the HUD draws is the complement of that share; the adapter keeps the cells as the grid they form
+    // and never computes a compaction. A port not offered or no record filed leaves the raster unknown and the HUD's
+    // loose bridge draws the mockup's grid. Cells of different edges, a share out of 0..1, a cell twice or a cell
+    // missing from the grid the records span is a broken raster and refused.
     loose_ = VivariumLooseView{};
     if (config_.loose_port.empty() || !host_->has_port(config_.loose_port.c_str())) {
         return ase::kernel::HostStatusOk;
@@ -4166,11 +4443,11 @@ HostStatus GodotHostResourceManager::read_loose() {
         const KernelHostRecord& record = organ_records_[i];
         const double x = record_value(record, GODOT_KEY_X);
         const double z = record_value(record, GODOT_KEY_Z);
-        const double share = record_value(record, GODOT_KEY_LOOSE_SHARE);
+        const double share = record_value(record, GODOT_KEY_CPCT_SHARE);
         if (!std::isfinite(x) || !std::isfinite(z) || record_value(record, GODOT_KEY_CELL_M) != cell_m ||
             !std::isfinite(share) || share < 0.0 || share > 1.0) {
             return refuse_record(*host_, config_.loose_port, record.object_id,
-                                 "loose cell incomplete: x, z, the raster's cell_m and loose_share 0..1 come together");
+                                 "loose cell incomplete: x, z, the raster's cell_m and cpct_share 0..1 come together");
         }
         west_x = ase::math::min(west_x, x);
         east_x = ase::math::max(east_x, x);
@@ -4192,7 +4469,7 @@ HostStatus GodotHostResourceManager::read_loose() {
         if (!std::isnan(loose[cell])) {
             return refuse_record(*host_, config_.loose_port, record.object_id, "loose cell filed twice");
         }
-        loose[cell] = record_value(record, GODOT_KEY_LOOSE_SHARE);
+        loose[cell] = 1.0 - record_value(record, GODOT_KEY_CPCT_SHARE);
     }
     loose_.known = true;
     loose_.loose = std::move(loose);
@@ -4503,6 +4780,22 @@ HostStatus GodotHostResourceManager::hold_figure(uint32_t figure, uint32_t item)
     input.object_id = figure;
     (void)put_value(input, kFigureKeyItem, static_cast<double>(item));
     return host_->submit(config_.figure_hold_port.c_str(), config_.op_hold.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::don_figure(uint32_t figure, uint32_t item) {
+    // The pack on the back (N0590): one port per place, so the back has its own port and the hand keeps its own;
+    // the item travels as the catalog id of its key, what it is and whether it fits the back are ase-pl-avatar's
+    // and ase-equipment's to check.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    if (!figure_offered()) {
+        return ase::kernel::HostStatusNotFound;
+    }
+    KernelHostInput input{};
+    input.object_id = figure;
+    (void)put_value(input, kFigureKeyItem, static_cast<double>(item));
+    return host_->submit(config_.figure_don_port.c_str(), config_.op_don.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::stock_figure(uint32_t figure, uint32_t item, double kg) {
@@ -5110,7 +5403,8 @@ bool GodotHostResourceManager::figure_offered() const {
            host_->has_port(config_.figure_stick_port.c_str()) && host_->has_port(config_.figure_orbit_port.c_str()) &&
            host_->has_port(config_.figure_switch_port.c_str()) && host_->has_port(config_.figure_release_port.c_str()) &&
            host_->has_port(config_.figure_seize_port.c_str()) && host_->has_port(config_.figure_hold_port.c_str()) &&
-           host_->has_port(config_.figure_drop_port.c_str()) && host_->has_port(config_.figure_fill_port.c_str()) &&
+           host_->has_port(config_.figure_drop_port.c_str()) && host_->has_port(config_.figure_don_port.c_str()) &&
+           host_->has_port(config_.figure_fill_port.c_str()) &&
            host_->has_port(config_.figure_drain_port.c_str()) && host_->has_port(config_.figure_gear_port.c_str()) &&
            host_->has_port(config_.figure_rig_port.c_str()) && host_->has_port(config_.figure_turn_port.c_str()) &&
            host_->has_port(config_.figure_code_port.c_str()) && host_->has_port(config_.figure_area_port.c_str()) &&

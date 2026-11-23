@@ -283,6 +283,18 @@ void VivariumView::follow_figure(double elapsed_s) {
                  ::godot::String::utf8(piece.item.c_str()) + " kg " + ::godot::String::num(piece.kg, 3) + " status " +
                  ::godot::String::num_int64(stocked));
         }
+        // the pack on the back (N0590, usecase:101332 - wear equipment in slots) belongs to the same start outfit:
+        // once per figure, one don request for figure.don. The item travels as the catalog id of its item key
+        // (name_id("ranzen")), the same key the hand sends and bind_hand_tools binds as hand.<key>, never the asset
+        // name, or carry_tool finds no tool for the kind the gear port hands back. ase-pl-avatar files it as
+        // HUB_EQP_SLOT_REQ at socket_back; a refusal is noted once with its status and never resent. A seat without
+        // a pack (figure.don empty) asks nothing.
+        if (!start_.don.empty()) {
+            const uint32_t pack = ase::kernel::KernelEmbeddedHost::name_id(start_.don.c_str());
+            const ase::kernel::HostStatus donned = resources_.don_figure(led->object_id, pack);
+            note(::godot::String("figure don figure=") + ::godot::String::num_uint64(led->object_id) + " item=" +
+                 ::godot::String::utf8(start_.don.c_str()) + " status " + ::godot::String::num_int64(donned));
+        }
         figure_stocked_.push_back(led->object_id);
     }
 

@@ -63,7 +63,7 @@ bool GroundReticle::bind(const UiTheme& theme, std::string& failed) {
 bool GroundReticle::op(const std::string& verb, std::string& out, std::string& failed) const {
     const std::string token = GODOT_HUD_VERB_TOKEN + verb + GODOT_HUD_VERB_OP_TAIL;
     ::godot::String text;
-    if (theme_ == nullptr || !theme_->token_text(token, text)) {
+    if (theme_ == nullptr || !theme_->token_text(token, text) || text.is_empty()) {
         failed = token;
         return false;
     }

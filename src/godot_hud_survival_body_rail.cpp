@@ -58,7 +58,7 @@ bool read_color(const UiTheme& theme, const char* name, ::godot::Color& out, std
 /** Reads the path data of the token `name` into `outlines`; false with the reason in `failed`. */
 bool read_glyph(const UiTheme& theme, const char* name, std::vector<UiSvgOutline>& outlines, std::string& failed) {
     ::godot::String text;
-    if (!theme.token_text(name, text)) {
+    if (!theme.token_text(name, text) || text.is_empty()) {
         failed = name;
         return false;
     }
@@ -233,13 +233,14 @@ bool SurvivalBodyRail::set(const SurvivalBodyFrame& body, std::string& failed) {
             return false;
         }
     }
-    // health: alert under health_alert, otherwise life; of level_full, Math.round(v)+' %'
+    // health: a share 0 to 1 by its owner (MTB_HEALTH in hub_metrics.json), Math.round(v)+' %' on the scale of
+    // level_full; alert under health_alert of that scale, otherwise life
     Row& health = health_;
     health.shown = body.health.counts;
     if (health.shown) {
-        health.tone = body.health.value < health_alert_ ? alert_ : life_;
-        health.fill = ase::math::clamp(body.health.value / full, 0.0, 1.0);
-        if (!set_number(health, hud_percent(body.health.value / full), failed)) {
+        health.tone = body.health.value * full < health_alert_ ? alert_ : life_;
+        health.fill = ase::math::clamp(body.health.value, 0.0, 1.0);
+        if (!set_number(health, hud_percent(body.health.value), failed)) {
             return false;
         }
     }
@@ -286,6 +287,7 @@ void SurvivalBodyRail::draw(UiPen& canvas, const ::godot::Transform2D& frame, do
     word.at = ::godot::Vector2(static_cast<float>(x_), static_cast<float>(label_y_));
     word.size = label_size_;
     word.anchor = GODOT_TEXT_ANCHOR_START;
+    word.bare = true;  // s.html T writes class o.c without sh: no outline
     word.color = soft_;
     word.opacity = 1.0;
     word.elapsed = elapsed;
@@ -326,6 +328,7 @@ void SurvivalBodyRail::draw(UiPen& canvas, const ::godot::Transform2D& frame, do
         name.at = ::godot::Vector2(static_cast<float>(name_x_), static_cast<float>(y + text_dy_));
         name.size = name_size_;
         name.anchor = GODOT_TEXT_ANCHOR_END;
+        name.bare = true;  // s.html T writes class o.c without sh: no outline
         name.color = row.tone;
         name.opacity = 1.0;
         name.fade = true;
@@ -337,6 +340,7 @@ void SurvivalBodyRail::draw(UiPen& canvas, const ::godot::Transform2D& frame, do
         number.at = ::godot::Vector2(static_cast<float>(number_x_), static_cast<float>(y + text_dy_));
         number.size = number_size_;
         number.anchor = GODOT_TEXT_ANCHOR_START;
+        number.bare = true;  // s.html T writes class o.c without sh: no outline
         number.color = soft_;
         number.opacity = 1.0;
         number.fade = true;

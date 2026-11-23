@@ -96,7 +96,7 @@ bool BeltHolster::bind(const UiTheme& theme, std::string& failed) {
     }
     ground_.a = static_cast<float>(fill_alpha);
     ::godot::String path;
-    if (!theme.token_text("hud_belt_path", path)) {
+    if (!theme.token_text("hud_belt_path", path) || path.is_empty()) {
         failed = "hud_belt_path";
         return false;
     }

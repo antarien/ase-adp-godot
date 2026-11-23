@@ -357,8 +357,18 @@ bool UiTheme::measure(const std::string& token, double& out) const {
 }
 
 bool UiTheme::token_text(const std::string& token, ::godot::String& out) const {
+    // The class answers false only for a name the files do not carry: an empty text is carried, it is the part a
+    // glyph does not have (hud_rail_state_*_fill, _line, _mark). A reader that needs a text refuses the empty one.
     ::godot::Dictionary entry;
-    return read_section(tokens_, token.c_str(), entry) && read_text(entry, "value", out);
+    if (!read_section(tokens_, token.c_str(), entry)) {
+        return false;
+    }
+    const ::godot::Variant value = entry.get("value", ::godot::Variant());
+    if (value.get_type() != ::godot::Variant::STRING) {
+        return false;
+    }
+    out = static_cast<::godot::String>(value);
+    return true;
 }
 
 bool UiTheme::words(const std::string& key, std::vector<HudRun>& out) const {

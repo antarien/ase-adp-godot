@@ -4,8 +4,10 @@
  * @file        godot_camp_load.cpp
  * @brief       Parses one camp export in a task of the WorkerThreadPool into its makes and hands them over once
  * @description See godot_camp_load.hpp. The task reads the file whole, parses it through godot_asset_loader.hpp,
- *              reads the extras of every node from the document's JSON and generates the scene only to take each
- *              node's mesh; the generated tree is freed by the task. A node is a make only with all three extras -
+ *              reads the extras of every node from the document's JSON and takes each node's mesh from the parsed
+ *              state (GLTFNode → GLTFMesh → ImporterMesh); no scene is generated, so the task holds no Node and
+ *              touches no tree, also when the pool runs a second camp task on its thread while a texture load
+ *              of the first one waits. A node is a make only with all three extras -
  *              make a text ending in .<variant>, mass_kg a positive number, hull at least IGL_HULL_MIN_PNT corners
  *              of three finite numbers each; any other node is skipped, so a helper node of the recipe never
  *              becomes a body.
@@ -17,7 +19,7 @@
  * @usecase     usecase:5436 - kindle fire
  * @actor       Funken (FNKN)
  * @created     2026-11-21
- * @modified    2026-11-21
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -31,10 +33,12 @@
 #include <ase/kernel/kernel_embedded_host.hpp>
 
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/gltf_document.hpp>
+#include <godot_cpp/classes/gltf_mesh.hpp>
+#include <godot_cpp/classes/gltf_node.hpp>
 #include <godot_cpp/classes/gltf_state.hpp>
-#include <godot_cpp/classes/mesh_instance3d.hpp>
-#include <godot_cpp/classes/node.hpp>
+#include <godot_cpp/classes/importer_mesh.hpp>
 #include <godot_cpp/classes/worker_thread_pool.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -132,20 +136,41 @@ bool make_of(const ::godot::Dictionary& node, CampMake& make) {
     return true;
 }
 
-/** The mesh of the generated node `index`, the node itself or the first mesh below it; null without one. */
-::godot::Ref<::godot::Mesh> mesh_of(const ::godot::Ref<::godot::GLTFState>& state, int32_t index) {
-    ::godot::Node* node = state->get_scene_node(index);
-    ::godot::MeshInstance3D* instance = ::godot::Object::cast_to<::godot::MeshInstance3D>(node);
-    if (instance == nullptr) {
-        instance = first_mesh(node);
-    }
-    if (instance == nullptr) {
+/**
+ * The mesh of glTF node `index`, the node itself or the first mesh below it depth first; null without one. It is
+ * read from the parsed state (GLTFNode → GLTFMesh → ImporterMesh, its surfaces with their materials), never from a
+ * generated scene node: generate_scene replaces each importer mesh node by its MeshInstance3D and frees it, so the
+ * node GLTFState::get_scene_node hands back afterwards is a freed object.
+ */
+::godot::Ref<::godot::Mesh> mesh_of(const ::godot::TypedArray<::godot::GLTFNode>& nodes,
+                                    const ::godot::TypedArray<::godot::GLTFMesh>& meshes, int32_t index) {
+    if (index < 0 || index >= nodes.size()) {
         return ::godot::Ref<::godot::Mesh>();
     }
-    return instance->get_mesh();
+    const ::godot::Ref<::godot::GLTFNode> node = nodes[index];
+    if (node.is_null()) {
+        return ::godot::Ref<::godot::Mesh>();
+    }
+    const int32_t mesh = node->get_mesh();
+    if (mesh >= 0 && mesh < meshes.size()) {
+        const ::godot::Ref<::godot::GLTFMesh> gltf_mesh = meshes[mesh];
+        const ::godot::Ref<::godot::ImporterMesh> importer =
+            gltf_mesh.is_valid() ? gltf_mesh->get_mesh() : ::godot::Ref<::godot::ImporterMesh>();
+        if (importer.is_valid()) {
+            return importer->get_mesh();
+        }
+    }
+    const ::godot::PackedInt32Array children = node->get_children();
+    for (int64_t i = 0; i < children.size(); ++i) {
+        const ::godot::Ref<::godot::Mesh> below = mesh_of(nodes, meshes, children[i]);
+        if (below.is_valid()) {
+            return below;
+        }
+    }
+    return ::godot::Ref<::godot::Mesh>();
 }
 
-/** The task: reads and parses the file, takes every make of its nodes with the mesh of its node, frees the tree. */
+/** The task: reads and parses the file, takes every make of its nodes with the mesh of its node from the state. */
 void load_camp_file(void* userdata) {
     CampRoleLoad* load = static_cast<CampRoleLoad*>(userdata);
     const ::godot::String path = load->asset_root.path_join(::godot::String::utf8(load->file.c_str()));
@@ -160,10 +185,10 @@ void load_camp_file(void* userdata) {
     if (!parse_asset_bytes(document, state, load->asset_root, load->file, bytes)) {
         return;
     }
-    ::godot::Node* scene = document->generate_scene(state);
-    if (scene == nullptr) {
-        return;
-    }
+    // the parsed nodes and meshes stand in the state in the order of the document's nodes, so json node i is
+    // GLTFNode i; no scene is generated, the task holds no Node and touches no tree
+    const ::godot::TypedArray<::godot::GLTFNode> parsed_nodes = state->get_nodes();
+    const ::godot::TypedArray<::godot::GLTFMesh> parsed_meshes = state->get_meshes();
     const ::godot::Dictionary json = state->get_json();
     const ::godot::Variant nodes_value = json.get("nodes", ::godot::Variant());
     if (nodes_value.get_type() == ::godot::Variant::ARRAY) {
@@ -176,11 +201,10 @@ void load_camp_file(void* userdata) {
             if (!make_of(nodes[i], make)) {
                 continue;
             }
-            make.mesh = mesh_of(state, static_cast<int32_t>(i));
+            make.mesh = mesh_of(parsed_nodes, parsed_meshes, static_cast<int32_t>(i));
             load->makes.push_back(make);
         }
     }
-    memdelete(scene);
 }
 
 }  // namespace

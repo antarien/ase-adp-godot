@@ -19,8 +19,8 @@
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
  * @design      DSGN_066
- * @usecase     usecase:100387 - view the plant
- * @actor       Plant Keeper (PLNTKEEPER)
+ * @usecase     usecase:100364 - host the engine embedded
+ * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-11-22
  * @modified    2026-11-22
  * @version     00.00.21.00021 [init]
@@ -91,6 +91,7 @@ constexpr const char* GODOT_SELFTEST_KEY_WAIT = "wait";              // action: 
 constexpr const char* GODOT_SELFTEST_KEY_CATCH_UP = "catch_up";      // action: a return from the background
 constexpr const char* GODOT_SELFTEST_KEY_EXPECT = "expect";          // action: compare one value
 constexpr const char* GODOT_SELFTEST_KEY_RECORDS = "records";        // action: compare a record count
+constexpr const char* GODOT_SELFTEST_KEY_IDS = "ids";                // digest: keys carrying an entity id
 constexpr const char* GODOT_SELFTEST_KEY_AS = "as";                  // remember: what a later plus refers to
 constexpr const char* GODOT_SELFTEST_KEY_PLACE = "place";            // a patch, by its place
 constexpr const char* GODOT_SELFTEST_KEY_OBJECT = "object_id";       // irrigate: an object id named directly
@@ -118,8 +119,24 @@ constexpr const char* GODOT_SELFTEST_KEY_Y = "y";                    // view: th
 constexpr const char* GODOT_SELFTEST_KEY_AIM_X = "aim_x";            // view: the point the eye looks at, world metres east
 constexpr const char* GODOT_SELFTEST_KEY_AIM_Y = "aim_y";            // view: the point the eye looks at, world metres up
 constexpr const char* GODOT_SELFTEST_KEY_AIM_Z = "aim_z";            // view: the point the eye looks at, world metres north
+constexpr const char* GODOT_SELFTEST_KEY_CAMP = "camp";              // action: lay the camp place through camp_place (PHASE_08 T.0)
+constexpr const char* GODOT_SELFTEST_KEY_HULL = "hull";              // action: file every hull corner of one make through camp_hull (T.1)
+constexpr const char* GODOT_SELFTEST_KEY_PART = "part";              // action: lay one camp part through camp_part (T.3)
+constexpr const char* GODOT_SELFTEST_KEY_DIGEST = "digest";          // action: fold the records of named ports frame by frame (T.10)
+constexpr const char* GODOT_SELFTEST_KEY_MAKE = "make";              // hull, part: the make by its name text
+constexpr const char* GODOT_SELFTEST_KEY_CORNERS = "corners";        // hull: array of [hx, hy, hz] corners, metres from the centre of mass
+constexpr const char* GODOT_SELFTEST_KEY_DROP = "drop";              // part: release height above the stem foot, metres
+constexpr const char* GODOT_SELFTEST_KEY_FALL = "fall";              // part: fall speed in still air, m/s
+constexpr const char* GODOT_SELFTEST_KEY_MASS = "mass";              // part: mass of the make, kg
+constexpr const char* GODOT_SELFTEST_KEY_FUEL = "fuel";              // part: true on a part that burns
+constexpr const char* GODOT_SELFTEST_PORT_FIRE = "survival_fire";    // digest: a port by its name in the start file, the fire cells
+constexpr const char* GODOT_SELFTEST_PORT_CAMP_BODY = "camp_body";   // digest: the place and turn of every camp part body
+constexpr uint32_t GODOT_SELFTEST_HULL_AXES = 3u;                    // hull: hx, hy and hz of one corner
+constexpr uint64_t GODOT_WALK_DIGEST_BASIS = 1469598103934665603ull; // digest: FNV-1a 64 offset basis, as the Linux reader
+constexpr uint64_t GODOT_WALK_DIGEST_PRIME = 1099511628211ull;       // digest: FNV-1a 64 prime
 constexpr const char* GODOT_SELFTEST_RECORD_CLOCK = "clock";         // record: the clock port
 constexpr const char* GODOT_SELFTEST_RECORD_PATCH = "patch";         // record: the patch port; an organ port by its GODOT_ORGAN_WORDS
+constexpr const char* GODOT_SELFTEST_RECORD_SOIL = "soil";           // record: the soil port, one record per patch with its place (usecase:101340)
 constexpr const char* GODOT_SELFTEST_OP_EQ = "eq";                   // |actual - value| <= tolerance
 constexpr const char* GODOT_SELFTEST_OP_NE = "ne";                   // |actual - value| > tolerance
 constexpr const char* GODOT_SELFTEST_OP_LT = "lt";                   // actual < value

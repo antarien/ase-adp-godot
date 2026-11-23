@@ -57,6 +57,9 @@ using test::figure_environment;
 using test::figure_of;
 using test::frames_carry;
 using test::kFigureBoundFrames;
+using test::kFigureEyeHeight;
+using test::kFigureHeight;
+using test::kFigureRadius;
 using test::kFigureSpawnX;
 using test::kFigureSpawnZ;
 using test::the_figure;
@@ -67,10 +70,6 @@ namespace {
 constexpr double kFigureSpawnSlack = 0.5;
 /** The soul value of a figure its player leads (SS/PC) the code port must name: the expected value, not the one compared against. */
 constexpr double kFigureSoulPlayer = 1.0;
-/** The skeleton of the figure as the scene measures it, metres. */
-constexpr double kFigureEyeHeight = 1.62;
-constexpr double kFigureHeight = 1.78;
-constexpr double kFigureRadius = 0.19;  // half the span of the shoulder joints of villager_body (L/R_Upperarm, glb_bones.out)
 /** One turn on the spot, radians, inside the span of one request. */
 constexpr double kFigureTurn = 0.5;
 /** Slack of the turned course, radians. */
@@ -151,7 +150,7 @@ TEST_CASE("usecase:101625 carry a tool in hand: a hold files the put-on request,
     CHECK(frames_carry(resources, "empties its hand, put-down request filed"));
 }
 
-TEST_CASE("usecase:101625 carry a tool in hand: every piece of the gear port names a figure of the body port at its right hand") {
+TEST_CASE("usecase:101625 carry a tool in hand: every piece of the gear port names a figure of the body port at its right hand or its back") {
     AdapterEnvironment& env = figure_environment();
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
     GodotHostResourceManager& resources = env.resources;
@@ -160,7 +159,10 @@ TEST_CASE("usecase:101625 carry a tool in hand: every piece of the gear port nam
                                 ase::kernel::KernelEmbeddedHost::name_id("enxada")) == ase::kernel::HostStatusOk);
     advance_frames(resources, kFigureBoundFrames);
 
+    // the two places a figure carries a piece at: the right hand (07.10) and the back (N0590); the run shares one
+    // host, so a pack an earlier case put on stays on the back
     const uint32_t hand = ase::kernel::KernelEmbeddedHost::name_id("socket_hand_r");
+    const uint32_t back = ase::kernel::KernelEmbeddedHost::name_id("socket_back");
     for (const VivariumFigureGearView& piece : resources.get_figure_gear()) {
         bool borne = false;
         for (const VivariumFigureView& figure : resources.get_figures()) {
@@ -168,9 +170,33 @@ TEST_CASE("usecase:101625 carry a tool in hand: every piece of the gear port nam
         }
         CHECK(borne);
         CHECK(piece.object_id != 0u);
-        CHECK(piece.slot == hand);
+        CHECK((piece.slot == hand || piece.slot == back));
         CHECK(piece.kind != 0u);
     }
+}
+
+TEST_CASE("usecase:101332 wear equipment in slots: a don puts the pack of the seat on the back of the figure") {
+    AdapterEnvironment& env = figure_environment();
+    REQUIRE(env.booted == ase::kernel::HostStatusOk);
+    GodotHostResourceManager& resources = env.resources;
+    const VivariumFigureView* figure = the_figure(resources);
+    REQUIRE(figure != nullptr);
+    const uint32_t bearer = figure->object_id;
+
+    // the pack of the HUD travels as the name_id of its item key, never of its asset name container_backpack_leather
+    const uint32_t pack = ase::kernel::KernelEmbeddedHost::name_id("ranzen");
+    REQUIRE(pack != 0u);
+    CHECK(resources.don_figure(bearer, pack) == ase::kernel::HostStatusOk);
+    CHECK(frames_carry(resources, "on its back, put-on request filed"));
+    advance_frames(resources, kFigureBoundFrames);
+
+    // ase-equipment put it on: the gear port names it at the socket of the back, with the kind of its key
+    const uint32_t back = ase::kernel::KernelEmbeddedHost::name_id("socket_back");
+    bool worn = false;
+    for (const VivariumFigureGearView& piece : resources.get_figure_gear()) {
+        worn = worn || (piece.bearer == bearer && piece.slot == back && piece.kind == pack);
+    }
+    CHECK(worn);
 }
 
 TEST_CASE("usecase:100367 water a patch: a vessel of the gear port carries the litres of ase-equipment, every other piece none") {

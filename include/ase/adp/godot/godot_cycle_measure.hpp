@@ -73,9 +73,13 @@ bool cycle_measure_begin(CycleMeasure& measure, const ase::kernel::KernelEmbedde
 /**
  * The line of the cycle that just ended, written into `line`, and the cursors moved on:
  *
- *   cycle=<n> organs <word>=<count>... orders <order>=<count>... time_us <unit>@<schedule>=<us>/<runs>...
- *   time_us_cycle=<us> pss_kib=<kib|unknown>
+ *   cycle=<n> organs <word>=<count>... orders <order>=<count>... nodes <order>=<count>...
+ *   time_us <unit>@<schedule>=<us>/<runs>... time_us_cycle=<us> pss_kib=<kib|unknown>
  *
+ * nodes counts the internodes per branching order: the organ records that carry the bark value
+ * (GODOT_KEY_BARK), which only a segment record carries. The height of the shoot and its diameter at
+ * breast height are no part of this line; ase-phytomer measures them and the patch record carries
+ * them (shoot_m, dbh_m), beside which the measurement run prints the line.
  * Only a (unit, schedule) pair that took time in this cycle is named; time_us_cycle sums them all.
  * <runs> is how many passes of the schedule ran the unit in this cycle, so <us> over <runs> is the cost
  * of one pass: a schedule of 1 Hz that spent 70000 us in two passes stalls a frame, one of 30 Hz that

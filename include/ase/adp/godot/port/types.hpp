@@ -76,7 +76,6 @@ constexpr const char* GODOT_KEY_GRAVITY_REL = "gravity_rel";  // patch lay reque
 constexpr const char* GODOT_KEY_GROW_AT_H = "grow_at_h";      // patch record: game hour ase-plant forecasts CRESCENDO at (PLT_GROW_AT_H)
 constexpr const char* GODOT_KEY_MTUR_AT_H = "mtur_at_h";      // patch record: game hour ase-plant forecasts MADURA at (PLT_MTUR_AT_H)
 constexpr const char* GODOT_KEY_BASE_Y = "base_y";            // stem record: the stem foot ase-physics holds, metres above the level of its patch
-constexpr const char* GODOT_KEY_LOOSE_SHARE = "loose_share";  // loose record: the looseness of one cell of the soil's raster after the spade, 0..1, as the soil's owner keeps it (N0456)
 constexpr const char* GODOT_KEY_CELL_M = "cell_m";            // loose record: the edge of the cell, metres, the same for every cell of the raster (N0456)
 constexpr const char* GODOT_KEY_AUTUMN = "autumn";             // autumn record: the autumn colour of the individual of the patch (PHY_LEAF_AUTUMN, usecase:101646 colour the leaves in autumn), share 0 green at the start of autumn to 1 at its own leaf fall
 constexpr const char* GODOT_KEY_AMOUNT_MM = "amount_mm";      // irrigate request: water poured on the patch, mm

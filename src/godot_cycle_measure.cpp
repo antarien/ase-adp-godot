@@ -75,6 +75,16 @@ uint32_t order_of(const ase::kernel::KernelHostRecord& record) {
     return GODOT_MEASURE_ORDERS;
 }
 
+// Whether a record carries a value under a key: the bark value stands on an internode record alone.
+bool carries_key(const ase::kernel::KernelHostRecord& record, const char* key) {
+    for (uint32_t i = 0u; i < record.value_count; ++i) {
+        if (ase::utils::str_equal(record.values[i].key, key, ase::kernel::HostKeyBytes)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 bool cycle_measure_valid(const CycleMeasure& measure) {
@@ -120,6 +130,8 @@ bool cycle_measure_line(CycleMeasure& measure, ase::kernel::KernelEmbeddedHost& 
 
     // ORGANS: the records of every organ port, per class and per branching order.
     std::vector<uint64_t> per_order(GODOT_MEASURE_ORDERS + 1u, 0u);
+    // NODES: the internodes among them, per branching order - the records that carry the bark value.
+    std::vector<uint64_t> nodes(GODOT_MEASURE_ORDERS + 1u, 0u);
     std::vector<ase::kernel::KernelHostRecord> records;
     line += " organs";
     for (std::size_t p = 0u; p < measure.organ_ports.size(); ++p) {
@@ -130,6 +142,9 @@ bool cycle_measure_line(CycleMeasure& measure, ase::kernel::KernelEmbeddedHost& 
         line += " " + measure.organ_words[p] + "=" + std::to_string(records.size());
         for (const ase::kernel::KernelHostRecord& record : records) {
             per_order[order_of(record)] += 1u;
+            if (carries_key(record, GODOT_KEY_BARK)) {
+                nodes[order_of(record)] += 1u;
+            }
         }
     }
     line += " orders";
@@ -142,6 +157,17 @@ bool cycle_measure_line(CycleMeasure& measure, ase::kernel::KernelEmbeddedHost& 
     }
     if (per_order[GODOT_MEASURE_ORDERS] > 0u) {
         line += " none=" + std::to_string(per_order[GODOT_MEASURE_ORDERS]);
+    }
+    line += " nodes";
+    for (uint32_t order = 0u; order < GODOT_MEASURE_ORDERS; ++order) {
+        if (nodes[order] == 0u) {
+            continue;
+        }
+        line += " " + std::to_string(order) + (order + 1u == GODOT_MEASURE_ORDERS ? "+" : "") + "=" +
+                std::to_string(nodes[order]);
+    }
+    if (nodes[GODOT_MEASURE_ORDERS] > 0u) {
+        line += " none=" + std::to_string(nodes[GODOT_MEASURE_ORDERS]);
     }
 
     // COMPUTE TIME: the difference of every running total against its cursor. The cursors move

@@ -45,7 +45,7 @@ bool read_token(const UiTheme& theme, const char* name, double& out, std::string
 /** Reads the path data of the token `name` into `outlines`; false with the reason in `failed`. */
 bool read_glyph(const UiTheme& theme, const char* name, std::vector<UiSvgOutline>& outlines, std::string& failed) {
     ::godot::String text;
-    if (!theme.token_text(name, text)) {
+    if (!theme.token_text(name, text) || text.is_empty()) {
         failed = name;
         return false;
     }
@@ -150,6 +150,7 @@ void SurvivalAirMark::draw(UiPen& canvas, const ::godot::Transform2D& frame, dou
     word.at = at(word_x_, word_y_);
     word.size = word_size_;
     word.anchor = GODOT_TEXT_ANCHOR_START;
+    word.bare = true;  // s.html T writes class o.c without sh: no outline
     word.color = alert_;
     word.opacity = 1.0;
     word.fade = true;

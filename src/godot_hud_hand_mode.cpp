@@ -154,7 +154,7 @@ HandMode::VerbChip* HandMode::chip(const std::string& verb, std::string& failed)
         failed = "DOMAIN_" + code;
         return nullptr;
     }
-    if (!theme_->token_text(stem + GODOT_HUD_VERB_OP_TAIL, text)) {
+    if (!theme_->token_text(stem + GODOT_HUD_VERB_OP_TAIL, text) || text.is_empty()) {
         failed = stem + GODOT_HUD_VERB_OP_TAIL;
         return nullptr;
     }

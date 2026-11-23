@@ -50,6 +50,9 @@ using test::figure_environment;
 using test::figure_of;
 using test::frames_carry;
 using test::kFigureBoundFrames;
+using test::kFigureEyeHeight;
+using test::kFigureHeight;
+using test::kFigureRadius;
 using test::the_figure;
 
 namespace {
@@ -178,6 +181,11 @@ TEST_CASE("07-G RAND DES AREALS: a bound figure led against a chunk border stops
     // Unbound, the figure has no area and so no rim: the camera record carries edge 0.
     CHECK_FALSE(resources.get_figure_camera().edge);
 
+    // The Godot host measures the skeleton of every figure it spawns; this executable stands in for it. The rim
+    // mark is the mark of ase-physics (HUB_PHYS_STAND_BNDY), and ase-physics holds only a body with a capsule.
+    CHECK(resources.measure_figure(object_id, kFigureEyeHeight, kFigureHeight, kFigureRadius) ==
+          ase::kernel::HostStatusOk);
+
     // Bound to the plate of place 1, the figure walks inside the chunk borders of the loaded ase-gis raster
     // (HUB_GIS_GRND, CAUSA_ASE_GIS B0541). The stick leads it forward at run speed; at the border ase-physics holds
     // the walking body and files the bump, ase-player sets the figure back onto the rim (PlayerSimBndySystem), and
@@ -200,11 +208,29 @@ TEST_CASE("07-G RAND DES AREALS: a bound figure led against a chunk border stops
     CHECK(bump->bumps > 0u);
     CHECK(std::fabs(bump->normal_x) + std::fabs(bump->normal_z) == doctest::Approx(1.0));
 
-    // On the axis of that edge the figure stands inside the touched border, within the margin of the rim; the
-    // stick still pushes, so it never crossed it.
+    // In the frame of the mark ase-physics holds the walking body where it stood: the step that would cross the border
+    // is refused, so the figure reads one run step short of the rim (2 m a frame, never beyond the touch). ase-player
+    // takes the answer of ase-physics in the Reception of the next tick (PlayerHubStndSyncSystem, CAUSA_ASE_PHYSICS)
+    // and only then sets the figure onto the rim (PlayerSimBndySystem, PlayerWalkRplcTag); the body port carries that
+    // place one frame later. The views of both ports are copies the next frame replaces, so the touch is kept first.
     const VivariumFigureView* held = figure_of(resources, object_id);
     REQUIRE(held != nullptr);
-    const double inward = (bump->touch_x - held->x) * bump->normal_x + (bump->touch_z - held->z) * bump->normal_z;
+    const double touch_x = bump->touch_x;
+    const double touch_z = bump->touch_z;
+    const double normal_x = bump->normal_x;
+    const double normal_z = bump->normal_z;
+    const double held_inward = (touch_x - held->x) * normal_x + (touch_z - held->z) * normal_z;
+    MESSAGE("07-G rim · touch " << touch_x << " " << touch_z << " · normal " << normal_x << " " << normal_z
+                                << " · held figure " << held->x << " " << held->z << " · inward " << held_inward);
+    CHECK(held_inward >= 0.0);  // the held body never crossed the touched border
+
+    // On the axis of that edge the set-back figure stands inside the touched border, within the margin of the rim;
+    // the stick still pushes, so it never crossed it.
+    advance_frames(resources, 1u);
+    const VivariumFigureView* set_back = figure_of(resources, object_id);
+    REQUIRE(set_back != nullptr);
+    const double inward = (touch_x - set_back->x) * normal_x + (touch_z - set_back->z) * normal_z;
+    MESSAGE("07-G rim · set back · figure " << set_back->x << " " << set_back->z << " · inward " << inward);
     CHECK(inward >= 0.0);
     CHECK(inward <= kFigureRimSlack);
     CHECK(resources.steer_figure(object_id, 0.0, 0.0, 0.0, 0.0) == ase::kernel::HostStatusOk);

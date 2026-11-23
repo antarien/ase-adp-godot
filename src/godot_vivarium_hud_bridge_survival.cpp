@@ -82,7 +82,8 @@ bool graded_toxic(const VivariumSurvivalFireView& cell, bool& toxic) {
 
 bool VivariumView::load_hud_bridge_survival(const UiTheme& theme) {
     // hud_bridge_survival_* of SHA (N0530): the mockup's body of the figure for the rail CORPO; every row counts, the
-    // levels lie within the rail's full level (hud_survival_rail_level_full), stress and fatigue are shares.
+    // levels lie within the rail's full level (hud_survival_rail_level_full), stress and fatigue are shares; health
+    // stands on the full level like the mockup's 64 and is filed as the share its owner MTB_HEALTH carries.
     std::string failed;
     double level_full = 0.0;
     if (!theme.measure("hud_survival_rail_level_full", level_full) || !(level_full > 0.0) ||
@@ -95,6 +96,7 @@ bool VivariumView::load_hud_bridge_survival(const UiTheme& theme) {
         !read_bridge_in(theme, "hud_bridge_survival_health", 0.0, level_full, hud_bridge_body_.health.value, failed)) {
         return fail_config("hud_bridge_survival_*: temp, temp_stress and fatigue 0..1, the levels 0..level_full");
     }
+    hud_bridge_body_.health.value /= level_full;
     hud_bridge_body_.temp.counts = true;
     hud_bridge_body_.hunger.counts = true;
     hud_bridge_body_.thirst.counts = true;

@@ -176,6 +176,21 @@ uint8_t VivariumStartChoice::tap(const ::godot::Vector2& point) {
     return GODOT_START_MODE_NONE;
 }
 
+bool VivariumStartChoice::take_begin_place(::godot::Vector2& centre, double& radius) {
+    if (!placed_) {
+        return false;
+    }
+    if (begin_announced_once_ && begin_announced_ == begin_at_.centre && begin_announced_radius_ == begin_at_.radius) {
+        return false;
+    }
+    begin_announced_once_ = true;
+    begin_announced_ = begin_at_.centre;
+    begin_announced_radius_ = begin_at_.radius;
+    centre = begin_at_.centre;
+    radius = begin_at_.radius;
+    return true;
+}
+
 uint8_t VivariumStartChoice::chosen() const {
     if (!offline_chosen_) {
         return GODOT_START_MODE_ONLINE;
@@ -206,6 +221,10 @@ bool VivariumView::start_input(const ::godot::Ref<::godot::InputEvent>& local) {
     node_->get_viewport()->set_input_as_handled();
     // The chips stand in mockup units under start_frame_, the frame the last start screen drew them with.
     const uint8_t mode = start_choice_.tap(start_frame_.affine_inverse().xform(at));
+    // EVERY TAP OF THE START SCREEN IS NAMED, a miss as well (mode 0): a run that taps the start chip tells a tap
+    // that never arrived from one that landed beside the chip by this line, at the logical place it arrived.
+    note(::godot::String("start tap x=") + ::godot::String::num(at.x, 1) + " y=" + ::godot::String::num(at.y, 1) +
+         " mode=" + ::godot::String::num_int64(static_cast<int64_t>(mode)));
     if (mode != GODOT_START_MODE_NONE) {
         begin_host(mode);
     }
@@ -250,6 +269,16 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
             ::godot::Vector2 anchor = start_frame_.affine_inverse().xform(line);
             UiPen pen(*node_);
             start_choice_.draw(pen, start_frame_, anchor, hud_clock_, hud_still_);
+            // The start chip on the canvas, in the logical pixels a tap arrives in (start_input carries it back
+            // under start_frame_): named once per new place, so a run that starts the world by tapping it, as the
+            // keeper does, reads where it stands instead of guessing it (usecase:100387).
+            ::godot::Vector2 begin_centre;
+            double begin_radius = 0.0;
+            if (start_choice_.take_begin_place(begin_centre, begin_radius)) {
+                const ::godot::Vector2 at = start_frame_.xform(begin_centre);
+                note(::godot::String("start choice begin x=") + ::godot::String::num(at.x, 1) + " y=" +
+                     ::godot::String::num(at.y, 1) + " r=" + ::godot::String::num(begin_radius * k, 1));
+            }
         }
     } else {
         // The loading line is the anchor, and every gap is measured from its glyph box, never from its

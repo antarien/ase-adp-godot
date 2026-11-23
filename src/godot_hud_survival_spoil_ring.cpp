@@ -113,6 +113,7 @@ void SurvivalSpoilRing::draw(UiPen& canvas, const ::godot::Transform2D& frame, d
     word.at = at(word_x_, word_y_);
     word.size = word_size_;
     word.anchor = GODOT_TEXT_ANCHOR_MIDDLE;
+    word.bare = true;  // s.html T writes class o.c without sh: no outline
     word.color = ground_;
     word.opacity = 1.0;
     word.fade = true;

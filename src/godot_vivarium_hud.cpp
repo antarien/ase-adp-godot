@@ -62,6 +62,21 @@ namespace {
 // reaches a higher stage; {stage} is the word texts.hud.stages.<n> of the stage reached.
 constexpr const char* HUD_TOAST_NEW_STAGE = "toast.new_stage";
 constexpr const char* HUD_WORD_STAGE = "stages.";
+
+/**
+ * The states the survival layer of `frame` draws by, as the line `hud survival ...` (U0245): the rest card (U05),
+ * the four signs of the rail SINAIS (U02), the air mark (U06), the food of the bag and whether its spoil stands above
+ * 0, the boundary the ring ESTRAGO draws a bow from (U07); the turbid drop of U08 follows poisoned. Every field is a
+ * flag, so the line changes only on an edge of a state, never per tick.
+ */
+std::string survival_line(const VivariumHudFrame& frame) {
+    const auto bit = [](bool on) { return on ? "1" : "0"; };
+    const SurvivalBodyFrame& body = frame.body;
+    return std::string("hud survival resting=") + bit(frame.rest.shown) + " sleeping=" + bit(frame.rest.sleeping) +
+           " poisoned=" + bit(body.poisoned) + " bleeding=" + bit(body.bleeding) + " emaciated=" +
+           bit(body.emaciated) + " well_rested=" + bit(body.well_rested) + " toxic=" + bit(frame.air.toxic) +
+           " food=" + bit(frame.food.shown) + " spoiling=" + bit(frame.food.shown && frame.food.spoil > 0.0);
+}
 }  // namespace
 
 bool VivariumView::hud_live() const {
@@ -255,21 +270,27 @@ bool VivariumView::fill_hud(std::string& failed) {
     // The past events of the trail on arrival and the ring's dots: flora.trail.v1 files none yet, so the bridge
     // writes the mockup's S.log (N0450, bridge_trail).
     bridge_trail(hud_now_.trail, sheet.year);
-    // The body of the figure for the rail CORPO: no host port reports its MTB_* yet, so the bridge writes the
-    // mockup's body (N0530, bridge_body).
+    // The body of the figure for the rail CORPO from survival.body.v1 of the seat's figure; without its record the
+    // bridge writes the mockup's body under its gap (N0530, bridge_body).
     bridge_body(hud_now_.body);
-    // The camp fire for the card FOGUEIRA: the adapter reads no ingle.fire.v1 yet, so the bridge writes the mockup's
-    // camp fire (B0657, bridge_fire).
+    // The camp fire for the card FOGUEIRA from ingle.fire.v1; without a record the bridge writes the mockup's camp
+    // fire under its gap (B0657, bridge_fire).
     bridge_fire(hud_now_.fire);
     // The figure's rest for the rest card: survival.rest.v1 lays is_resting and sleeping of the seat's figure; while
     // no record carries them the bridge writes the mockup's resting figure (N0530, N0555, bridge_rest).
     bridge_rest(hud_now_.rest);
-    // The owner's grade of the air for the mark AR TÓXICO: ingle.fire.v1 lays the GLOBAL grade with every fire cell,
-    // the grade at the figure's own cell waits for survival.body.v1 (N0530, bridge_air).
+    // The owner's grade of the air at the figure's cell for the mark AR TÓXICO from the breath of survival.body.v1;
+    // without it the bridge writes the mockup's air under its gap (N0530, bridge_air).
     bridge_air(hud_now_.air);
-    // The spoil of the bag's food for the ring ESTRAGO: no port lays it, so the bridge writes the mockup's food of
-    // the bag (N0530, bridge_food).
+    // The spoil of the bag's food for the ring ESTRAGO from survival.food.v1; without the port the bridge writes the
+    // mockup's food of the bag under its gap (N0530, bridge_food).
     bridge_food(hud_now_.food);
+    // The states of the frames just written, logged on their edges for the acceptance (survival_line, U0245).
+    const std::string survival = survival_line(hud_now_);
+    if (survival != survival_watch_.line) {
+        survival_watch_.line = survival;
+        note(::godot::String(survival.c_str()));
+    }
     sheet.day.vec = band.vec;
     sheet.day.lun = band.lun;
     sheet.day.tum = band.tum;

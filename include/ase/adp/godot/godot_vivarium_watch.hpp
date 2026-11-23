@@ -103,6 +103,16 @@ struct VivariumGroundWatch {
 };
 
 /**
+ * The survival states the HUD last logged (U0245): the rest card, the four signs of the rail SINAIS, the air mark,
+ * the food of the bag and whether its spoil stands above 0, as the line `hud survival ...` that tick_hud writes on
+ * every edge of one of them (godot_vivarium_hud.cpp). vivarium_acceptance.py waits on that line to lay the picture
+ * of rows U02 and U05 to U08 in their state; the record only keeps the line from repeating every frame.
+ */
+struct VivariumSurvivalWatch {
+    std::string line;  // the last `hud survival ...` line logged; empty = none yet
+};
+
+/**
  * The CPU time the calling thread has spent, in microseconds (CLOCK_THREAD_CPUTIME_ID). Held against the wall clock
  * of the same span it says how much of the span the thread computed and how much it waited for a core (P0690: on a
  * host whose load exceeds its cores a frame's interval grows while its work stays the same).
