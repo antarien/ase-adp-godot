@@ -47,17 +47,20 @@ struct VivariumLodView {
     double cnpy = 0.0;   // RND_CONST_LOD_LEVEL_CNPY: the level of the canopy
 };
 
-/** How much of a plant the drawn body and how much its view card show: 1 fully, 0 not at all. */
+/** How much of a plant each of its four forms shows: 1 fully, 0 not at all. The four always add up to one. */
 struct PlantLevelShare {
-    float body = 1.0f;  // share of the drawn body: its bark tubes and its instance nodes
-    float card = 0.0f;  // share of the view card (GODOT_PLANT_IMPOSTOR)
+    float body = 1.0f;    // share of the drawn body (LOD 0 to 2): its bark tubes and its instance nodes
+    float card = 0.0f;    // share of the view card (LOD 3, GODOT_PLANT_IMPOSTOR)
+    float tile = 0.0f;    // share of the billboard tile (LOD 4, GODOT_PLANT_BILLBOARD), drawn from the view card
+    float canopy = 0.0f;  // share of the canopy of the whole (LOD 5): no form of the individual is drawn
 };
 
 /**
- * The share of body and card for the level `lod` of a plant. No record (nullptr): the body is not graded and is drawn
- * whole. A level at or above the view level: the card stands in whole. The level just below the view level hands its
- * fade over to the card, so body and card cross over in the dither band of ase-render-data. Every finer level draws
- * the body whole.
+ * The share of the four forms for the level `lod` of a plant. No record (nullptr): the body is not graded and is
+ * drawn whole. Below the view level the body is drawn; at the view level the card stands in, at the tile level the
+ * billboard, from the canopy level on the individual is part of the canopy. A level whose next coarser level draws
+ * another form hands its fade over to that form, so two forms cross over in the dither band of ase-render-data and
+ * the shares always add up to one.
  */
 PlantLevelShare level_share(const VivariumLodView* lod);
 

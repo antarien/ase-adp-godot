@@ -57,5 +57,10 @@ constexpr const char* GODOT_KEY_LOD_TILE = "lod_tile";    // level record: RND_C
 constexpr const char* GODOT_KEY_LOD_CNPY = "lod_cnpy";    // level record: RND_CONST_LOD_LEVEL_CNPY, the level of the canopy
 constexpr double GODOT_LOD_CODE_STEP = 1.0;               // distance of two neighbouring codes of RND_CONST_LOD_LEVEL_*: FULL 0 to CNPY 5 follow each other by one (hub_constants.json), so the level whose fade leads into the view level lies one step below it
 constexpr uint32_t GODOT_PLANT_DRAWN_PARTS = 7u;          // drawing nodes of a plant whose share the level sets: the fine and the coarse bark tube and the five instance nodes (leaves, coarse leaves, male, female, fruit)
+constexpr const char* GODOT_PLANT_BILLBOARD = "Billboard";            // node name: the billboard of the individual (LOD 4), a Sprite3D turning about y to the camera like the view card
+constexpr const char* GODOT_PLANT_BILLBOARD_VIEW = "BillboardView";   // node name: the 2D viewport that draws the billboard tile from the texture of the view card
+constexpr const char* GODOT_PLANT_BILLBOARD_FRAME = "BillboardFrame"; // node name: the TextureRect in the billboard viewport that shows the view card texture over the whole tile
+constexpr int32_t GODOT_PLANT_BILLBOARD_WIDTH = 16;       // pixels: width of the billboard tile of LOD 4 (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN, Detailstufen: a tile of 16 x 32 pixels drawn from the view card)
+constexpr int32_t GODOT_PLANT_BILLBOARD_HEIGHT = 32;      // pixels: height of the billboard tile of LOD 4
 
 }  // namespace ase::adp::godot
