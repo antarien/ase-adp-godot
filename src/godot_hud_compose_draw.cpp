@@ -174,7 +174,7 @@ bool VivariumHud::draw_layer(UiPen& canvas, const ::godot::Transform2D& frame, c
     }
     if (layer == LAYER_SYSTEM) {
         SystemRingFrame ring;
-        ring.held = press_.system ? now.clock - press_.clock : 0.0;
+        ring.held = press_.system_held;  // the seconds tick measures ASK_RESET on: the arc closes as it fires
         ring.elapsed = wall_ - replay_.since();
         ring.still = now.still;
         ring.cover = now.cover;

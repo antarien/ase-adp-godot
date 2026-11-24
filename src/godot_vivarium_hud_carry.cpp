@@ -398,6 +398,16 @@ bool VivariumCarryBridge::engine_fill(const std::vector<VivariumFigureGearView>&
         can->mm_per_l = piece.mm_per_l;
         return true;
     }
+    // A CAN THE OWNER HAS NOT NAMED YET HOLDS NOTHING EITHER. The piece is loaned in the tick after the hold
+    // (EquipmentHubSlotSyncSystem), so a press before that read the 2 L of the design tokens and the release filed a
+    // litre the owner never gave (run 1124-ui-hud-n: pressed at 13.682, loaned at 14.304, poured at 15.179). A can once
+    // named keeps the owner's last level while it is off the body.
+    if (engine_water_l_ < 0.0) {
+        Carried* can = find(can_item_);
+        if (can != nullptr) {
+            can->fill_l = 0.0;
+        }
+    }
     return false;
 }
 

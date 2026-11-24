@@ -165,7 +165,7 @@ public:
      * kind is the can item (name_id of hud_bridge_hand_can_item) gives its water_l to the carried can, each time that
      * level changes; it is the only writer of the can's fill. A fill and a pour of the player (fill and drain ports)
      * or of the AI all show here. `rose_to` is the new level when it rose against the last snapshot, else below 0.
-     * False while no such vessel stands.
+     * False while no such piece stands; until the first one the carried can holds 0 litres, never the tokens' fill.
      */
     bool engine_fill(const std::vector<VivariumFigureGearView>& gear, double& rose_to);
 

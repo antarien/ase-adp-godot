@@ -53,7 +53,6 @@ bool VivariumHud::press(const ::godot::Vector2& point, const VivariumHudFrame& n
     press_ = HudPress{};
     press_.down = true;
     press_.at = point;
-    press_.clock = clock;
     press_.wall = wall_;
     press_.hit = hit(point, now);
     const char* act = press_.hit.act;
@@ -248,7 +247,17 @@ bool VivariumHud::tick(double clock, double real, VivariumHudFrame& now, std::ve
         pour.point = press_.at;
         out.push_back(pour);
     }
-    if (press_.system && system_.full(clock - press_.clock)) {
+    // THE RING COUNTS REAL SECONDS TOO: its sentence promises SEGURE 1,5 S, and at two frames a second a hold of 9 s
+    // reached 0.9 s on the clock capped at hud_frame_dt_max and never reset (run 1124-ui-hud-n, 18 frames in the hold).
+    // The first frame after the press began before it: only the frames after it lie wholly inside the hold, so a hold
+    // shorter than the token never resets.
+    if (press_.system) {
+        if (press_.system_ticked) {
+            press_.system_held += ase::math::max(real, 0.0);
+        }
+        press_.system_ticked = true;
+    }
+    if (press_.system && system_.full(press_.system_held)) {
         press_ = HudPress{};
         VivariumHudRequest reset;
         reset.kind = VivariumHudRequest::ASK_RESET;

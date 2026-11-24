@@ -92,6 +92,7 @@ bool VivariumCarryBridge::load(const UiTheme& theme, std::string& failed) {
     carried_.clear();
     rack_placed_ = false;
     next_order_ = 0;
+    engine_water_l_ = -1.0;  // no gear snapshot of the new host applied yet: the can holds nothing until its owner names it
 
     // The rules of fits(), wt(), layAt() and stow(), and the tool place.
     const char* rule_keys[] = {"hud_bridge_belt_len_cm",    "hud_bridge_fill_kg_per_l",   "hud_bridge_sap_kg_per_l",
