@@ -42,6 +42,8 @@
  * [ ] NO structs (structs belong in Components)
  */
 
+#include <cstdint>
+
 namespace ase::adp::godot {
 
 /**
@@ -54,5 +56,6 @@ constexpr const char* GODOT_KEY_LOD_VIEW = "lod_view";    // level record: RND_C
 constexpr const char* GODOT_KEY_LOD_TILE = "lod_tile";    // level record: RND_CONST_LOD_LEVEL_TILE, the level of the billboard
 constexpr const char* GODOT_KEY_LOD_CNPY = "lod_cnpy";    // level record: RND_CONST_LOD_LEVEL_CNPY, the level of the canopy
 constexpr double GODOT_LOD_CODE_STEP = 1.0;               // distance of two neighbouring codes of RND_CONST_LOD_LEVEL_*: FULL 0 to CNPY 5 follow each other by one (hub_constants.json), so the level whose fade leads into the view level lies one step below it
+constexpr uint32_t GODOT_PLANT_DRAWN_PARTS = 7u;          // drawing nodes of a plant whose share the level sets: the fine and the coarse bark tube and the five instance nodes (leaves, coarse leaves, male, female, fruit)
 
 }  // namespace ase::adp::godot

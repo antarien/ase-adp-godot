@@ -12,10 +12,12 @@
  *              GODOT_PLANT_LEAVES_CORS). Each of them reads the very mesh, instance buffer and material resource
  *              the plant node was just filled with - no value is taken over, the resource is the same object - so
  *              the viewport draws the body exactly as the scene does, the closing of thin rings included. It draws
- *              once each time the plant is filled, which is when a body ticked or the shown orders moved. Where the
- *              card takes over (impostor_of, godot_plant_impostor.hpp) the drawing nodes of the plant end their
- *              visibility range and the card begins its own: the body is either drawn or stood in for, never both
- *              and never neither.
+ *              once each time the plant is filled, which is when a body ticked or the shown orders moved. WHEN the
+ *              card takes over is the graded level of ase-render-data (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10,
+ *              usecase:101657 grade plants by picture height, flora.lod.v1): show_plant_share sets the drawing
+ *              nodes and the card by the share level_share gives, every frame, so the body and the card cross over
+ *              in the dither band of ase-render-data and are never both whole and never both gone. The reach of
+ *              impostor_of (godot_plant_impostor.hpp) only sizes the texture.
  *
  *              The viewport draws without light (DEBUG_DRAW_UNSHADED, the albedo of the materials) and with a clear
  *              background; the card is shaded, so the sun and the sky of the scene light it like the plant beside it.
@@ -28,7 +30,7 @@
  * @actor       Scene Graph Culler (SCENGRACUL)
  * @created     2026-11-13
  * @modified    2026-11-24
- * @version     00.00.21.00021 [init]
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -37,6 +39,8 @@
 
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_plant_impostor.hpp>
+#include <ase/adp/godot/lod/godot_plant_level_scene.hpp>
+#include <ase/adp/godot/lod/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
@@ -49,6 +53,7 @@
 #include <godot_cpp/classes/sprite3d.hpp>
 #include <godot_cpp/classes/sprite_base3d.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
+#include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/core/memory.hpp>
@@ -60,6 +65,27 @@
 #include <cstdint>
 
 namespace ase::adp::godot {
+
+namespace {
+
+// the seven drawing nodes of a plant; the bark draws through the two tubes below its node (register B0317), so
+// their paths run through it
+void drawn_parts(::godot::NodePath (&parts)[GODOT_PLANT_DRAWN_PARTS]) {
+    const ::godot::String bark = ::godot::String(GODOT_PLANT_BARK) + ::godot::String("/");
+    const char* const instanced[] = {
+        GODOT_PLANT_LEAVES, GODOT_PLANT_LEAVES_CORS, GODOT_PLANT_MALE, GODOT_PLANT_FEMALE, GODOT_PLANT_FRUIT};
+    uint32_t at = 0u;
+    for (const char* tube : {GODOT_PLANT_TUBES, GODOT_PLANT_TWIGS}) {
+        parts[at] = ::godot::NodePath(bark + ::godot::String(tube));
+        ++at;
+    }
+    for (const char* part : instanced) {
+        parts[at] = ::godot::NodePath(part);
+        ++at;
+    }
+}
+
+}  // namespace
 
 void make_impostor(::godot::Node3D* plant) {
     if (plant == nullptr) {
@@ -105,24 +131,11 @@ void fill_impostor(::godot::Node3D* plant, const PlantImpostorFrame& frame) {
     if (plant == nullptr) {
         return;
     }
+    // the card gets a texture when the body has a ring to measure (a reach) and a size; WHEN it stands in is the
+    // level of ase-render-data (show_plant_share), never the reach - the reach only sizes the texture
     const bool stood_in = frame.reach > 0.0f && frame.height > 0.0f && frame.texture_height > 0u;
-    // the drawing nodes end where the card begins; without a card they draw at every distance (an end of 0)
-    // the bark draws through the two tubes below its node (register B0317), so their paths run through it
-    const ::godot::String bark = ::godot::String(GODOT_PLANT_BARK) + ::godot::String("/");
-    const ::godot::NodePath parts[] = {::godot::NodePath(bark + ::godot::String(GODOT_PLANT_TUBES)),
-                                       ::godot::NodePath(bark + ::godot::String(GODOT_PLANT_TWIGS)),
-                                       ::godot::NodePath(GODOT_PLANT_LEAVES),
-                                       ::godot::NodePath(GODOT_PLANT_LEAVES_CORS),
-                                       ::godot::NodePath(GODOT_PLANT_MALE),
-                                       ::godot::NodePath(GODOT_PLANT_FEMALE),
-                                       ::godot::NodePath(GODOT_PLANT_FRUIT)};
-    for (const ::godot::NodePath& part : parts) {
-        ::godot::GeometryInstance3D* drawn =
-            ::godot::Object::cast_to<::godot::GeometryInstance3D>(plant->get_node_or_null(part));
-        if (drawn != nullptr) {
-            drawn->set_visibility_range_end(stood_in ? frame.reach : 0.0f);
-        }
-    }
+    ::godot::NodePath parts[GODOT_PLANT_DRAWN_PARTS];
+    drawn_parts(parts);
     ::godot::Sprite3D* card =
         ::godot::Object::cast_to<::godot::Sprite3D>(plant->get_node_or_null(::godot::NodePath(GODOT_PLANT_IMPOSTOR)));
     ::godot::SubViewport* view = ::godot::Object::cast_to<::godot::SubViewport>(
@@ -131,6 +144,7 @@ void fill_impostor(::godot::Node3D* plant, const PlantImpostorFrame& frame) {
         return;
     }
     if (!stood_in) {
+        card->set_texture(::godot::Ref<::godot::Texture2D>());
         card->set_visible(false);
         view->set_update_mode(::godot::SubViewport::UPDATE_DISABLED);
         return;
@@ -173,8 +187,32 @@ void fill_impostor(::godot::Node3D* plant, const PlantImpostorFrame& frame) {
     card->set_texture(view->get_texture());
     card->set_pixel_size(frame.height / static_cast<float>(frame.texture_height));
     card->set_position(::godot::Vector3(frame.centre_x, frame.centre_y, frame.centre_z));
-    card->set_visibility_range_begin(frame.reach);
-    card->set_visible(true);
+}
+
+void show_plant_share(::godot::Node3D* plant, const PlantLevelShare& share) {
+    if (plant == nullptr) {
+        return;
+    }
+    // the body fades out by the share it handed over: transparency 1 - body, hidden where nothing of it is left
+    ::godot::NodePath parts[GODOT_PLANT_DRAWN_PARTS];
+    drawn_parts(parts);
+    for (const ::godot::NodePath& part : parts) {
+        ::godot::GeometryInstance3D* drawn =
+            ::godot::Object::cast_to<::godot::GeometryInstance3D>(plant->get_node_or_null(part));
+        if (drawn != nullptr) {
+            drawn->set_visible(share.body > 0.0f);
+            drawn->set_transparency(1.0f - share.body);
+        }
+    }
+    // the card shows by the share handed to it, and only with a texture fill_impostor prepared
+    ::godot::Sprite3D* card =
+        ::godot::Object::cast_to<::godot::Sprite3D>(plant->get_node_or_null(::godot::NodePath(GODOT_PLANT_IMPOSTOR)));
+    if (card == nullptr) {
+        return;
+    }
+    const bool textured = card->get_texture().is_valid();
+    card->set_visible(textured && share.card > 0.0f);
+    card->set_transparency(1.0f - share.card);
 }
 
 }  // namespace ase::adp::godot

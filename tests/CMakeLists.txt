@@ -108,7 +108,7 @@ endif()
 # manager it drives: a .cpp whose name carries resource_manager is a resource manager implementation
 # (file_types.json, resource_mgr_impl). Each target writes its own log file - ABSOLUTE, like the
 # user:// path the node hands over - so no run rotates the file of another.
-foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap)
+foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap lod)
     if(_adp_godot_bundle_test STREQUAL "host")
         set(_adp_godot_bundle_source test_godot_host.cpp)
     else()
@@ -139,7 +139,7 @@ foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap)
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor templates capscale stand binding ground figlayout hold water waterpit waterband waterkinds keeper focus seed exposure window context signs chips pose showcase)
+foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor level templates capscale stand binding ground figlayout hold water waterpit waterband waterkinds keeper focus seed exposure window context signs chips pose showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
@@ -160,6 +160,8 @@ foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke 
         set(_adp_godot_pure_source test_godot_knot_store.cpp)  # usecase:101613 show the plant bark tubes, N0543
     elseif(_adp_godot_pure_test STREQUAL "impostor")
         set(_adp_godot_pure_source test_godot_plant_impostor.cpp)  # usecase:101613, the card of a far body
+    elseif(_adp_godot_pure_test STREQUAL "level")
+        set(_adp_godot_pure_source test_godot_plant_level.cpp)  # usecase:101657 grade plants by picture height, B0897
     elseif(_adp_godot_pure_test STREQUAL "templates")
         set(_adp_godot_pure_source test_godot_plant_templates.cpp)
     elseif(_adp_godot_pure_test STREQUAL "capscale")

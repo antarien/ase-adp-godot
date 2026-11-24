@@ -80,6 +80,7 @@ add_library(ase-adp-godot-host STATIC
     src/tube/godot_tube_bend.cpp     # the intermediate rings of a bent piece on the Hermite curve (usecase:101643 ring the tubes by curvature)
     src/tube/godot_tube_ring.cpp     # one ring with the corners K of its axis and the K a knot walks down to (usecase:101644 count ring corners by size)
     src/godot_plant_impostor.cpp     # from where a far body is drawn as its card, and the size of card and texture (usecase:101613, B0295 point 4)
+    src/godot_plant_level.cpp        # the share of body and view card by the graded level of ase-render-data (usecase:101657 grade plants by picture height, B0897)
     src/godot_plant_templates.cpp    # the organ templates from the template ports (usecase:101342 hand organ shapes to app, 03.11)
     src/godot_cap_scale.cpp          # the scale of a fruit body to its cap radius and the cap role and node of a species (usecase:101362 scale the organ templates, B0605)
     src/godot_plant_ground.cpp       # the ground mesh and the marks of its shader (usecase:101339 show the ground around plant, 03.8)
@@ -186,6 +187,9 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/cap/types.hpp       # the cap port key, the cap role and the cap node of a fruit body (usecase:101362 scale the organ templates, B0605)
     include/ase/adp/godot/cap/godot_plant_cap.hpp  # the cap template bound, scaled to the cap radius and drawn at the stem base (usecase:101362 scale the organ templates, B0605)
     include/ase/adp/godot/cap/godot_cap_scale.hpp  # cap_scale, cap_role_of, cap_species_of, cap_node_of without a Godot type (usecase:101362 scale the organ templates, B0605)
+    include/ase/adp/godot/lod/types.hpp       # the level port keys, the code step and the drawn parts of a plant (usecase:101657 grade plants by picture height, B0897)
+    include/ase/adp/godot/lod/godot_host_lod_view.hpp  # VivariumLodView and level_share without a Godot type (usecase:101657 grade plants by picture height, B0897)
+    include/ase/adp/godot/lod/godot_plant_level_scene.hpp  # show_plant_levels and show_plant_share, body or card by the level (usecase:101657 grade plants by picture height, B0897)
     include/ase/adp/godot/godot_plant_ground.hpp
     include/ase/adp/godot/godot_plant_water.hpp
     include/ase/adp/godot/godot_scene_exposure.hpp

@@ -110,6 +110,7 @@
 #include <ase/adp/godot/godot_salt_records.hpp>
 #include <ase/adp/godot/godot_terrain_samples.hpp>
 #include <ase/adp/godot/cap/types.hpp>
+#include <ase/adp/godot/lod/types.hpp>
 #include <ase/adp/godot/host/types.hpp>
 #include <ase/adp/godot/loose/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
@@ -2627,6 +2628,7 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     patches_.clear();
     places_.clear();
     caps_.clear();
+    lods_.clear();
     clock_ = VivariumClockView{};
     weather_ = VivariumWeatherView{};
     sap_ = VivariumSapView{};
@@ -2998,13 +3000,6 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         // the autumn colour of the individual stands on the autumn port, read below (usecase:101646 colour the
         // leaves in autumn); until its record for this patch is read it is not measured
         view.autumn = std::nan("");
-        // the graded level of the plant body stands on the level port, read below (usecase:101657 grade plants by
-        // picture height); until its record for this patch is read the body is not graded
-        view.lod_level = std::nan("");
-        view.lod_fade = std::nan("");
-        view.lod_view = std::nan("");
-        view.lod_tile = std::nan("");
-        view.lod_cnpy = std::nan("");
         // the stem base: x and z from the lay request, y once ase-terrain levelled the disc (03.11)
         view.x = record_value(record, GODOT_KEY_X);
         view.y = record_value(record, GODOT_KEY_Y);
@@ -3176,7 +3171,9 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     // PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10): ase-pl-flora files one record per patch whose plant body is graded,
     // its object id the patch, the level, the share handed over to the next coarser level and the codes of the view
     // card, the billboard and the canopy. A patch without such a record is not graded and draws its body; a record
-    // that names no patch of the patch port, or carries a value that is not finite, is a broken port.
+    // that names no patch of the patch port, or carries a value that is not finite, is a broken port. The level is
+    // kept beside the patch (lods_), never in its view: the patch view header reaches over a hundred units.
+    lods_.clear();
     status = snapshot_all(*host_, config_.lod_port, records_, written);
     if (status != ase::kernel::HostStatusOk) {
         patches_.clear();
@@ -3186,11 +3183,11 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     }
     for (uint32_t i = 0u; i < written; ++i) {
         const KernelHostRecord& record = records_[i];
-        const auto found = patches_.find(record.object_id);
-        if (found == patches_.end()) {
+        if (patches_.find(record.object_id) == patches_.end()) {
             patches_.clear();
             places_.clear();
             caps_.clear();
+            lods_.clear();
             return refuse_record(*host_, config_.lod_port, record.object_id, "level of no patch");
         }
         const double level = record_value(record, GODOT_KEY_LOD_LEVEL);
@@ -3203,13 +3200,16 @@ HostStatus GodotHostResourceManager::read_snapshot() {
             patches_.clear();
             places_.clear();
             caps_.clear();
+            lods_.clear();
             return refuse_record(*host_, config_.lod_port, record.object_id, "level without its five values");
         }
-        found->second.lod_level = level;
-        found->second.lod_fade = fade;
-        found->second.lod_view = view;
-        found->second.lod_tile = tile;
-        found->second.lod_cnpy = cnpy;
+        VivariumLodView lod;
+        lod.level = level;
+        lod.fade = fade;
+        lod.view = view;
+        lod.tile = tile;
+        lod.cnpy = cnpy;
+        lods_[record.object_id] = lod;
     }
 
     std::vector<KernelHostRecord> clock_records(1u);
@@ -5543,6 +5543,10 @@ const VivariumPatchView* GodotHostResourceManager::get_patch_at(uint32_t place) 
     return found == places_.end() ? nullptr : get_patch(found->second);
 }
 
+const std::unordered_map<uint32_t, VivariumLodView>& GodotHostResourceManager::get_lods() const {
+    return lods_;
+}
+
 const std::unordered_map<uint32_t, double>& GodotHostResourceManager::get_caps() const {
     return caps_;
 }
@@ -5981,6 +5985,7 @@ void GodotHostResourceManager::clear_all() {
     patches_.clear();
     places_.clear();
     caps_.clear();
+    lods_.clear();
     clock_ = VivariumClockView{};
     weather_ = VivariumWeatherView{};
     records_.clear();

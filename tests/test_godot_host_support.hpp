@@ -110,6 +110,9 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // The cap radii of the fruit bodies (usecase:101362 scale the organ templates): read_snapshot keeps them per
     // patch object id, so boot() asks the set for this port as well.
     config.cap_port = "flora.cap.v1";
+    // The graded levels of the plant bodies (usecase:101657 grade plants by picture height): read_snapshot keeps them
+    // per patch object id, so boot() asks the set for this port as well.
+    config.lod_port = "flora.lod.v1";
     config.clock_port = "flora.clock.v1";
     // The SURA date record (FloraHostClkExptSystem): snapshot() reads it beside the clock, so boot()
     // asks the set for this port as well.

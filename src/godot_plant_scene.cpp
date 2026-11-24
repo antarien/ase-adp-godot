@@ -13,7 +13,9 @@
  *              plant's node comes with its body and goes with it. Materials and organ template files are bound
  *              once (godot_plant_look.hpp); a fill only hands the bound resources on. Soil water and condition
  *              go to the ground and leaf nodes as instance shader parameters every frame (mark_plant_stands):
- *              the value of the record, a Nil where it carried none. The bodies on the patch beside the plants -
+ *              the value of the record, a Nil where it carried none. Every frame show_plant_levels hands each plant
+ *              its share of body and view card by the level ase-render-data graded it to (flora.lod.v1,
+ *              usecase:101657 grade plants by picture height). The bodies on the patch beside the plants -
  *              seeds and the fruit bodies of the cap patches - stand in godot_plant_scene_patch.cpp; both units
  *              find their nodes and templates through godot_plant_scene_parts.hpp.
  *
@@ -49,6 +51,7 @@
 #include <ase/adp/godot/asset/types.hpp>
 #include <ase/adp/godot/cap/types.hpp>
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
+#include <ase/adp/godot/lod/godot_plant_level_scene.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 #include <ase/adp/godot/template/types.hpp>
@@ -341,6 +344,29 @@ void mark_plant_stands(::godot::Node3D* scene, const std::unordered_map<uint32_t
             // its own autumn colour (usecase:101646 colour the leaves in autumn): unknown hands the default back, the green
             hand_on(leaves, GODOT_SHADER_AUTUMN, stand.second.autumn_known, stand.second.autumn);
         }
+    }
+}
+
+void show_plant_levels(::godot::Node3D* scene, const std::unordered_map<uint32_t, VivariumLodView>& lods) {
+    ::godot::Node3D* bodies = part_of<::godot::Node3D>(scene, GODOT_PLANT_BODIES);
+    if (bodies == nullptr) {
+        return;
+    }
+    // every plant node, graded or not: a body without a record of the level port draws whole (level_share)
+    const int64_t prefix = ::godot::String(GODOT_PLANT_BODY_PREFIX).length();
+    const int32_t count = bodies->get_child_count();
+    for (int32_t i = 0; i < count; ++i) {
+        ::godot::Node3D* plant = ::godot::Object::cast_to<::godot::Node3D>(bodies->get_child(i));
+        if (plant == nullptr) {
+            continue;
+        }
+        const ::godot::String name = plant->get_name();
+        if (!name.begins_with(GODOT_PLANT_BODY_PREFIX)) {
+            continue;
+        }
+        const uint32_t body = static_cast<uint32_t>(name.substr(prefix).to_int());
+        const auto found = lods.find(body);
+        show_plant_share(plant, level_share(found == lods.end() ? nullptr : &found->second));
     }
 }
 

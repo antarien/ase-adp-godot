@@ -44,6 +44,7 @@
 #include <ase/adp/godot/godot_plant_leaf_season.hpp>
 #include <ase/adp/godot/godot_vivarium_scene_counts.hpp>
 #include <ase/adp/godot/cap/godot_plant_cap.hpp>
+#include <ase/adp/godot/lod/godot_plant_level_scene.hpp>
 #include <ase/adp/godot/host/types.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
@@ -274,6 +275,9 @@ void VivariumView::follow_scene(double elapsed_s) {
     const std::unordered_map<uint32_t, PlantStand> stands = plant_stands(patches);
     const auto ground = focused == nullptr ? stands.end() : stands.find(focused->object_id);
     mark_plant_stands(scene_, stands, ground == stands.end() ? PlantStand{} : ground->second);
+    // body or view card by the level ase-render-data graded each plant to, every frame (flora.lod.v1,
+    // PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10, usecase:101657 grade plants by picture height)
+    show_plant_levels(scene_, resources_.get_lods());
     // an overcast sky turns the sky grey and dims the light (PLAN_ASE_VIVARIUM_PHASE_06_HUD row N01): SkyOvercast
     // derives the shade from the sky frame's kind of weather and the sun's height. The frame carries a kind only
     // while the sky port's colours carry no tint of it (the bridge's weather, N0449); the weather of
