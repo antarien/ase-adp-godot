@@ -86,6 +86,7 @@ add_library(ase-adp-godot-host STATIC
     src/godot_plant_water.cpp        # the water in every bed and its line for the brook's sign (usecase:100399 carry brook water, 03.11, B0285)
     src/godot_plant_water_ribbon.cpp # the ribbon of water along a course, build_water (usecase:100399 carry brook water, B0285)
     src/godot_plant_water_pit.cpp    # the water of every pit ase-hydro fills, pit_water_levels (usecase:101339 show the ground around plant, D2506)
+    src/godot_plant_water_band.cpp   # the reaches of the water bands LOD 0 to 4, its tiles per chunk and the chunk plane (usecase:101363 band entities by distance, H.13)
     src/godot_scene_exposure.cpp     # the exposure of the scene camera for the sky's light (usecase:101415 hand sky light to app, D1721)
     src/godot_order_budget.cpp
     src/godot_cycle_measure.cpp      # the measurement line of one cycle, also compiled into avt-headless (03.6)
@@ -170,6 +171,7 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/stroke/godot_stroke_mesh.hpp  # stroke_run, stroke_bound, stroke_lay: the stroke mesh without a Godot type (usecase:101440, T0357)
     include/ase/adp/godot/godot_vivarium_hud_sample.hpp  # VivariumHudSample: the last HUD sample the view holds as hud_shown_, cut from godot_vivarium_node.hpp (R0217)
     include/ase/adp/godot/godot_plant_impostor.hpp
+    include/ase/adp/godot/godot_plant_water_band.hpp  # water_band_reach, water_band_tiles, water_band_plane without a Godot type (usecase:101363 band entities by distance, H.13)
     include/ase/adp/godot/godot_plant_templates.hpp
     include/ase/adp/godot/godot_plant_template_mesh.hpp  # template_mesh_of: an organ template with its tangents on ARRAY_TANGENT (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.6)
     include/ase/adp/godot/template/types.hpp  # the record keys and template codes of the organ template ports, corner, triangle and tangent (usecase:101342, usecase:101011, T.6)
