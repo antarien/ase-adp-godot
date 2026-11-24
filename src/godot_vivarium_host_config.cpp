@@ -92,6 +92,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.cap");
     }
     start_.cap_port = utf8_of(text);
+    // The graded levels of the plant bodies (usecase:101657 grade plants by picture height, T.10): a port of their
+    // own, one record per patch whose body ase-render-data graded, its values the level, its fade and the codes.
+    if (!read_text(ports, "lod", text)) {
+        return fail_config("ports.lod");
+    }
+    start_.lod_port = utf8_of(text);
     if (!read_text(ports, "clock", text)) {
         return fail_config("ports.clock");
     }

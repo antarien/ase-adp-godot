@@ -1526,6 +1526,7 @@ bool ports_named(const VivariumStartConfig& config) {
                  !config.stem_port.empty() &&
                  !config.autumn_port.empty() &&
                  !config.cap_port.empty() &&
+                 !config.lod_port.empty() &&
                  !config.clock_port.empty() &&
                  !config.date_port.empty() &&
                  !config.scene_port.empty() &&
@@ -2513,6 +2514,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.stem_port.c_str()) &&
                    host_->has_port(config_.autumn_port.c_str()) &&
                    host_->has_port(config_.cap_port.c_str()) &&
+                   host_->has_port(config_.lod_port.c_str()) &&
                    host_->has_port(config_.clock_port.c_str()) &&
                    host_->has_port(config_.date_port.c_str()) &&
                    host_->has_port(config_.scene_port.c_str()) && host_->has_port(config_.ground_port.c_str()) &&
@@ -2996,6 +2998,13 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         // the autumn colour of the individual stands on the autumn port, read below (usecase:101646 colour the
         // leaves in autumn); until its record for this patch is read it is not measured
         view.autumn = std::nan("");
+        // the graded level of the plant body stands on the level port, read below (usecase:101657 grade plants by
+        // picture height); until its record for this patch is read the body is not graded
+        view.lod_level = std::nan("");
+        view.lod_fade = std::nan("");
+        view.lod_view = std::nan("");
+        view.lod_tile = std::nan("");
+        view.lod_cnpy = std::nan("");
         // the stem base: x and z from the lay request, y once ase-terrain levelled the disc (03.11)
         view.x = record_value(record, GODOT_KEY_X);
         view.y = record_value(record, GODOT_KEY_Y);
@@ -3161,6 +3170,46 @@ HostStatus GodotHostResourceManager::read_snapshot() {
             return refuse_record(*host_, config_.cap_port, record.object_id, "cap without a radius");
         }
         caps_[record.object_id] = cap_radius;
+    }
+
+    // THE LEVEL IS GRADED BY ase-render-data (FLORA_HOST_PORT_LOD, usecase:101657 grade plants by picture height,
+    // PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10): ase-pl-flora files one record per patch whose plant body is graded,
+    // its object id the patch, the level, the share handed over to the next coarser level and the codes of the view
+    // card, the billboard and the canopy. A patch without such a record is not graded and draws its body; a record
+    // that names no patch of the patch port, or carries a value that is not finite, is a broken port.
+    status = snapshot_all(*host_, config_.lod_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        patches_.clear();
+        places_.clear();
+        caps_.clear();
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = records_[i];
+        const auto found = patches_.find(record.object_id);
+        if (found == patches_.end()) {
+            patches_.clear();
+            places_.clear();
+            caps_.clear();
+            return refuse_record(*host_, config_.lod_port, record.object_id, "level of no patch");
+        }
+        const double level = record_value(record, GODOT_KEY_LOD_LEVEL);
+        const double fade = record_value(record, GODOT_KEY_LOD_FADE);
+        const double view = record_value(record, GODOT_KEY_LOD_VIEW);
+        const double tile = record_value(record, GODOT_KEY_LOD_TILE);
+        const double cnpy = record_value(record, GODOT_KEY_LOD_CNPY);
+        if (!std::isfinite(level) || !std::isfinite(fade) || !std::isfinite(view) || !std::isfinite(tile) ||
+            !std::isfinite(cnpy)) {
+            patches_.clear();
+            places_.clear();
+            caps_.clear();
+            return refuse_record(*host_, config_.lod_port, record.object_id, "level without its five values");
+        }
+        found->second.lod_level = level;
+        found->second.lod_fade = fade;
+        found->second.lod_view = view;
+        found->second.lod_tile = tile;
+        found->second.lod_cnpy = cnpy;
     }
 
     std::vector<KernelHostRecord> clock_records(1u);

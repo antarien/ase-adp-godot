@@ -101,6 +101,7 @@
 #include <ase/adp/godot/godot_host_weather_view.hpp>
 #include <ase/adp/godot/godot_water_kinds_reader.hpp>
 #include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/lod/godot_host_lod_view.hpp>  // VivariumLodView, the level of a graded plant body (usecase:101657)
 #include <ase/kernel/kernel_embedded_host.hpp>
 #include <ase/kernel/kernel_host_port.hpp>
 #include <ase/kernel/kernel_types.hpp>
@@ -463,6 +464,12 @@ public:
      * a patch without a record of the cap port has no entry and shows no fruit body.
      */
     [[nodiscard]] const std::unordered_map<uint32_t, double>& get_caps() const;
+    /**
+     * The graded level of the plant body of every graded patch, keyed by the patch's object id (flora.lod.v1,
+     * RND_LOD_LEVEL and RND_LOD_FADE of ase-render-data, usecase:101657 grade plants by picture height). Read with
+     * every snapshot; a patch without a record of the level port has no entry and draws its body whole.
+     */
+    [[nodiscard]] const std::unordered_map<uint32_t, VivariumLodView>& get_lods() const;
     [[nodiscard]] uint32_t patch_count() const;
     [[nodiscard]] const VivariumClockView& get_clock() const;
     /**
@@ -808,6 +815,7 @@ private:
     std::unordered_map<uint32_t, VivariumPatchView>  patches_;
     std::unordered_map<uint32_t, uint32_t>           places_;      // place → object id of the last snapshot
     std::unordered_map<uint32_t, double>             caps_;        // patch object id → cap radius in metres of the cap port, last read (usecase:101362 scale the organ templates)
+    std::unordered_map<uint32_t, VivariumLodView>    lods_;        // patch object id → graded level of its plant body of the level port, last read (usecase:101657 grade plants by picture height)
     VivariumClockView                                clock_;
     VivariumWeatherView                              weather_;     // the weather of the sky, last read (N0449)
     VivariumSapView                                  sap_;         // the birch's tap and bark vessel, last read (N0457)
