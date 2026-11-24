@@ -607,6 +607,7 @@ bool current_view_of(const KernelHostRecord& record, VivariumCurrentView& out) {
     constexpr const char* KEY_SPEED = "curr_speed_mps";  // WATR_HOST_KEY_CURR_SPEED: GIS_HYD_CELL_CURR_SPEED, m/s
     constexpr const char* KEY_EAST = "curr_east";        // WATR_HOST_KEY_CURR_EAST: GIS_HYD_CELL_CURR_EAST, -1 to 1
     constexpr const char* KEY_NORTH = "curr_north";      // WATR_HOST_KEY_CURR_NORTH: GIS_HYD_CELL_CURR_NORTH, -1 to 1
+    constexpr const char* KEY_CHUNK = "curr_chunk_m";    // WATR_HOST_KEY_CURR_CHUNK: TER_CONST_CHUNK_SIZE, metres (H.13)
     out = VivariumCurrentView{};
     out.object_id = record.object_id;
     out.x = record_value(record, KEY_X);
@@ -615,6 +616,7 @@ bool current_view_of(const KernelHostRecord& record, VivariumCurrentView& out) {
     out.speed_m_s = record_value(record, KEY_SPEED);
     out.east = record_value(record, KEY_EAST);
     out.north = record_value(record, KEY_NORTH);
+    out.chunk_m = record_value(record, KEY_CHUNK);
     // what the water carries comes from the quality port and is joined afterwards; until then it is unanswered
     out.bloom_kg_m3 = std::nan("");
     out.rot_kg_m3 = std::nan("");
@@ -649,6 +651,7 @@ bool same_currents(const std::vector<VivariumCurrentView>& read, const std::vect
             !same_water_value(read[i].depth_m, held[i].depth_m) ||
             !same_water_value(read[i].speed_m_s, held[i].speed_m_s) ||
             !same_water_value(read[i].east, held[i].east) || !same_water_value(read[i].north, held[i].north) ||
+            !same_water_value(read[i].chunk_m, held[i].chunk_m) ||
             !same_water_value(read[i].bloom_kg_m3, held[i].bloom_kg_m3) ||
             !same_water_value(read[i].rot_kg_m3, held[i].rot_kg_m3) ||
             !same_water_value(read[i].salt_kg_m3, held[i].salt_kg_m3) ||
@@ -2649,6 +2652,7 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     groundwater_generation_ += 1u;
     salt_.clear();
     salt_generation_ += 1u;
+    water_kinds_.clear();
     template_corners_.clear();
     template_triangles_.clear();
     template_generation_ += 1u;
@@ -3480,6 +3484,11 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     const HostStatus salt = read_salt();
     if (salt != ase::kernel::HostStatusOk) {
         return salt;
+    }
+    const HostStatus water_kinds =
+        water_kinds_.read(*host_, VivariumWaterKindsPorts{config_.lake_port, config_.sea_port, config_.glacier_port});
+    if (water_kinds != ase::kernel::HostStatusOk) {
+        return water_kinds;
     }
     const HostStatus templates = read_templates();
     if (templates != ase::kernel::HostStatusOk) {
@@ -5612,6 +5621,30 @@ uint64_t GodotHostResourceManager::salt_generation() const {
     return salt_generation_;
 }
 
+const std::vector<VivariumLakeView>& GodotHostResourceManager::get_lakes() const {
+    return water_kinds_.get_lakes();
+}
+
+uint64_t GodotHostResourceManager::lake_generation() const {
+    return water_kinds_.lake_generation();
+}
+
+const std::vector<VivariumSeaView>& GodotHostResourceManager::get_seas() const {
+    return water_kinds_.get_seas();
+}
+
+uint64_t GodotHostResourceManager::sea_generation() const {
+    return water_kinds_.sea_generation();
+}
+
+const std::vector<VivariumGlacierView>& GodotHostResourceManager::get_glaciers() const {
+    return water_kinds_.get_glaciers();
+}
+
+uint64_t GodotHostResourceManager::glacier_generation() const {
+    return water_kinds_.glacier_generation();
+}
+
 const std::vector<VivariumTemplateCornerView>& GodotHostResourceManager::get_template_corners() const {
     return template_corners_;
 }
@@ -5933,6 +5966,7 @@ void GodotHostResourceManager::clear_all() {
     groundwater_generation_ += 1u;  // and its groundwater
     salt_.clear();
     salt_generation_ += 1u;  // and its salt
+    water_kinds_.clear();    // and its lakes, its sea and its glacier
     template_corners_.clear();
     template_triangles_.clear();
     template_generation_ += 1u;  // and its templates

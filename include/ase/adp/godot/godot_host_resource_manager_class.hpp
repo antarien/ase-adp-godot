@@ -99,6 +99,7 @@
 #include <ase/adp/godot/godot_host_template_view.hpp>
 #include <ase/adp/godot/godot_host_terrain_view.hpp>
 #include <ase/adp/godot/godot_host_weather_view.hpp>
+#include <ase/adp/godot/godot_water_kinds_reader.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/kernel/kernel_embedded_host.hpp>
 #include <ase/kernel/kernel_host_port.hpp>
@@ -559,6 +560,21 @@ public:
     /** Grows by one every time the salt of a chunk differs from the last read. */
     [[nodiscard]] uint64_t salt_generation() const;
     /**
+     * The lake and pond bodies as the lake port of ase-pl-water showed them (H.13): one box per standing body with its
+     * depth and kind code, read with every snapshot once the plugin offers the port; empty before.
+     */
+    [[nodiscard]] const std::vector<VivariumLakeView>& get_lakes() const;
+    /** Grows by one every time a lake or pond body differs from the last read. */
+    [[nodiscard]] uint64_t lake_generation() const;
+    /** The salt chunks of the sea as the sea port of ase-pl-water showed them (H.13); empty before the port stands. */
+    [[nodiscard]] const std::vector<VivariumSeaView>& get_seas() const;
+    /** Grows by one every time a sea chunk differs from the last read. */
+    [[nodiscard]] uint64_t sea_generation() const;
+    /** The chunks with glacier ice as the glacier port of ase-pl-water showed them (H.13); empty before the port stands. */
+    [[nodiscard]] const std::vector<VivariumGlacierView>& get_glaciers() const;
+    /** Grows by one every time a glacier chunk differs from the last read. */
+    [[nodiscard]] uint64_t glacier_generation() const;
+    /**
      * The corners of the organ templates as the template corner port showed them, every code together
      * (usecase:101011 tessellate the organ templates). ase-render-data builds the templates once when the host
      * starts, so the ports are read with every snapshot until both carry a set, and not again until a
@@ -825,6 +841,7 @@ private:
     uint64_t                                         groundwater_generation_ = 0;
     std::vector<VivariumSaltView>                    salt_;      // the salt of every chunk, last read
     uint64_t                                         salt_generation_ = 0;
+    GodotWaterKindsReader                            water_kinds_;  // the lakes, the sea and the glacier, last read (H.13)
     std::vector<VivariumTemplateCornerView>          template_corners_;    // the corners of the organ templates, every code
     std::vector<VivariumTemplateTriangleView>        template_triangles_;  // the triangles of the organ templates, every code
     uint64_t                                         template_generation_ = 0;

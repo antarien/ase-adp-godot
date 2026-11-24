@@ -25,7 +25,7 @@ ASE GODOT ADAPTER BUILD CONFIGURATION
 @usecase     usecase:100653 - publish the module catalog
 @design      DSGN_021
 @created     2026-10-05
-@modified    2026-11-21
+@modified    2026-11-24
 
 Copyright (c) Jan Ohlmann. All rights reserved.
 Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -87,6 +87,8 @@ add_library(ase-adp-godot-host STATIC
     src/godot_plant_water_ribbon.cpp # the ribbon of water along a course, build_water (usecase:100399 carry brook water, B0285)
     src/godot_plant_water_pit.cpp    # the water of every pit ase-hydro fills, pit_water_levels (usecase:101339 show the ground around plant, D2506)
     src/godot_plant_water_band.cpp   # the reaches of the water bands LOD 0 to 4, its tiles per chunk and the chunk plane (usecase:101363 band entities by distance, H.13)
+    src/godot_plant_water_kinds_geom.cpp  # the surfaces of the lake, the sea chunk and the ice over a chunk, without a Godot type (usecase:101339)
+    src/godot_water_kinds_reader.cpp      # the lake, sea and glacier ports of ase-pl-water as views with change detection (usecase:100364)
     src/godot_scene_exposure.cpp     # the exposure of the scene camera for the sky's light (usecase:101415 hand sky light to app, D1721)
     src/godot_order_budget.cpp
     src/godot_cycle_measure.cpp      # the measurement line of one cycle, also compiled into avt-headless (03.6)
@@ -172,6 +174,12 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/godot_vivarium_hud_sample.hpp  # VivariumHudSample: the last HUD sample the view holds as hud_shown_, cut from godot_vivarium_node.hpp (R0217)
     include/ase/adp/godot/godot_plant_impostor.hpp
     include/ase/adp/godot/godot_plant_water_band.hpp  # water_band_reach, water_band_tiles, water_band_plane without a Godot type (usecase:101363 band entities by distance, H.13)
+    include/ase/adp/godot/godot_host_lake_view.hpp           # the lake and pond bodies of water.lake.v1
+    include/ase/adp/godot/godot_host_sea_view.hpp            # the salt chunks of water.sea.v1
+    include/ase/adp/godot/godot_host_glacier_view.hpp        # the chunks with ice of water.glacier.v1
+    include/ase/adp/godot/godot_water_kinds_reader.hpp       # the reader of the three ports and its record functions
+    include/ase/adp/godot/godot_plant_water_kinds_geom.hpp   # the surfaces of the three kinds without a Godot type
+    include/ase/adp/godot/godot_plant_water_kinds.hpp        # the three nodes of lake, sea and glacier water and their fill
     include/ase/adp/godot/godot_plant_templates.hpp
     include/ase/adp/godot/godot_plant_template_mesh.hpp  # template_mesh_of: an organ template with its tangents on ARRAY_TANGENT (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.6)
     include/ase/adp/godot/template/types.hpp  # the record keys and template codes of the organ template ports, corner, triangle and tangent (usecase:101342, usecase:101011, T.6)
@@ -402,6 +410,7 @@ add_library(ase-adp-godot SHARED
     src/godot_plant_brook_reflection.cpp # the sky the water of that scene reflects and the strokes of its current (usecase:101339, 06.4 N07)
     src/godot_plant_haze.cpp     # the shimmer of hot air over that scene (usecase:101515 veil sight with weather, 03.11)
     src/godot_plant_brook.cpp    # the water of the brooks in that scene (usecase:100399 carry brook water, 03.11)
+    src/godot_plant_water_kinds.cpp  # the nodes of the lake, sea and glacier water in that scene (usecase:101339)
     src/godot_plant_look.cpp    # the materials and organ template files of that scene, bound once (03.2)
     src/godot_figure_scene.cpp  # the figures of the body port in that scene and the player camera at its eye (usecase:101611 animate character motion, 07.9)
     src/godot_figure_query.cpp  # height, rig, place and face read back from a figure's node for the view (usecase:101611 animate character motion, 07.3)

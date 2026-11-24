@@ -67,6 +67,9 @@ The same form as plugins/ase-pl-vegetation/tests.
   ase-adp-godot-waterpit-test The water of the pits ase-hydro fills, pit_water_levels (D2506). Pure computation.
   ase-adp-godot-waterband-test The reaches of the water bands LOD 0 to 4 by the pixel rule, the tiles per
                               chunk and the chunk plane (usecase:101363, H.13). Pure computation.
+  ase-adp-godot-waterkinds-test The lake at the top of its box, the sea chunk at NN0 and the ice over the
+                              ground of its own chunk, and the records of the three ports (usecase:101339,
+                              H.13). Pure computation.
   ase-adp-godot-keeper-test   The return to the garden of the Plant Keeper (03.1, 03.6, V6). Pure computation.
   ase-adp-godot-focus-test    The selected patch: the place the camera looks at, its near view and the
                               zoom (03.1, V2). Pure computation.
@@ -136,7 +139,7 @@ foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap)
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor templates capscale stand binding ground figlayout hold water waterpit waterband keeper focus seed exposure window context signs chips pose showcase)
+foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor templates capscale stand binding ground figlayout hold water waterpit waterband waterkinds keeper focus seed exposure window context signs chips pose showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
@@ -177,6 +180,8 @@ foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke 
         set(_adp_godot_pure_source test_godot_plant_water_pit.cpp)  # usecase:101339, the water of the pits (D2506)
     elseif(_adp_godot_pure_test STREQUAL "waterband")
         set(_adp_godot_pure_source test_godot_plant_water_band.cpp)  # usecase:101363 band entities by distance, H.13
+    elseif(_adp_godot_pure_test STREQUAL "waterkinds")
+        set(_adp_godot_pure_source test_godot_plant_water_kinds.cpp)  # usecase:101339, the lake, sea and glacier water
     elseif(_adp_godot_pure_test STREQUAL "keeper")
         set(_adp_godot_pure_source test_godot_keeper_flow.cpp)
     elseif(_adp_godot_pure_test STREQUAL "focus")

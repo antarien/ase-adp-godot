@@ -16,7 +16,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-11-22
- * @modified    2026-11-22
+ * @modified    2026-11-24
  * @version     00.00.04.00024 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -42,6 +42,7 @@ struct VivariumCurrentView {
     double   speed_m_s = 0.0;  // speed of the water in the cell, metres per second; NaN when unanswered
     double   east = 0.0;       // share of the flow direction towards east, -1 to 1; NaN when unanswered
     double   north = 0.0;      // share of the flow direction towards north, -1 to 1; NaN when unanswered
+    double   chunk_m = 0.0;    // edge of the terrain chunk the cell lies in, metres (curr_chunk_m, TER_CONST_CHUNK_SIZE; the tile of the band of one surface per chunk, H.13); NaN when the port laid none
     double   bloom_kg_m3 = 0.0;  // algae dry mass in the water of the cell, kg/m3 (water.quality.v1, D2508); NaN when unanswered
     double   rot_kg_m3 = 0.0;    // dissolved rot in the water of the cell, kg/m3 (water.quality.v1, D2508); NaN when unanswered
     double   salt_kg_m3 = 0.0;   // dissolved salt in the water of the cell, kg/m3 (water.quality.v1, D2508); NaN when unanswered

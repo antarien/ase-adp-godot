@@ -26,8 +26,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-23
- * @modified    2026-11-23
- * @version     00.00.23.00023 [init]
+ * @modified    2026-11-24
+ * @version     00.00.31.00031 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -38,11 +38,18 @@
 
 namespace ase::adp::godot {
 
-/** The generation of each water port the scene's water was last laid from; 0 before the first lay. */
+/**
+ * The generation of each water port the scene's water was last laid from; 0 before the first lay. The last three
+ * belong to the standing and frozen waters of H.13 (fill_plant_water_kinds, godot_plant_water_kinds.hpp), laid in a
+ * pass of their own beside the brook water.
+ */
 struct VivariumWaterMarks {
     uint64_t streams = 0;   // stream generation the brook water was last laid from (usecase:100399 carry brook water)
     uint64_t pits = 0;      // pit generation the water of the pits was last laid from (D2506, hydrogeology.pit.v1)
     uint64_t currents = 0;  // current generation the hue of the brook water was last laid from (water.quality.v1, curr_hue_deg)
+    uint64_t lakes = 0;     // lake generation the lake and pond surfaces were last laid from (H.13, water.lake.v1)
+    uint64_t seas = 0;      // sea generation the sea plane was last laid from (H.13, water.sea.v1)
+    uint64_t glaciers = 0;  // glacier generation the ice caps were last laid from (H.13, water.glacier.v1)
 };
 
 }  // namespace ase::adp::godot

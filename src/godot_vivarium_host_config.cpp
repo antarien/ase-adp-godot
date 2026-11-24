@@ -253,6 +253,20 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.groundwater");
     }
     start_.groundwater_port = utf8_of(text);
+    // The three standing and frozen waters of H.13: the lake and pond bodies, the salt chunks of the sea and the
+    // chunks with glacier ice, each its own port of ase-pl-water and its own shader in the care view.
+    if (!read_text(ports, "lake", text)) {
+        return fail_config("ports.lake");
+    }
+    start_.lake_port = utf8_of(text);
+    if (!read_text(ports, "sea", text)) {
+        return fail_config("ports.sea");
+    }
+    start_.sea_port = utf8_of(text);
+    if (!read_text(ports, "glacier", text)) {
+        return fail_config("ports.glacier");
+    }
+    start_.glacier_port = utf8_of(text);
     // The salt of every chunk (H.9, I-4): the water half of ase-hydro, the soil half of ase-pedosphere and the sum
     // ase-gis adds; ase-pl-hydrogeology carries all three and the debug status line of the HUD shows their world sums.
     if (!read_text(ports, "salt", text)) {

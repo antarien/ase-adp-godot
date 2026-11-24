@@ -38,6 +38,7 @@
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_plant_brook.hpp>
 #include <ase/adp/godot/godot_plant_brook_reflection.hpp>
+#include <ase/adp/godot/godot_plant_water_kinds.hpp>
 #include <ase/adp/godot/godot_plant_ground_season.hpp>
 #include <ase/adp/godot/godot_plant_horizon_ridge.hpp>
 #include <ase/adp/godot/godot_plant_leaf_season.hpp>
@@ -141,6 +142,51 @@ void VivariumView::follow_scene(double elapsed_s) {
              ::godot::String::num_int64(static_cast<int64_t>(resources_.get_streams().size())) + " pits " +
              ::godot::String::num_int64(static_cast<int64_t>(resources_.get_pits().size())) +
              " fill_usec=" + ::godot::String::num_uint64(water_usec));
+    }
+    // the standing and frozen waters of H.13 (usecase:100327 lay the water request): the lake and pond bodies
+    // ase-terrain files at the top face of their box, the sea at NN0 over every salt chunk, the ice over the ground
+    // of every chunk that holds it - each read from its own port of ase-pl-water, each in its own shader; laid anew
+    // when one of the three ports moved or the ground under the ice did, never once per frame. A record short of a
+    // value draws nothing (L-3) and opens the gap of its port under the register task of H.13
+    const uint64_t lakes = resources_.lake_generation();
+    const uint64_t seas = resources_.sea_generation();
+    const uint64_t glaciers = resources_.glacier_generation();
+    if (ground_moved || lakes != water_marks_.lakes || seas != water_marks_.seas ||
+        glaciers != water_marks_.glaciers) {
+        water_marks_.lakes = lakes;
+        water_marks_.seas = seas;
+        water_marks_.glaciers = glaciers;
+        const uint64_t kinds_start_usec = ticks->get_ticks_usec();
+        const WaterKindsFilled kinds = fill_plant_water_kinds(scene_, resources_.get_lakes(), resources_.get_seas(),
+                                                              resources_.get_glaciers(), ground_surface_.arrays);
+        const uint64_t kinds_usec = ticks->get_ticks_usec() - kinds_start_usec;
+        constexpr const char* GAP_WATER_KINDS = "F1252";
+        constexpr const char* LAKE_FIELD = "water.lake.v1";
+        constexpr const char* SEA_FIELD = "water.sea.v1";
+        constexpr const char* GLACIER_FIELD = "water.glacier.v1";
+        if (kinds.lake_gaps > 0u) {
+            open_gap(GAP_WATER_KINDS, LAKE_FIELD);
+        } else if (kinds.lakes > 0u) {
+            close_gap(GAP_WATER_KINDS, LAKE_FIELD);
+        }
+        if (kinds.sea_gaps > 0u) {
+            open_gap(GAP_WATER_KINDS, SEA_FIELD);
+        } else if (kinds.seas > 0u) {
+            close_gap(GAP_WATER_KINDS, SEA_FIELD);
+        }
+        if (kinds.glacier_gaps > 0u) {
+            open_gap(GAP_WATER_KINDS, GLACIER_FIELD);
+        } else if (kinds.glaciers > 0u) {
+            close_gap(GAP_WATER_KINDS, GLACIER_FIELD);
+        }
+        note("scene water kinds lakes " + ::godot::String::num_int64(static_cast<int64_t>(kinds.lakes)) + "/" +
+             ::godot::String::num_int64(static_cast<int64_t>(resources_.get_lakes().size())) + " seas " +
+             ::godot::String::num_int64(static_cast<int64_t>(kinds.seas)) + "/" +
+             ::godot::String::num_int64(static_cast<int64_t>(resources_.get_seas().size())) + " glaciers " +
+             ::godot::String::num_int64(static_cast<int64_t>(kinds.glaciers)) + "/" +
+             ::godot::String::num_int64(static_cast<int64_t>(resources_.get_glaciers().size())) + " ice_tris " +
+             ::godot::String::num_int64(static_cast<int64_t>(kinds.glacier_triangles)) +
+             " fill_usec=" + ::godot::String::num_uint64(kinds_usec));
     }
     // the stem base of every configured patch, as its record carries it (plant_origins reads it)
     std::vector<VivariumPatchView> patches;

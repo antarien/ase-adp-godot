@@ -182,6 +182,9 @@ struct VivariumStartConfig {
     std::string quality_port;        // host port of what the water of every current cell carries (ase-pl-water: water.quality.v1, D2508), read once offered
     std::string pit_port;            // host port of the open water of every dug pit (ase-pl-hydrogeology: hydrogeology.pit.v1, H.4), read once offered
     std::string groundwater_port;    // host port of the groundwater of every chunk (ase-pl-hydrogeology: hydrogeology.groundwater.v1, H.3), read once offered
+    std::string lake_port;           // host port of the lake and pond bodies (ase-pl-water: water.lake.v1, H.13), read once offered
+    std::string sea_port;            // host port of the salt chunks of the sea (ase-pl-water: water.sea.v1, H.13), read once offered
+    std::string glacier_port;        // host port of the chunks with glacier ice (ase-pl-water: water.glacier.v1, H.13), read once offered
     std::string salt_port;           // host port of the salt of every chunk, water half, soil half and sum (ase-pl-hydrogeology: hydrogeology.salt.v1, H.9 I-4), read once offered
     std::string level_port;          // host port the player levels a patch through (ase-pl-flora: flora.level.v1)
     std::string flatten_port;        // host port the player flattens the ground at a place through (ase-pl-flora: flora.flatten.v1)
