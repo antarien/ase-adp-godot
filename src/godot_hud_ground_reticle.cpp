@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ground_reticle.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 

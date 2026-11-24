@@ -274,6 +274,8 @@ public:
     void return_to_garden();
 
     const UiTheme& theme() const { return theme_; }
+    /** The thing `key` among the frame's things, nullptr when none; the view asks it whether a hit lies at the rack. */
+    const VivariumHudThing* thing(const std::string& key, const VivariumHudFrame& now) const;
     bool pouring() const { return press_.pouring; }  // S.holding: a finger holds the can, read by the hand bridge before compose
     bool holding_system() const { return press_.system; }  // S.sysHold: a finger holds the system ring, read by the refresh cadence (T10)
     bool holding_window() const { return press_.window; }  // S.wdrag: a grip is held; its move renders, its let go does not (T10)
@@ -334,9 +336,6 @@ private:
      * "hud.items.<id>" in `failed` when hud.items does not describe the item.
      */
     bool equip_verb(const std::string& id, std::string& failed);
-
-    /** The thing `key` among the frame's things, nullptr when none. */
-    const VivariumHudThing* thing(const std::string& key, const VivariumHudFrame& now) const;
 
     /** Where the thing `key` was last drawn, in `box` at scale `k`; false while it was not drawn. */
     bool box_of(const std::string& key, ::godot::Rect2& box, double& k) const;

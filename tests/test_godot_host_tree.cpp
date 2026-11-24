@@ -20,8 +20,8 @@
  * @usecase     usecase:101613 - show the plant bark tubes
  * @actor       Worldkeeper Perception Relay (WORLPERREL)
  * @created     2026-11-13
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-23
+ * @version     00.00.28.00028 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -72,10 +72,25 @@ TEST_CASE("B0295 point 4: the stem of a birch at MADURA is one tube, its rings m
     // grows and never reaches the organ and bark ports.
     const VivariumPatchView& seen = patch_at(resources, 0u);
     REQUIRE(resources.view(seen.x, seen.y + 3.0, seen.z + 6.0, seen.x, seen.y, seen.z) == ase::kernel::HostStatusOk);
-    REQUIRE(resources.irrigate(cared, vivarium_config(env.bundle).irrigate_amount_mm) == ase::kernel::HostStatusOk);
+    // The seed sprouts when its soil holds the share its species needs, a share of the capacity of the cell's soil
+    // class (PlantStgeGrmnSystem): a class of nFK 24 Vol.-% holds 96 mm, so one pour of Regar may not reach it. The
+    // case pours Regar's amount again as a player would until the shoot stands, bounded by the pours that fill the
+    // capacity once, read from the patch the port carries.
+    // The bound is read only once the class stands on the port: before it the capacity is NaN, and a NaN bound
+    // ended the loop below before its first pour (measured 2026-11-23 12:32: no "mm asked of ase-hydro" line of
+    // FloraHostIrrgSystem in the run, data/probes/runs/adp_tree_test_1123.txt).
+    constexpr uint32_t kSoilBoundFrames = 32u;
+    REQUIRE(test::await_soil_class(resources, kSoilBoundFrames));
+    const double amount_mm = vivarium_config(env.bundle).irrigate_amount_mm;
+    const double capacity_mm = patch_at(resources, 0u).capacity_mm;
     constexpr uint32_t kBoundFrames = 256u;
-    for (uint32_t frame = 0u; frame < kBoundFrames && resources.get_organs(GODOT_ORGAN_SEGMENT).empty(); ++frame) {
-        advance_frames(resources, 1u);
+    for (double poured_mm = amount_mm;
+         poured_mm < capacity_mm + amount_mm && resources.get_organs(GODOT_ORGAN_SEGMENT).empty();
+         poured_mm += amount_mm) {
+        REQUIRE(resources.irrigate(cared, amount_mm) == ase::kernel::HostStatusOk);
+        for (uint32_t frame = 0u; frame < kBoundFrames && resources.get_organs(GODOT_ORGAN_SEGMENT).empty(); ++frame) {
+            advance_frames(resources, 1u);
+        }
     }
     REQUIRE(!resources.get_organs(GODOT_ORGAN_SEGMENT).empty());
     for (uint32_t frame = 0u; frame < kBoundFrames && !(patch_at(resources, 0u).mtur_at_h > 0.0); ++frame) {

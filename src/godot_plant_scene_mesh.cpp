@@ -34,6 +34,7 @@
  */
 
 #include <ase/adp/godot/godot_plant_scene.hpp>
+#include <ase/adp/godot/godot_plant_template_mesh.hpp>
 #include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_plant_tubes.hpp>
 #include <ase/adp/godot/tube/types.hpp>
@@ -166,6 +167,22 @@ namespace {
     ::godot::Ref<::godot::ArrayMesh> mesh;
     mesh.instantiate();
     mesh->add_surface_from_arrays(::godot::Mesh::PRIMITIVE_TRIANGLES, surface_of(arrays));
+    return mesh;
+}
+
+::godot::Ref<::godot::ArrayMesh> template_mesh_of(const PlantMeshArrays& arrays, const std::vector<float>& tangents) {
+    // four floats per vertex or the set is broken: a tangent shifted by one vertex would turn the bark of
+    // every ring against its neighbour, so such a set gives no mesh, as an empty one does
+    if (arrays.positions.empty() || arrays.indices.empty() || tangents.size() / 4u != arrays.positions.size() / 3u ||
+        tangents.size() % 4u != 0u) {
+        return ::godot::Ref<::godot::ArrayMesh>();
+    }
+    ::godot::Array surface = surface_of(arrays);
+    // ARRAY_TANGENT: x, y, z along growing u and the sign of the bitangent, as ase-render-data laid them
+    surface[::godot::Mesh::ARRAY_TANGENT] = floats_of(tangents);
+    ::godot::Ref<::godot::ArrayMesh> mesh;
+    mesh.instantiate();
+    mesh->add_surface_from_arrays(::godot::Mesh::PRIMITIVE_TRIANGLES, surface);
     return mesh;
 }
 

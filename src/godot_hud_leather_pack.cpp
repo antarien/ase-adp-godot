@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_leather_pack.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 
 namespace ase::adp::godot {
 

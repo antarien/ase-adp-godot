@@ -113,6 +113,7 @@ struct PlantGroundSurface {
     PlantGroundSpan                     normals;        // vertex stream: the normals it wrote
     PlantGroundSpan                     attributes;     // attribute stream: the colours and coordinates it wrote
     bool                                grown = false;  // the last patch moved a vertex past low_m or high_m
+    uint64_t                            revision = 0;   // counts every write that moved a vertex's place (P0692)
 };
 
 /**

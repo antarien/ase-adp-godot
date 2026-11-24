@@ -87,6 +87,16 @@ const char* read_part(const ::godot::Variant& value, VivariumCampPartSpec& part)
     if (!read_number(entry, "drop", part.drop) || !std::isfinite(part.drop)) {
         return "camp.parts[].drop";
     }
+    // The turn the pyramid lays the part in (data/probes/n0541_camp_layout_probe.py); any rotation vector is a turn.
+    if (!read_number(entry, "tx", part.tx) || !std::isfinite(part.tx)) {
+        return "camp.parts[].tx";
+    }
+    if (!read_number(entry, "ty", part.ty) || !std::isfinite(part.ty)) {
+        return "camp.parts[].ty";
+    }
+    if (!read_number(entry, "tz", part.tz) || !std::isfinite(part.tz)) {
+        return "camp.parts[].tz";
+    }
     if (!read_number(entry, "fall", part.fall) || !std::isfinite(part.fall) || !(part.fall > 0.0)) {
         return "camp.parts[].fall";
     }

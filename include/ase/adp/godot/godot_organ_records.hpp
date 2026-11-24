@@ -23,7 +23,7 @@
  * @usecase     usecase:100974 - lay out organ records
  * @actor       Vivarium Steward (VIVARIUSTE)
  * @created     2026-11-05
- * @modified    2026-11-21
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -44,11 +44,17 @@ bool organ_view_of(const ase::kernel::KernelHostRecord& record, VivariumOrganVie
 /** The bark share of a segment record into its view; false without one in GODOT_BARK_WHITE..GODOT_BARK_BASE. */
 bool segment_bark_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
 
+/** The card of a leaf record into its view; false unless it is GODOT_TMPL_LEAF or GODOT_TMPL_LEAF_CORS (TREEGEN T.6). */
+bool leaf_template_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
+
 /** The bark tiling of a tile record into the view of its internode; false without three positive finite counts. */
 bool segment_tile_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
 
 /** The sway of a sway record into the view of its organ; false without seven finite values and a frequency >= 0. */
 bool organ_sway_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
+
+/** The lineage of a lineage record into the view of its organ; false without a whole number in 0..GODOT_LINEAGE_MAX. */
+bool organ_lineage_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);
 
 /** The bend of a bend record into the view of its leaf; false without two finite values (ase-pl-flora checked their range). */
 bool leaf_bend_of(const ase::kernel::KernelHostRecord& record, VivariumOrganView& out);

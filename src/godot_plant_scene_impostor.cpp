@@ -5,9 +5,11 @@
  * @brief       The card that stands for a far plant and the viewport that draws its texture once
  * @description Register B0295 point 4: far bodies become an impostor. Every plant node carries a card
  *              (GODOT_PLANT_IMPOSTOR, a Sprite3D turning about y to the camera) and a viewport of its own world
- *              (GODOT_PLANT_IMPOSTOR_VIEW) with an orthographic camera and six drawing nodes of its own, one per
+ *              (GODOT_PLANT_IMPOSTOR_VIEW) with an orthographic camera and seven drawing nodes of its own, one per
  *              drawing node of the plant - the fine and the coarse bark tube under a bark node of its own
- *              (register B0317) and the four instance nodes. Each of them reads the very mesh, instance buffer and material resource
+ *              (register B0317) and the five instance nodes, the fine and the coarse leaf card among them
+ *              (PLAN_ASE_VIVARIUM_TREEGEN T.6: a leaf of a body in the far band is drawn as the coarse 1 x 1 card,
+ *              GODOT_PLANT_LEAVES_CORS). Each of them reads the very mesh, instance buffer and material resource
  *              the plant node was just filled with - no value is taken over, the resource is the same object - so
  *              the viewport draws the body exactly as the scene does, the closing of thin rings included. It draws
  *              once each time the plant is filled, which is when a body ticked or the shown orders moved. Where the
@@ -22,10 +24,10 @@
  * @layer       5 (Adapter)
  * @design      DSGN_066
  * @category    render/pipeline/stage
- * @usecase     usecase:101613 - show the plant bark tubes
- * @actor       Worldkeeper Perception Relay (WORLPERREL)
+ * @usecase     usecase:100969 - instance the plant organs
+ * @actor       Scene Graph Culler (SCENGRACUL)
  * @created     2026-11-13
- * @modified    2026-11-14
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -91,7 +93,8 @@ void make_impostor(::godot::Node3D* plant) {
         drawer->set_name(tube);
         bark->add_child(drawer);
     }
-    for (const char* part : {GODOT_PLANT_LEAVES, GODOT_PLANT_MALE, GODOT_PLANT_FEMALE, GODOT_PLANT_FRUIT}) {
+    for (const char* part :
+         {GODOT_PLANT_LEAVES, GODOT_PLANT_LEAVES_CORS, GODOT_PLANT_MALE, GODOT_PLANT_FEMALE, GODOT_PLANT_FRUIT}) {
         ::godot::MultiMeshInstance3D* drawer = memnew(::godot::MultiMeshInstance3D);
         drawer->set_name(part);
         view->add_child(drawer);
@@ -109,6 +112,7 @@ void fill_impostor(::godot::Node3D* plant, const PlantImpostorFrame& frame) {
     const ::godot::NodePath parts[] = {::godot::NodePath(bark + ::godot::String(GODOT_PLANT_TUBES)),
                                        ::godot::NodePath(bark + ::godot::String(GODOT_PLANT_TWIGS)),
                                        ::godot::NodePath(GODOT_PLANT_LEAVES),
+                                       ::godot::NodePath(GODOT_PLANT_LEAVES_CORS),
                                        ::godot::NodePath(GODOT_PLANT_MALE),
                                        ::godot::NodePath(GODOT_PLANT_FEMALE),
                                        ::godot::NodePath(GODOT_PLANT_FRUIT)};

@@ -53,12 +53,12 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
-#include <ase/adp/godot/godot_hud_ui_icon.hpp>
+#include <ase/adp/godot/godot_hud_ui_icon_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_leader_line.hpp>
-#include <ase/adp/godot/godot_hud_ui_text_block.hpp>
+#include <ase/adp/godot/godot_hud_ui_text_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/transform2d.hpp>

@@ -44,6 +44,7 @@ target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_asset_loader.hpp
     include/ase/adp/godot/godot_asset_showcase_scene.hpp
     include/ase/adp/godot/godot_plant_scene.hpp
+    include/ase/adp/godot/godot_plant_scene_parts.hpp
     include/ase/adp/godot/godot_plant_environment.hpp
     include/ase/adp/godot/godot_plant_sky.hpp
     include/ase/adp/godot/godot_plant_sky_disc.hpp
@@ -63,6 +64,7 @@ target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_camp_load.hpp     # CampMake, CampRoleLoad, start_camp_load, take_camp_load (usecase:5436 kindle fire)
     include/ase/adp/godot/godot_vivarium_camp.hpp # VivariumCampState, read_camp_config, restart_camp, end_camp (usecase:5436 kindle fire)
     include/ase/adp/godot/godot_vivarium_water_pending.hpp  # VivariumWaterPending, the watering the view waits on (usecase:100367 water a patch)
+    include/ase/adp/godot/godot_vivarium_water_marks.hpp    # VivariumWaterMarks, the port generations the water was last laid from (usecase:100387 view the plant)
     include/ase/adp/godot/godot_figure_rig.hpp    # add_figure_motion, drive_figure_motion, figure_eye_level (usecase:101611 animate character motion)
     include/ase/adp/godot/godot_figure_hand.hpp   # hand_kind, carry_tool (usecase:101625 carry a tool in hand)
     include/ase/adp/godot/godot_figure_glass.hpp  # FigureSceneGlass, bind_figure_glass, flash_figure_edges (usecase:101612 keep figure in loaded area)

@@ -22,11 +22,13 @@
  */
 
 #include <ase/adp/godot/godot_hud_sign_marker.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_plant_water.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/variant/string.hpp>
 
+#include <cmath>
 #include <initializer_list>
 #include <utility>
 
@@ -166,9 +168,9 @@ void SignMarker::lay_brook(const std::vector<::godot::Vector2>& seen, float left
     }
 }
 
-void SignMarker::follow_brook(const VivariumStreamView& stream, const PlantMeshArrays& ground, const UiAnchor& anchor,
-                              const UiGround& land, float left, float right, ::godot::PackedVector2Array& out,
-                              std::string& flank) {
+void SignMarker::follow_brook(const VivariumStreamView& stream, const PlantMeshArrays& ground, uint64_t revision,
+                              const UiAnchor& anchor, const UiGround& land, float left, float right,
+                              BrookSight& kept, ::godot::PackedVector2Array& out, std::string& flank) {
     // The sign lies on the water the table draws (B0285): build_water_line gives the brook's water station by
     // station, at the level ase-hydro's depth lays over the deepest ground of each section and across the bed
     // where that water stands. The straight line between the filed ends ran over the bank of the winding bed,
@@ -201,15 +203,42 @@ void SignMarker::follow_brook(const VivariumStreamView& stream, const PlantMeshA
         held->point = point;
         return false;
     };
-    std::vector<float> water;
-    build_water_line(stream, ground, eyed ? sees : nullptr, &sight, water);
-    // The bank hid all the water (run 20261113-d2309-tri: 1716 of 1716, the water 0.43 m under the lip, no water
-    // colour in the picture): what the eye sees of the brook is its carved bed, and the sign lies on that.
-    const uint32_t water_stations = static_cast<uint32_t>(water.size() / 3u);
-    uint32_t bed_stations = 0u;
-    if (water.empty()) {
-        bed_stations = build_bed_line(stream, ground, eyed ? sees : nullptr, &sight, water);
+    // THE STATIONS HOLD WHILE NOTHING THEY STAND ON MOVED (P0692): the vertex loop of build_water_line and the march
+    // of UiGround::sees over each water point ran every frame, 16 heights a metre of sight for each of the 1716
+    // hidden points of run 20261113-d2309-tri, with the ground, the brook and the eye unchanged. The ground's
+    // revision, every field of the brook's port and the eye decide; any change reads the stations anew.
+    const auto level = [](double a, double b) { return a == b || (!std::isfinite(a) && !std::isfinite(b)); };
+    const VivariumStreamView& held = kept.stream;
+    const bool same_brook = held.object_id == stream.object_id && level(held.x, stream.x) &&
+                            level(held.z, stream.z) && level(held.end_x, stream.end_x) &&
+                            level(held.end_z, stream.end_z) && level(held.half_m, stream.half_m) &&
+                            level(held.depth_m, stream.depth_m) && level(held.velocity_m_s, stream.velocity_m_s) &&
+                            level(held.discharge_m3_s, stream.discharge_m3_s) &&
+                            level(held.groundwater_level_m, stream.groundwater_level_m) &&
+                            level(held.groundwater_reach_m, stream.groundwater_reach_m);
+    if (!kept.laid || kept.ground != revision || !same_brook || kept.eyed != eyed || (eyed && kept.eye != sight.eye)) {
+        kept.water.clear();
+        build_water_line(stream, ground, eyed ? sees : nullptr, &sight, kept.water);
+        // The bank hid all the water (run 20261113-d2309-tri: 1716 of 1716, the water 0.43 m under the lip, no
+        // water colour in the picture): what the eye sees of the brook is its carved bed, and the sign lies on that.
+        kept.water_stations = static_cast<uint32_t>(kept.water.size() / 3u);
+        kept.bed_stations = 0u;
+        if (kept.water.empty()) {
+            kept.bed_stations = build_bed_line(stream, ground, eyed ? sees : nullptr, &sight, kept.water);
+        }
+        kept.laid = true;
+        kept.ground = revision;
+        kept.stream = stream;
+        kept.eyed = eyed;
+        kept.eye = sight.eye;
+        kept.hidden = sight.hidden;
+        kept.point = sight.point;
+        kept.over = sight.over;
+        kept.least = sight.least;
     }
+    const std::vector<float>& water = kept.water;
+    const uint32_t water_stations = kept.water_stations;
+    const uint32_t bed_stations = kept.bed_stations;
     std::vector<::godot::Vector2> seen;
     for (size_t at = 0; at + 2 < water.size(); at += 3) {
         ::godot::Vector2 point;  // UiAnchor places in mockup units already
@@ -224,9 +253,9 @@ void SignMarker::follow_brook(const VivariumStreamView& stream, const PlantMeshA
             " seen=" + std::to_string(seen.size()) +
             " eye=" + std::to_string(static_cast<int32_t>(eyed)) + " at=" + std::to_string(sight.eye.x) + "," +
             std::to_string(sight.eye.y) + "," + std::to_string(sight.eye.z) + " hidden=" +
-            std::to_string(sight.hidden) + " least=" + std::to_string(sight.least) + " last=" + std::to_string(sight.point.x) + "," +
-            std::to_string(sight.point.y) + "," + std::to_string(sight.point.z) + " over=" +
-            std::to_string(sight.over.x) + "," + std::to_string(sight.over.y) + "," + std::to_string(sight.over.z) +
+            std::to_string(kept.hidden) + " least=" + std::to_string(kept.least) + " last=" + std::to_string(kept.point.x) + "," +
+            std::to_string(kept.point.y) + "," + std::to_string(kept.point.z) + " over=" +
+            std::to_string(kept.over.x) + "," + std::to_string(kept.over.y) + "," + std::to_string(kept.over.z) +
             " left=" +
             std::to_string(static_cast<int32_t>(left)) + " right=" + std::to_string(static_cast<int32_t>(right)) +
             " points=";

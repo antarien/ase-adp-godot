@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_bag_icon.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/variant/string.hpp>

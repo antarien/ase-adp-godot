@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_survival_air_mark.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
@@ -116,7 +117,13 @@ bool SurvivalAirMark::set(const SurvivalAirFrame& air, std::string& failed) {
         failed = "hud.survival_air.soot";
         return false;
     }
-    smoky_ = air.soot > 0.0;
+    // The figure smells the smoke the wind carried into the sphere of its nose (PER_SMELL_SMOKE, ARCH_ASE_ECO_GIS
+    // "Scent: Particles the Wind Carries"): beside the fire it stands in the next raster cell, where no soot is filed.
+    if (std::isnan(air.smell) || air.smell < 0.0) {
+        failed = "hud.survival_air.smell";
+        return false;
+    }
+    smoky_ = air.soot > 0.0 || air.smell > 0.0;
     return true;
 }
 

@@ -15,7 +15,7 @@
  * @usecase     usecase:100974 - lay out organ records
  * @actor       Vivarium Steward (VIVARIUSTE)
  * @created     2026-11-05
- * @modified    2026-11-21
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -27,6 +27,8 @@
 #include <ase/adp/godot/godot_organ_records.hpp>
 #include <ase/adp/godot/godot_host_record.hpp>
 #include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/lineage/types.hpp>
+#include <ase/adp/godot/template/types.hpp>
 #include <ase/adp/godot/leaf/types.hpp>
 #include <ase/adp/godot/tube/types.hpp>
 
@@ -79,6 +81,20 @@ bool segment_bark_of(const KernelHostRecord& record, VivariumOrganView& out) {
 }
 
 /**
+ * TREEGEN T.6, detail stage 1. The leaf port writes GODOT_KEY_TEMPLATE for every leaf as its twelfth value
+ * (FloraHostLeafExptSystem): the fine card for a leaf of a body in the near band, the coarse card in the far
+ * band. Any other value is a broken port - never a leaf laid on a card nobody chose.
+ */
+bool leaf_template_of(const KernelHostRecord& record, VivariumOrganView& out) {
+    const double card = record_value(record, GODOT_KEY_TEMPLATE);
+    if (card != static_cast<double>(GODOT_TMPL_LEAF) && card != static_cast<double>(GODOT_TMPL_LEAF_CORS)) {
+        return false;
+    }
+    out.card = static_cast<uint32_t>(card);
+    return true;
+}
+
+/**
  * 03.11 step 2, the material data of a section. The tile port writes all three keys for every internode it
  * names (FloraHostTileExptSystem), so a gap is a broken port - never a bark stretched by a tiling nobody
  * computed.
@@ -120,6 +136,24 @@ bool organ_sway_of(const KernelHostRecord& record, VivariumOrganView& out) {
     out.sway_gust_z = gust_z;
     out.sway_base = shape_base;
     out.sway_top = shape_top;
+    return true;
+}
+
+/**
+ * PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.9, the round trip S0, S1, S0 (usecase:101330 watch the growing plant body).
+ * The lineage port writes its one key for every shown organ (FloraHostLngeExptSystem) as a whole number from a
+ * uint32_t, so a value that is no whole number in 0..GODOT_LINEAGE_MAX is a broken port - never a name nobody gave.
+ * Inside the range the value is a whole number exactly when it survives the round trip through uint32_t.
+ */
+bool organ_lineage_of(const KernelHostRecord& record, VivariumOrganView& out) {
+    const double lineage = record_value(record, GODOT_KEY_LINEAGE);
+    if (!std::isfinite(lineage) || lineage < 0.0 || lineage > GODOT_LINEAGE_MAX) {
+        return false;
+    }
+    if (static_cast<double>(static_cast<uint32_t>(lineage)) != lineage) {
+        return false;
+    }
+    out.lineage = lineage;
     return true;
 }
 

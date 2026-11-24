@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_terrain_kit.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/types.hpp>
 

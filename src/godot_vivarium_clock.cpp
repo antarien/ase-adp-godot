@@ -112,7 +112,7 @@ uint32_t VivariumView::scene_parts_built() const {
     }
     uint32_t built = 0u;
     built += scene_terrain_ == resources_.terrain_generation() ? 1u : 0u;
-    built += scene_streams_ == resources_.stream_generation() ? 1u : 0u;
+    built += water_marks_.streams == resources_.stream_generation() ? 1u : 0u;
     built += resources_.template_generation() > 0u ? 1u : 0u;
     built += scene_organs_ > 0u ? 1u : 0u;
     built += scene_focus_ != GODOT_NO_PLACE ? 1u : 0u;

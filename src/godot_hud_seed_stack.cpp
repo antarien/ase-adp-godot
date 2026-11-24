@@ -24,6 +24,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_seed_stack.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 
 namespace ase::adp::godot {
 

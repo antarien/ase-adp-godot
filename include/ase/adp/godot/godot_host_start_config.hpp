@@ -18,7 +18,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-11-21
- * @modified    2026-11-21
+ * @modified    2026-11-23
  * @version     00.00.04.00024 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -108,7 +108,10 @@ struct VivariumCampPartSpec {
     uint32_t    variant = 0;    // node of the export, the suffix of its make (camp_stone.<variant>)
     double      east = 0.0;     // metres east of the stem foot of the patch of camp.place
     double      north = 0.0;    // metres north of that stem foot
-    double      drop = 0.0;     // release height of the centre of mass, metres above that stem foot
+    double      drop = 0.0;     // height of the centre of mass the part is laid at, metres above that stem foot
+    double      tx = 0.0;       // turn the part is laid in, rotation vector in radians, east component
+    double      ty = 0.0;       // turn the part is laid in, up component
+    double      tz = 0.0;       // turn the part is laid in, north component
     double      fall = 0.0;     // fall speed of the part in still air, m/s
     bool        fuel = false;   // the part burns: ase-pl-ingle gives it a fire cell of ase-fire
 };
@@ -138,12 +141,13 @@ struct VivariumStartConfig {
     std::string stage_port;          // host port of the stage codes of ase-plant, one record (ase-pl-flora: flora.stage.v1, usecase:101635 - show the plant stage)
     std::string stem_port;           // host port of the stem feet ase-physics holds, one record per standing stem (ase-pl-flora: flora.stem.v1)
     std::string autumn_port;         // host port of the autumn colours, one record per patch whose colour stands (ase-pl-flora: flora.autumn.v1, usecase:101646 colour the leaves in autumn)
+    std::string cap_port;            // host port of the cap radii, one record per patch whose fruit body has a cap (ase-pl-flora: flora.cap.v1, usecase:101362 scale the organ templates)
     std::string clock_port;          // host port of the game clock (ase-pl-flora: flora.clock.v1)
     std::string scene_port;          // host port the patches are laid through (ase-pl-flora: flora.scene.v1)
     std::string organ_ports[GODOT_ORGAN_COUNT];  // one host port per organ class, index = GODOT_ORGAN_*
     std::string instance_ports[GODOT_DRAWN_COUNT];  // one instance port per drawn class, index = GODOT_ORGAN_* before the root
     std::string ground_port;         // host port the ground square is laid through (ase-pl-flora: flora.ground.v1)
-    std::string brook_port;          // host port the brooks are laid through (ase-pl-flora: flora.brook.v1)
+    std::string brook_port;          // host port the brooks are laid through (ase-pl-water: water.brook.v1, H.8)
     std::string terrain_port;        // host port of the terrain samples (ase-pl-flora: flora.terrain.v1)
     std::string ground_cell_port;    // host port of the ground cells (ase-pl-flora: flora.ground.cell.v1)
     std::string sky_port;            // host port of the sky and the light of the scene (ase-pl-sky: sky.scene.v1)
@@ -164,6 +168,7 @@ struct VivariumStartConfig {
     std::string camp_body_port;      // host port of the place and turn of every camp part body (ase-pl-ingle: ingle.body.v1, T.3)
     std::string camp_refuel_port;    // host port of the keepers laying wood this pass (ase-pl-ingle: ingle.refuel.v1, T.7)
     std::string tile_port;           // host port of the bark tiling of the internodes (ase-pl-flora: flora.tile.v1)
+    std::string lineage_port;        // host port of the lineage of every shown organ (ase-pl-flora: flora.lineage.v1, TREEGEN T.9)
     std::string sway_port;           // host port of the sway of the organs on a branch (ase-pl-flora: flora.sway.v1)
     std::string bend_port;           // host port of the bend of every leaf card (ase-pl-flora: flora.bend.v1, TREEGEN T.6)
     std::string tint_port;           // host port of the colour offset of every leaf card (ase-pl-flora: flora.tint.v1, TREEGEN T.6)
@@ -172,11 +177,12 @@ struct VivariumStartConfig {
     std::string knot_port;           // host port of the knots where a branch leaves its axis (ase-pl-flora: flora.mesh.knot.v1, N0543)
     std::string foot_port;           // host port of the foot flare of every stem at the ground (ase-pl-flora: flora.mesh.foot.v1, N0543)
     std::string scar_port;           // host port of the scars a cut branch leaves on its axis (ase-pl-flora: flora.mesh.scar.v1, N0543)
-    std::string stream_port;         // host port of the water of the brooks (ase-pl-flora: flora.stream.v1)
+    std::string stream_port;         // host port of the water of the brooks (ase-pl-water: water.stream.v1, H.8)
     std::string current_port;        // host port of the flowing water of every river cell (ase-pl-water: water.current.v1, H.13), read once offered
     std::string quality_port;        // host port of what the water of every current cell carries (ase-pl-water: water.quality.v1, D2508), read once offered
     std::string pit_port;            // host port of the open water of every dug pit (ase-pl-hydrogeology: hydrogeology.pit.v1, H.4), read once offered
     std::string groundwater_port;    // host port of the groundwater of every chunk (ase-pl-hydrogeology: hydrogeology.groundwater.v1, H.3), read once offered
+    std::string salt_port;           // host port of the salt of every chunk, water half, soil half and sum (ase-pl-hydrogeology: hydrogeology.salt.v1, H.9 I-4), read once offered
     std::string level_port;          // host port the player levels a patch through (ase-pl-flora: flora.level.v1)
     std::string flatten_port;        // host port the player flattens the ground at a place through (ase-pl-flora: flora.flatten.v1)
     std::string lower_port;          // host port the player digs the ground down at a place through (ase-pl-flora: flora.lower.v1)
@@ -197,6 +203,7 @@ struct VivariumStartConfig {
     std::string view_port;           // host port the view hands the place of its camera through (ase-pl-flora: flora.view.v1)
     std::string template_corner_port;   // host port of the corners of the organ templates (ase-pl-flora: flora.template.corner.v1)
     std::string template_triangle_port;  // host port of the triangles of the organ templates (ase-pl-flora: flora.template.triangle.v1)
+    std::string template_tangent_port;   // host port of the tangents of the organ template corners (ase-pl-flora: flora.template.tangent.v1, T.6)
     std::string figure_body_port;    // host port of the figures the view draws (ase-pl-avatar: avatar.body.v1)
     std::string figure_camera_port;  // host port of the player camera while it follows a figure (ase-pl-avatar: avatar.camera.v1)
     std::string figure_spawn_port;   // host port the view asks for the figure of its seat through (ase-pl-avatar: avatar.spawn.v1)

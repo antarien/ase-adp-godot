@@ -314,6 +314,10 @@ void VivariumView::bridge_air(SurvivalAirFrame& air) {
             }
         }
     }
+    // The smell rides on the same record (PER_SMELL_SMOKE, B3): beside the fire the figure stands in the next raster
+    // cell, so its soot is 0 while its nose catches the smoke the wind carried (ARCH_ASE_ECO_GIS "Scent: Particles
+    // the Wind Carries"). A record without the key leaves the smell at 0; the gap stays the soot's alone.
+    air.smell = (cell == nullptr || std::isnan(cell->smell)) ? 0.0 : cell->smell;
     if (cell == nullptr || std::isnan(cell->soot)) {
         open_gap(SurvivalAirFrame::GAP_SOOT, smoked);
         air.soot = 0.0;

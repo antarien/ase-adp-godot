@@ -48,7 +48,7 @@
 #include <ase/adp/godot/godot_hud_figure_switch.hpp>
 #include <ase/adp/godot/godot_hud_figure_turn.hpp>
 #include <ase/adp/godot/godot_hud_figure_zoom.hpp>
-#include <ase/adp/godot/godot_hud_ui_text_block.hpp>
+#include <ase/adp/godot/godot_hud_ui_text_class.hpp>
 
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/rect2.hpp>

@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_world_drop.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <ase/math/math.hpp>

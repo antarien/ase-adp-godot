@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_survival_rest_card.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 

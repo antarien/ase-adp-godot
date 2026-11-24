@@ -34,6 +34,8 @@
 #include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_plant_shader.hpp>
 #include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/cap/godot_plant_cap.hpp>
+#include <ase/adp/godot/cap/types.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
@@ -269,6 +271,14 @@ PlantSceneLook bind_plant_look(const VivariumAssetBinding& binding, const ::godo
     look.fruit = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_FRUIT));
     look.nutlet = template_of(binding, asset_root, asset_of(roles, GODOT_ROLE_NUTLET));
     return look;
+}
+
+PlantSceneTemplate bind_plant_cap(const VivariumAssetBinding& binding, const ::godot::String& asset_root,
+                                  const std::unordered_map<std::string, std::string>& roles, const std::string& species) {
+    // the fruit body of a cap patch of `species` (usecase:101362 scale the organ templates): the same role binding as
+    // every organ template, under the role fungus.<species>, its stand-in colour the one stand_ins_of gives every cap
+    // role
+    return template_of(binding, asset_root, asset_of(roles, cap_role_of(species).c_str()));
 }
 
 }  // namespace ase::adp::godot

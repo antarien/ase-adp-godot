@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_screen_shade.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 
 #include <ase/math/math.hpp>
 

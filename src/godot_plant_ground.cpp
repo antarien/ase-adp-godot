@@ -367,6 +367,8 @@ bool patch_ground(const std::vector<VivariumTerrainView>& samples, const std::ve
     }
     const PlantGroundLayout& layout = surface.layout;
     if (moved_any) {
+        // a reader that keeps what it derived from the places (SignMarker::follow_brook) sees them move (P0692)
+        surface.revision += 1u;
         surface.positions = PlantGroundSpan{layout.position_offset + moved_first * layout.position_stride,
                                             layout.position_offset + moved_last * layout.position_stride + 12u};
         // the normal and, at stride 8, the tangent behind it: the whole slot of the last moved vertex

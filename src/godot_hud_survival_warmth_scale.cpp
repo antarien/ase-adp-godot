@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_survival_warmth_scale.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
 #include <ase/adp/godot/hud/types.hpp>

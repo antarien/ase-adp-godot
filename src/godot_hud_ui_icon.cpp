@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_icon.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
@@ -41,6 +42,8 @@ bool UiIcon::bind(const UiTheme& theme, const std::string& name, std::string& fa
     font_ = ::godot::Ref<::godot::FontFile>();
     glyph_ = ::godot::String();
     name_ = name;
+    measured_size_ = 0;  // a new glyph is shaped again at its first size
+    measured_width_ = 0.0f;
     const ::godot::Ref<::godot::FontFile>& face = theme.faces().data;
     if (!read_icon(theme.icons(), ::godot::String::utf8(name.c_str()), face, glyph_, offset_css_)) {
         glyph_ = ::godot::String();
@@ -64,7 +67,7 @@ void UiIcon::draw(UiPen& canvas, const ::godot::Vector2& centre, double size, co
     const int32_t font_size = static_cast<int32_t>(size);
     // text-anchor middle: the advance centred; dominant-baseline central: the middle of the face's designed ascent
     // and descent on the centre, so the baseline lies half that span below it, never from the rounded metrics.
-    const float width = font_->get_string_size(glyph_, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f, font_size).x;
+    const float width = width_at(font_size);
     const float baseline =
         centre.y + static_cast<float>((ascent_share_ - descent_share_) * static_cast<double>(font_size)) * GODOT_HALF;
     const float share = static_cast<float>(size / web_px_);
@@ -107,7 +110,17 @@ double UiIcon::advance(double size) const {
     if (!bound()) {
         return 0.0;
     }
-    return font_->get_string_size(glyph_, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f, static_cast<int32_t>(size)).x;
+    return static_cast<double>(width_at(static_cast<int32_t>(size)));
+}
+
+float UiIcon::width_at(int32_t font_size) const {
+    // The text server shapes the glyph on every get_string_size; an icon keeps its size from frame to frame, so the
+    // advance is shaped once per size (P0692).
+    if (font_size != measured_size_) {
+        measured_width_ = font_->get_string_size(glyph_, ::godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f, font_size).x;
+        measured_size_ = font_size;
+    }
+    return measured_width_;
 }
 
 }  // namespace ase::adp::godot

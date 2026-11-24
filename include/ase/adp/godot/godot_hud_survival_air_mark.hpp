@@ -25,9 +25,10 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    N0528 (survival rows of the inventory), N0530 (survival facets without a value), D2500 (the glyph also
- *              stands while soot of GIS_LOCAL_SOOT hangs in the seat's cell, the facet Rauch), carrier N0448
+ *              stands while soot of GIS_LOCAL_SOOT hangs in the seat's cell, the facet Rauch), N0593 (the cell's soot
+ *              is never carried off by the wind, so the smoke facet stays on once laid), carrier N0448
  * @created     2026-11-20
- * @modified    2026-11-20
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -37,10 +38,10 @@
 
 #include <ase/adp/godot/godot_hud_ui_motion.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
-#include <ase/adp/godot/godot_hud_ui_text_block.hpp>
+#include <ase/adp/godot/godot_hud_ui_text_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 
@@ -55,6 +56,7 @@ struct SurvivalAirFrame {
     static constexpr const char* GAP_SOOT = "D2500";    // the bridge gap: no port carries GIS_LOCAL_SOOT
     bool toxic = false;  // st.air: the owner rates the air worse than normal, the mark shows
     double soot = 0.0;   // GIS_LOCAL_SOOT of the seat's figure (survival.smoke.v1): kg of soot in the air of its cell; the plume stands above 0
+    double smell = 0.0;  // PER_SMELL_SMOKE of the seat's figure (survival.smoke.v1): the share its nose caught in its sphere; the plume stands above 0
 };
 
 /** The air mark in the sky band. */

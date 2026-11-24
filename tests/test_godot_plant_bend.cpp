@@ -22,7 +22,7 @@
  * @usecase     usecase:6540 - generate plant organs
  * @actor       Organ Arrangement Generator (ORGAARRGEN)
  * @created     2026-11-21
- * @modified    2026-11-21
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -38,6 +38,7 @@
 #include <ase/adp/godot/godot_plant_instances.hpp>
 #include <ase/adp/godot/leaf/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
+#include <ase/adp/godot/template/types.hpp>
 #include <ase/kernel/kernel_host_port.hpp>
 #include <ase/utils/strops.hpp>
 
@@ -96,6 +97,16 @@ ase::kernel::KernelHostRecord atlas_record(double cell, double cells) {
     return record;
 }
 
+/** The leaf record as FloraHostLeafExptSystem files it, reduced to its twelfth value: the card of the leaf. */
+ase::kernel::KernelHostRecord card_record(double card) {
+    ase::kernel::KernelHostRecord record;
+    record.object_id = kLeaf;
+    ase::kernel::KernelHostValue& slot = record.values[record.value_count++];
+    ase::utils::str_copy(slot.key, ase::kernel::HostKeyBytes, GODOT_KEY_TEMPLATE);
+    slot.value = card;
+    return record;
+}
+
 /** Channel a of an organ without an atlas record: cell 0 of cells 1, packed as plant_instances packs it. */
 constexpr float kAtlasNone = static_cast<float>(GODOT_ATLS_CELL_NONE * GODOT_ATLS_PACK +
                                                 (GODOT_ATLS_CELLS_NONE - GODOT_ATLS_CELLS_NONE));
@@ -120,11 +131,35 @@ TEST_CASE("usecase:6540 generate plant organs: a bend record with a value that i
     CHECK(leaf.bend_along == GODOT_BEND_NONE);
 }
 
+TEST_CASE("TREEGEN T.6: the twelfth value of a leaf record lays the fine or the coarse card into the view of its leaf") {
+    VivariumOrganView near_leaf = organ(kLeaf, kPatch, 1.0);
+    REQUIRE(leaf_template_of(card_record(static_cast<double>(GODOT_TMPL_LEAF)), near_leaf));
+    CHECK(near_leaf.card == GODOT_TMPL_LEAF);
+    VivariumOrganView far_leaf = organ(kLeaf, kPatch, 1.0);
+    REQUIRE(leaf_template_of(card_record(static_cast<double>(GODOT_TMPL_LEAF_CORS)), far_leaf));
+    CHECK(far_leaf.card == GODOT_TMPL_LEAF_CORS);
+}
+
+TEST_CASE("TREEGEN T.6: a leaf record whose card is no leaf card, no number or missing is a broken port") {
+    VivariumOrganView leaf = organ(kLeaf, kPatch, 1.0);
+    leaf.card = GODOT_TMPL_LEAF_CORS;
+    // the bark tube, the fungus card and a code beyond the table never lay a leaf
+    CHECK_FALSE(leaf_template_of(card_record(static_cast<double>(GODOT_TMPL_FINE)), leaf));
+    CHECK_FALSE(leaf_template_of(card_record(static_cast<double>(GODOT_TMPL_CORS)), leaf));
+    CHECK_FALSE(leaf_template_of(card_record(static_cast<double>(GODOT_TMPL_FNGS)), leaf));
+    CHECK_FALSE(leaf_template_of(card_record(static_cast<double>(GODOT_TMPL_COUNT)), leaf));
+    CHECK_FALSE(leaf_template_of(card_record(2.5), leaf));
+    CHECK_FALSE(leaf_template_of(card_record(std::nan("")), leaf));
+    CHECK_FALSE(leaf_template_of(bend_record(kAcross, kAlong), leaf));  // a record without the template key
+    // the view keeps the card it had
+    CHECK(leaf.card == GODOT_TMPL_LEAF_CORS);
+}
+
 TEST_CASE("usecase:6540 generate plant organs: every leaf instance carries the bend of its card as custom data, slot for slot") {
     VivariumOrganView bent = organ(kLeaf, kPatch, 1.0);
     REQUIRE(leaf_bend_of(bend_record(kAcross, kAlong), bent));
     const VivariumOrganView flat = organ(kFlat, kPatch, 1.0);
-    const auto split = rows_by_body({instance(kLeaf), instance(kFlat)}, {bent, flat}, GODOT_ORDER_EVERY);
+    const auto split = rows_by_body({instance(kLeaf), instance(kFlat)}, {bent, flat}, GODOT_ORDER_EVERY, GODOT_TMPL_LEAF);
     const PlantBodyRows& plant = split.at(kPatch);
 
     // one custom slot per record, beside it in the same order: across, along, the colour offset, the atlas cell
@@ -165,7 +200,7 @@ TEST_CASE("usecase:6540 generate plant organs: every leaf instance carries its c
     VivariumOrganView tinted = organ(kLeaf, kPatch, 1.0);
     REQUIRE(leaf_tint_of(tint_record(kOffset), tinted));
     const VivariumOrganView plain = organ(kFlat, kPatch, 1.0);
-    const auto split = rows_by_body({instance(kLeaf), instance(kFlat)}, {tinted, plain}, GODOT_ORDER_EVERY);
+    const auto split = rows_by_body({instance(kLeaf), instance(kFlat)}, {tinted, plain}, GODOT_ORDER_EVERY, GODOT_TMPL_LEAF);
     const PlantBodyRows& plant = split.at(kPatch);
 
     REQUIRE(plant.above_custom.size() == 2u * GODOT_INSTANCE_CUSTOM_VALUES);
@@ -207,7 +242,7 @@ TEST_CASE("usecase:6540 generate plant organs: every leaf instance carries its a
     VivariumOrganView varied = organ(kLeaf, kPatch, 1.0);
     REQUIRE(leaf_atlas_of(atlas_record(kCell, kCells), varied));
     const VivariumOrganView whole = organ(kFlat, kPatch, 1.0);
-    const auto split = rows_by_body({instance(kLeaf), instance(kFlat)}, {varied, whole}, GODOT_ORDER_EVERY);
+    const auto split = rows_by_body({instance(kLeaf), instance(kFlat)}, {varied, whole}, GODOT_ORDER_EVERY, GODOT_TMPL_LEAF);
     const PlantBodyRows& plant = split.at(kPatch);
 
     REQUIRE(plant.above_custom.size() == 2u * GODOT_INSTANCE_CUSTOM_VALUES);
@@ -225,7 +260,7 @@ TEST_CASE("usecase:6540 generate plant organs: every cell of every atlas width s
         for (double cell = GODOT_ATLS_CELL_NONE; cell < cells; cell += 1.0) {
             VivariumOrganView leaf = organ(kLeaf, kPatch, 1.0);
             REQUIRE(leaf_atlas_of(atlas_record(cell, cells), leaf));
-            const auto split = rows_by_body({instance(kLeaf)}, {leaf}, GODOT_ORDER_EVERY);
+            const auto split = rows_by_body({instance(kLeaf)}, {leaf}, GODOT_ORDER_EVERY, GODOT_TMPL_LEAF);
             const float packed = std::round(split.at(kPatch).above_custom[3]);
             const float read_cell = std::floor(packed / static_cast<float>(GODOT_ATLS_PACK));
             const float read_cells = packed - read_cell * static_cast<float>(GODOT_ATLS_PACK) + 1.0f;

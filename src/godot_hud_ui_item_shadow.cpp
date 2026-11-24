@@ -193,11 +193,20 @@ uint8_t channel_byte(double value) {
 const UiItemSpriteShadow& UiItemShadow::of(const std::vector<UiItemSpritePath>& paths, double stroke_scale,
                                            const ::godot::Transform2D& local, double scale, double spread,
                                            const ::godot::Color& shade) {
-    for (const UiItemSpriteShadow& cast : kept_) {
+    // Least recently used goes first (P0692): a hit moves to the end, so a shadow drawn every frame is never the one a
+    // ninth key pushes out, as it was while the first one rastered went first however often it was drawn.
+    const size_t held = kept_.size();
+    for (size_t index = 0; index < held; ++index) {
+        const UiItemSpriteShadow& cast = kept_[index];
         if (same_axis(cast.axis_x, local.columns[0]) && same_axis(cast.axis_y, local.columns[1]) &&
             ::godot::Math::abs(cast.scale - scale) <= GODOT_ITEM_SHADOW_SAME &&
             ::godot::Math::abs(cast.spread - spread) <= GODOT_ITEM_SHADOW_SAME && cast.shade == shade) {
-            return cast;
+            if (index + 1 < held) {
+                const UiItemSpriteShadow hit = cast;
+                kept_.erase(kept_.begin() + static_cast<int64_t>(index));
+                kept_.push_back(hit);
+            }
+            return kept_.back();
         }
     }
     if (static_cast<int64_t>(kept_.size()) >= GODOT_ITEM_SHADOW_KEPT) {

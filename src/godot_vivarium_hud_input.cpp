@@ -20,7 +20,9 @@
  *              "hud plug trunk" for the peg, each "done: " or "refused: " with the bridge's reason; the window
  *              acceptance taps every hit of hud.modes.<mode>.hits a place line names and waits for that line.
  *              Every press writes "hud tap act=<act> index=<sign or tool> mode=<mode> x y" before the HUD takes
- *              it, so a tap that changes no mode, or rests where a sign was meant, is read from the log.
+ *              it, so a tap that changes no mode, or rests where a sign was meant, is read from the log. Every
+ *              release writes "hud release requests=<n> mode=<mode> selected=<key>" after the HUD took it (B0790):
+ *              a tap that sends no request names the mode and the selection it left, so the exit that kept it reads.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -142,6 +144,12 @@ void VivariumView::hud_input(const ::godot::Ref<::godot::InputEvent>& local) {
             fail_hud(failed);
             return;
         }
+        // THE RELEASE NAMES WHAT IT LEFT (B0790): VivariumHud::release has exits that send nothing (a refused drop,
+        // a long press that fired, a thing that left, the selection toggled); the count, the mode and the selection
+        // after it tell them apart without a line in the HUD itself.
+        const std::string left = "hud release requests=" + std::to_string(requests.size()) + " mode=" + hud_.mode() +
+                                 " selected=" + (hud_.selected().empty() ? std::string("none") : hud_.selected());
+        note(::godot::String::utf8(left.c_str()));
     }
     // a press and a release render at once in the mockup (render() after doAct), and so does every move of a lifted
     // thing or a held grip (pointermove, m.html 1006 and 1007): the next fill_hud samples again. A let go grip does not.
@@ -283,7 +291,8 @@ void VivariumView::send_hud(const std::vector<VivariumHudRequest>& requests) {
             // brookTap (usecase:100399 carry brook water): the bridge checks the can of the hand and the tap on the
             // first brook's line by the mockup's rule, the fill goes to the fill port of the figure led (07.14) and
             // ase-equipment fills the can; ENCHEU NO RIACHO follows the risen level (engine_fill). N0458 closes
-            // while the port takes the fill; flora.stream.v1 takes no water from the brook yet (N0451).
+            // while the port takes the fill; the stream port water.stream.v1 of ase-pl-water takes no water from the
+            // brook (N0451).
             float x = 0.0f;
             float z = 0.0f;
             float nearest_px = -1.0f;

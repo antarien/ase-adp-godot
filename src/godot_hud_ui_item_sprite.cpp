@@ -13,7 +13,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-13
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -22,6 +22,8 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_item_sprite.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
+#include <ase/adp/godot/godot_hud_ui_stroke.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
@@ -158,6 +160,8 @@ bool UiItemSprite::set(const std::string& name, std::string& failed) {
 
     has_level_ = entry.has("level");
     level_ = UiItemSpriteLevel();
+    level_outline_ = UiSvgOutline();  // a new level is laid again at its first share
+    level_share_ = 0.0;
     if (has_level_) {
         ::godot::Dictionary level;
         if (!read_section(entry, "level", level) || !read_level(*theme_, level, level_)) {
@@ -168,9 +172,9 @@ bool UiItemSprite::set(const std::string& name, std::string& failed) {
     return true;
 }
 
-void UiItemSprite::paint(UiPen& canvas, const UiSvgOutline& outline, const ::godot::Transform2D& local,
-                         const ::godot::Color* fill, const ::godot::Color* stroke, double width,
-                         const UiItemSpritePlace& place) const {
+void UiItemSprite::paint(UiPen& canvas, const ::godot::Transform2D& frame, const UiSvgOutline& outline,
+                         const ::godot::Transform2D& local, const ::godot::Color* fill, const ::godot::Color* stroke,
+                         double width, const UiItemSpritePlace& place) const {
     // The outline through one read pointer, every point through one write pointer (P0697): a push_back or an index
     // per point crosses the GDExtension border each time, the way UiPen::moved measured it (P0690).
     const int64_t count = outline.points.size();
@@ -204,26 +208,9 @@ void UiItemSprite::paint(UiPen& canvas, const UiSvgOutline& outline, const ::god
     if (!(drawn > 0.0f)) {
         return;
     }
-    // Read again after the resize: a shrink may hand the array a new buffer.
-    const ::godot::Vector2* corners = points.ptr();
-    const bool round = outline.closed && kept > 1;
-    const int64_t length = round ? kept + 1 : kept;
-    if (length > 1) {
-        ::godot::PackedVector2Array line;
-        line.resize(length);
-        ::godot::Vector2* along = line.ptrw();
-        for (int64_t index = 0; index < kept; ++index) {
-            along[index] = corners[index];
-        }
-        if (round) {
-            along[kept] = corners[0];
-        }
-        canvas.draw_polyline(line, ink, drawn, true);
-    }
-    // stroke-linecap and stroke-linejoin round: a disc of the stroke's width on every corner and end.
-    for (int64_t index = 0; index < kept; ++index) {
-        canvas.draw_circle(corners[index], drawn * GODOT_HALF, ink);
-    }
+    // stroke-linecap and stroke-linejoin round as ONE mesh (P0692): a polyline with a disc on every corner drew each
+    // knee twice, and a translucent ink stood two layers deep there. A closed run goes back onto its first point.
+    ui_stroke(canvas, frame, points, outline.closed && kept > 1, ink, drawn);
 }
 
 void UiItemSprite::draw(UiPen& canvas, const ::godot::Transform2D& frame,
@@ -278,38 +265,47 @@ void UiItemSprite::draw_local(UiPen& canvas, const ::godot::Transform2D& frame,
     }
     for (const UiItemSpritePath& path : paths_) {
         for (const UiSvgOutline& outline : path.outlines) {
-            paint(canvas, outline, local, path.filled ? &path.fill : nullptr, path.stroked ? &path.stroke : nullptr,
-                  path.width, place);
+            paint(canvas, frame, outline, local, path.filled ? &path.fill : nullptr,
+                  path.stroked ? &path.stroke : nullptr, path.width, place);
         }
     }
     const double share = ase::math::clamp(place.level, 0.0, 1.0);
     if (!has_level_ || !(share > 0.0)) {
         return;
     }
-    const double y = level_.bottom - share * level_.span;
-    UiSvgOutline level;
+    // The outline in sprite units depends on the share alone, so it is laid again only when the level moves; the
+    // frame, the place and the shade are applied by paint on every draw (P0692).
+    if (share != level_share_) {
+        const double y = level_.bottom - share * level_.span;
+        UiSvgOutline level;
+        if (level_.line) {
+            // M left y Q middle (y + sag) right y, stroked.
+            const ::godot::Vector2 from(static_cast<float>(level_.left), static_cast<float>(y));
+            const ::godot::Vector2 control(static_cast<float>((level_.left + level_.right) * GODOT_HALF),
+                                           static_cast<float>(y + level_.sag));
+            const ::godot::Vector2 to(static_cast<float>(level_.right), static_cast<float>(y));
+            svg_append(level, from);
+            svg_append_quadratic(level, from, control, to);
+        } else {
+            // The walls run from the top corners to the foot corners; the sap fills between them below y.
+            const double along = (y - level_.top) / level_.span;
+            const double wall_left = level_.top_left + (level_.foot_left - level_.top_left) * along;
+            const double wall_right = level_.top_right + (level_.foot_right - level_.top_right) * along;
+            const float foot = static_cast<float>(level_.bottom);
+            level.closed = true;
+            svg_append(level, ::godot::Vector2(static_cast<float>(wall_left), static_cast<float>(y)));
+            svg_append(level, ::godot::Vector2(static_cast<float>(wall_right), static_cast<float>(y)));
+            svg_append(level, ::godot::Vector2(static_cast<float>(level_.foot_right), foot));
+            svg_append(level, ::godot::Vector2(static_cast<float>(level_.foot_left), foot));
+        }
+        level_outline_ = level;
+        level_share_ = share;
+    }
     if (level_.line) {
-        // M left y Q middle (y + sag) right y, stroked.
-        const ::godot::Vector2 from(static_cast<float>(level_.left), static_cast<float>(y));
-        const ::godot::Vector2 control(static_cast<float>((level_.left + level_.right) * GODOT_HALF),
-                                       static_cast<float>(y + level_.sag));
-        const ::godot::Vector2 to(static_cast<float>(level_.right), static_cast<float>(y));
-        svg_append(level, from);
-        svg_append_quadratic(level, from, control, to);
-        paint(canvas, level, local, nullptr, &level_.color, level_.width, place);
+        paint(canvas, frame, level_outline_, local, nullptr, &level_.color, level_.width, place);
         return;
     }
-    // The walls run from the top corners to the foot corners; the sap fills between them below y.
-    const double along = (y - level_.top) / level_.span;
-    level.closed = true;
-    svg_append(level, ::godot::Vector2(static_cast<float>(level_.top_left + (level_.foot_left - level_.top_left) * along),
-                                       static_cast<float>(y)));
-    svg_append(level,
-               ::godot::Vector2(static_cast<float>(level_.top_right + (level_.foot_right - level_.top_right) * along),
-                                static_cast<float>(y)));
-    svg_append(level, ::godot::Vector2(static_cast<float>(level_.foot_right), static_cast<float>(level_.bottom)));
-    svg_append(level, ::godot::Vector2(static_cast<float>(level_.foot_left), static_cast<float>(level_.bottom)));
-    paint(canvas, level, local, &level_.color, nullptr, 0.0, place);
+    paint(canvas, frame, level_outline_, local, &level_.color, nullptr, 0.0, place);
 }
 
 }  // namespace ase::adp::godot

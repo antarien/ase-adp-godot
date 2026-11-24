@@ -16,7 +16,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-11-21
- * @modified    2026-11-21
+ * @modified    2026-11-23
  * @version     00.00.04.00024 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -31,8 +31,9 @@ namespace ase::adp::godot {
 /**
  * One corner of an organ template as the last snapshot of the template corner port showed it - a copy
  * (usecase:101011 tessellate the organ templates). ase-render-data builds the corner on the unit - base at the
- * origin, length 1 along +y - and the view takes its place, normal and texture coordinates into the
- * template mesh of its code and computes none of them.
+ * origin, length 1 along +y - and the view takes its place, normal, texture coordinates and tangent into
+ * the template mesh of its code and computes none of them. The tangent comes from the template tangent
+ * port (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.6), joined to the corner of the same code and index.
  */
 struct VivariumTemplateCornerView {
     uint32_t object_id = 0;   // the corner row, as the plugin names it on its port
@@ -46,6 +47,10 @@ struct VivariumTemplateCornerView {
     double   nz = 0.0;        // unit normal, z share
     double   u = 0.0;         // texture coordinate around the ring or across the leaf
     double   v = 0.0;         // texture coordinate along the organ
+    double   tx = 0.0;        // unit tangent along growing u, x share - from the template tangent port, joined by code and index
+    double   ty = 0.0;        // unit tangent, y share
+    double   tz = 0.0;        // unit tangent, z share
+    double   tw = 0.0;        // sign of the bitangent: +1 with growing v, -1 against it
 };
 
 /**

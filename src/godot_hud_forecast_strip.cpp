@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_forecast_strip.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/adp/godot/port/types.hpp>

@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_survival_rail_states.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 
 #include <godot_cpp/variant/rect2.hpp>

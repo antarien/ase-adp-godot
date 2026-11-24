@@ -18,7 +18,7 @@
  * @usecase     usecase:101348 - hand organ instances to app
  * @actor       Organ Instance Courier (ORGNINST)
  * @created     2026-10-26
- * @modified    2026-10-26
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -39,7 +39,7 @@ namespace ase::adp::godot {
 
 std::unordered_map<uint32_t, PlantBodyRows> rows_by_body(const std::vector<VivariumInstanceView>& instances,
                                                          const std::vector<VivariumOrganView>& organs,
-                                                         double split_order) {
+                                                         double split_order, uint32_t card) {
     // the organ record of every object id: a port names each organ once
     std::unordered_map<uint32_t, std::size_t> organ_at;
     organ_at.reserve(organs.size());
@@ -53,6 +53,10 @@ std::unordered_map<uint32_t, PlantBodyRows> rows_by_body(const std::vector<Vivar
             continue;
         }
         const VivariumOrganView& organ = organs[found->second];
+        // the card of the organ chooses its bundle: a coarse leaf is drawn on the 1 x 1 card, never beside the fine ones
+        if (organ.card != card) {
+            continue;
+        }
         PlantBodyRows& rows = bodies[organ.body];
         const bool above = organ.order > split_order;
         std::vector<float>& side = above ? rows.above : rows.up_to;

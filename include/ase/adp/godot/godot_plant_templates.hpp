@@ -25,7 +25,7 @@
  * @usecase     usecase:101342 - hand organ shapes to app
  * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-10-26
- * @modified    2026-10-26
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -50,10 +50,16 @@ namespace ase::adp::godot {
  * GODOT_TMPL_LEAF stands in for a leaf or a seed. A triangle whose corner the port did not carry is not drawn;
  * an index named twice is drawn once.
  *
+ * `tangents` gets four floats per vertex, in the order of the vertices of `out`: the tangent of the corner
+ * along growing u and the sign of its bitangent, as the template tangent port carried them and
+ * GodotHostResourceManager::read_templates joined them to the corner (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN
+ * T.6). They are the form of ARRAY_TANGENT; the view computes no tangent. PlantMeshArrays does not carry them
+ * because only the templates have them, and its header is read by every surface of the care view.
+ *
  * @return the triangles drawn
  */
 uint32_t build_template(const std::vector<VivariumTemplateCornerView>& corners,
                         const std::vector<VivariumTemplateTriangleView>& triangles, uint32_t code,
-                        PlantMeshArrays& out);
+                        PlantMeshArrays& out, std::vector<float>& tangents);
 
 }  // namespace ase::adp::godot

@@ -18,7 +18,7 @@
  * @usecase     usecase:100395 - age the bark
  * @actor       Birkenborke (Betula pendula)
  * @created     2026-10-26
- * @modified    2026-11-21
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -32,6 +32,7 @@
 
 #include <ase/adp/godot/godot_plant_instances.hpp>
 #include <ase/adp/godot/leaf/types.hpp>
+#include <ase/adp/godot/template/types.hpp>
 #include <ase/adp/godot/types.hpp>
 
 #include <cstdint>
@@ -49,7 +50,8 @@ TEST_CASE("usecase:100395 age the bark: the bark share of an internode stays off
     VivariumOrganView band = organ(13u, kPatch, 0.0);
     band.bark = 0.25;  // the band towards the white bark
     const VivariumOrganView twig = organ(12u, kPatch, 3.0);  // a branch: white bark
-    const auto split = rows_by_body({instance(11u), instance(12u), instance(13u)}, {stem, twig, band}, 2.0);
+    const auto split = rows_by_body({instance(11u), instance(12u), instance(13u)}, {stem, twig, band}, 2.0,
+                                    GODOT_TMPL_LEAF);
     const PlantBodyRows& plant = split.at(kPatch);
 
     // one custom slot per record, beside it in the same order, and no bark in any of them: no bend record, flat
@@ -72,7 +74,7 @@ TEST_CASE("03.11 step 2: the bark tiling of an internode stays off its instance,
     stem.tile_around = 2.5;   // tiles of the white bark around the tube
     stem.tile_along = 0.75;   // tiles of the white bark along the tube
     stem.tile_base = 0.4;     // tiles of the stem-base bark per white tile
-    const auto split = rows_by_body({instance(11u)}, {stem}, 2.0);
+    const auto split = rows_by_body({instance(11u)}, {stem}, 2.0, GODOT_TMPL_LEAF);
     const PlantBodyRows& plant = split.at(kPatch);
 
     REQUIRE(plant.up_to_custom.size() == GODOT_INSTANCE_CUSTOM_VALUES);

@@ -64,7 +64,7 @@ namespace ase::adp::godot {
 constexpr double GODOT_ITEM_SHADOW_SIGMA_PER_BLUR = 0.5;  // CSS blur radius over the Gaussian's standard deviation: sigma = blur / 2
 constexpr double GODOT_ITEM_SHADOW_SIGMA_REACH = 3.0;     // sigmas the blur kernel and the mask's margin reach out; past 3 sigma a Gaussian holds 0.3 %
 constexpr int64_t GODOT_ITEM_SHADOW_SAMPLES = 2;          // samples of the mask per pixel along each axis, the edge's coverage in quarters
-constexpr int64_t GODOT_ITEM_SHADOW_KEPT = 8;             // shadow textures a thing keeps; the oldest goes first
+constexpr int64_t GODOT_ITEM_SHADOW_KEPT = 8;             // shadow textures a thing keeps; the least recently drawn goes first
 constexpr double GODOT_ITEM_SHADOW_SAME = 1.0e-4;         // largest difference of two keys' numbers that still names the same shadow
 constexpr int64_t GODOT_ITEM_SHADOW_PIXEL_MAX = 1024;     // longest side of a shadow texture in pixels; a larger mask is not rastered
 constexpr double GODOT_ITEM_SHADOW_BYTE = 255.0;          // the largest value of a texture's 8-bit channel (Image::FORMAT_RGBA8)

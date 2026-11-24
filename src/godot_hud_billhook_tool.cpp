@@ -24,6 +24,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_billhook_tool.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 
 namespace ase::adp::godot {
 

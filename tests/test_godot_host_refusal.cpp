@@ -23,7 +23,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
- * @modified    2026-11-19
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -34,14 +34,18 @@
 #include "test_godot_host_support.hpp"
 
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
+#include <ase/adp/godot/godot_salt_records.hpp>
 #include <ase/adp/godot/host/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/fileio/path.hpp>
 #include <ase/fileio/text_reader.hpp>
 #include <ase/fileio/text_writer.hpp>
+#include <ase/kernel/kernel_host_port.hpp>
+#include <ase/utils/strops.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -174,9 +178,9 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     // the whole set for nothing: an organ port, the ground, the sky, the seeds, the tiling, the sway, the templates,
     // the level port and its operation, the elevation port and its operation, the date port, the stars port,
     // the forecast port, the two spade ports and their operations, the bark port, the stem port, the condition port,
-    // the stage port (usecase:101635, D2455), the bend port, the tint port, the atlas port (TREEGEN T.6) and the
-    // soil port (usecase:101340).
-    std::vector<VivariumStartConfig> unnamed(31u, vivarium_config(bundle));
+    // the stage port (usecase:101635, D2455), the bend port, the tint port, the atlas port (TREEGEN T.6), the
+    // soil port (usecase:101340) and the template tangent port (TREEGEN T.6).
+    std::vector<VivariumStartConfig> unnamed(32u, vivarium_config(bundle));
     unnamed[0].organ_ports[GODOT_ORGAN_ROOT].clear();
     unnamed[1].terrain_port.clear();
     unnamed[2].ground_cell_port.clear();
@@ -208,6 +212,7 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     unnamed[28].tint_port.clear();
     unnamed[29].atlas_port.clear();
     unnamed[30].soil_port.clear();
+    unnamed[31].template_tangent_port.clear();
     for (const VivariumStartConfig& config : unnamed) {
         CHECK(resources.boot(config) == ase::kernel::HostStatusInvalidArgument);
         CHECK(std::string(resources.failure_step()) == GODOT_STEP_CONFIG);
@@ -215,7 +220,7 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     }
 
     // A port the set does not offer is found after the load and before the start.
-    std::vector<VivariumStartConfig> unoffered(25u, vivarium_config(bundle));
+    std::vector<VivariumStartConfig> unoffered(26u, vivarium_config(bundle));
     unoffered[0].clock_port = "flora.clock.v9";
     unoffered[1].organ_ports[GODOT_ORGAN_LEAF] = "flora.organ.leaf.v9";
     unoffered[2].sky_port = "sky.scene.v9";
@@ -241,6 +246,7 @@ TEST_CASE("a missing bundle and an incomplete configuration are named by their s
     unoffered[22].tint_port = "flora.tint.v9";
     unoffered[23].atlas_port = "flora.atlas.v9";
     unoffered[24].soil_port = "flora.soil.v9";
+    unoffered[25].template_tangent_port = "flora.template.tangent.v9";
     for (const VivariumStartConfig& config : unoffered) {
         CHECK(resources.boot(config) == ase::kernel::HostStatusNotFound);
         CHECK(std::string(resources.failure_step()) == GODOT_STEP_PORT);
@@ -377,6 +383,57 @@ TEST_CASE("the PSS of this process is read from smaps_rollup, or reported as not
     } else {
         CHECK(pss == 0u);  // no rollup on this kernel: no value, and no invented one
     }
+}
+
+TEST_CASE("H.9 I-4: a salt record without its chunk, off the grid or with a value no finite number is refused") {
+    // one chunk as HydrogeologyHostSlntExptSystem files it on hydrogeology.salt.v1, the keys of HYG_HOST_KEY_*
+    constexpr uint64_t SALT_CHUNK_ID = 7u;
+    ase::kernel::KernelHostRecord record;
+    record.object_id = SALT_CHUNK_ID;
+    const auto put = [&record](const char* key, double value) {
+        ase::kernel::KernelHostValue& slot = record.values[record.value_count++];
+        ase::utils::str_copy(slot.key, ase::kernel::HostKeyBytes, key);
+        slot.value = value;
+    };
+    put("chunk_x", 3.0);
+    put("chunk_y", 0.0);
+    put("chunk_z", -2.0);
+    put("salt_hyd_kg", 3.5);
+    put("salt_soil_kg", 1.25);
+    put("salt_kg", 4.75);
+    VivariumSaltView view;
+    REQUIRE(salt_view_of(record, view));  // positive control: the whole record reads
+    CHECK(view.object_id == SALT_CHUNK_ID);
+    CHECK(view.chunk_x == doctest::Approx(3.0));
+    CHECK(view.chunk_z == doctest::Approx(-2.0));
+    CHECK(view.hyd_kg == doctest::Approx(3.5));
+    CHECK(view.soil_kg == doctest::Approx(1.25));
+    CHECK(view.sum_kg == doctest::Approx(4.75));
+
+    // without chunk_x the record names no chunk: read_salt refuses it as "salt without its chunk"
+    ase::kernel::KernelHostRecord headless = record;
+    headless.values[0u].key[0u] = '\0';
+    CHECK_FALSE(salt_view_of(headless, view));
+
+    // a chunk between two grid places is no chunk the world has
+    ase::kernel::KernelHostRecord off_grid = record;
+    off_grid.values[2u].value = -2.5;
+    CHECK_FALSE(salt_view_of(off_grid, view));
+
+    // each of the three salt values, once not finite, breaks the record
+    for (uint32_t slot = 3u; slot < record.value_count; ++slot) {
+        ase::kernel::KernelHostRecord broken = record;
+        broken.values[slot].value = std::numeric_limits<double>::quiet_NaN();
+        CAPTURE(slot);
+        CHECK_FALSE(salt_view_of(broken, view));
+        broken.values[slot].value = std::numeric_limits<double>::infinity();
+        CHECK_FALSE(salt_view_of(broken, view));
+    }
+
+    // a record without the sum is short of one half the port promised
+    ase::kernel::KernelHostRecord short_record = record;
+    short_record.value_count -= 1u;
+    CHECK_FALSE(salt_view_of(short_record, view));
 }
 
 }  // namespace ase::adp::godot

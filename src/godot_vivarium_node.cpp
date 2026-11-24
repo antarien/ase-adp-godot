@@ -52,6 +52,7 @@
 #include <ase/adp/godot/godot_new_seed.hpp>
 #include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
+#include <ase/adp/godot/cap/godot_plant_cap.hpp>
 #include <ase/adp/godot/host/types.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
@@ -124,6 +125,9 @@ void VivariumView::ready() {
         // 03.2: the materials and organ template files of the stage are read once, here, through the
         // loader the asset showcase shares; a missing one is drawn in the error material
         scene_look_ = bind_plant_look(assets_, asset_root_, asset_roles_);
+        // the caps node of the scene holds the fruit body of every species' cap role from here on (usecase:101362
+        // scale the organ templates)
+        stamp_plant_caps(scene_, assets_, asset_root_, asset_roles_);
         // B0482: the least screen width of a bark ring (view.least_ring_px) on the shared bark material, which
         // fill_tube duplicates per plant, so every tube holds a ring narrower than it at this width
         const ::godot::Ref<::godot::ShaderMaterial> bark = scene_look_.bark;

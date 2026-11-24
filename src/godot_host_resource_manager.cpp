@@ -13,8 +13,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-20
- * @version     00.00.04.00024 [seed]
+ * @modified    2026-11-23
+ * @version     00.00.28.00028 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -107,11 +107,14 @@
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/adp/godot/godot_host_record.hpp>
 #include <ase/adp/godot/godot_organ_records.hpp>
+#include <ase/adp/godot/godot_salt_records.hpp>
 #include <ase/adp/godot/godot_terrain_samples.hpp>
+#include <ase/adp/godot/cap/types.hpp>
 #include <ase/adp/godot/host/types.hpp>
 #include <ase/adp/godot/loose/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/template/types.hpp>
 #include <ase/adp/godot/types.hpp>
 // The knots, feet and cut faces of the bark tubes (N0543): knots_ is a unique_ptr to this type, so the
 // constructor and the destructor need it complete here; its schedule and page size come with the tube types
@@ -263,6 +266,7 @@ constexpr const char* kSurvivalKeyRestQuality = "rest_quality";       // surviva
 constexpr const char* kSurvivalKeyRestTarget = "rest_target";         // survival rest: MTB_CONST_REST_QUALITY_TARGET, good rest (N0578)
 constexpr const char* kSurvivalKeySpoil = "spoil";                    // survival food: ENT_FOOD_ROT_CARRIED, 0 fresh to 1 rotten (U07)
 constexpr const char* kSurvivalKeySoot = "soot";                      // survival smoke: GIS_LOCAL_SOOT, kg of soot in the air of the figure's cell (U06, D2500)
+constexpr const char* kSurvivalKeySmell = "smell";                    // survival smoke: PER_SMELL_SMOKE, share of smoke the figure's nose caught (B3)
 constexpr const char* kSurvivalKeyKind = "kind";                      // survival stock: the hash of the item_art.json key of the food (T.8)
 constexpr const char* kSurvivalKeyKg = "kg";                          // survival stock: the fresh mass of the piece, kg (T.8)
 // The camp ports of ase-pl-ingle (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP T.3, T.7; IGL_HOST_KEY_* of its types.hpp).
@@ -273,13 +277,14 @@ constexpr const char* kCampKeyFall = "fall";     // part request: fall speed in 
 constexpr const char* kCampKeyMass = "mass";     // part request: mass of the recipe variant, kg
 constexpr const char* kCampKeyMake = "make";     // part, hull and body: name id of the recipe variant
 constexpr const char* kCampKeyFuel = "fuel";     // part request: present on a part that burns
+constexpr const char* kCampKeyRough = "rough";   // part request: roughness of the recipe variant, metres beneath its convex hull (IGL_HOST_KEY_ROUGH)
 constexpr const char* kCampKeyHullX = "hx";      // hull request: corner, metres east of the centre of mass
 constexpr const char* kCampKeyHullY = "hy";      // hull request: corner, metres above the centre of mass
 constexpr const char* kCampKeyHullZ = "hz";      // hull request: corner, metres north of the centre of mass
 constexpr const char* kCampKeyPatch = "patch";   // body record: the patch whose frame the body lies in
-constexpr const char* kCampKeyTurnX = "tx";      // body record: rotation vector, east component, radians
-constexpr const char* kCampKeyTurnY = "ty";      // body record: rotation vector, up component, radians
-constexpr const char* kCampKeyTurnZ = "tz";      // body record: rotation vector, north component, radians
+constexpr const char* kCampKeyTurnX = "tx";      // body record and part request: rotation vector, east component, radians
+constexpr const char* kCampKeyTurnY = "ty";      // body record and part request: rotation vector, up component, radians
+constexpr const char* kCampKeyTurnZ = "tz";      // body record and part request: rotation vector, north component, radians
 constexpr const char* kCampKeyBody = "body";     // refuel record: the fuel body the keeper lays wood on
 constexpr const char* kCampKeyCell = "cell";     // refuel record: the fire cell of that body
 constexpr double kCampFuelMark = 1.0;            // the value the key fuel carries; the plugin reads its presence
@@ -532,7 +537,7 @@ bool ground_cell_view_of(const KernelHostRecord& record, VivariumGroundCellView&
 
 /**
  * One stream record as a view. false for a record that misses one of the eight keys the stream port writes for
- * every brook it names (ase-pl-flora, FloraHostStrmExptSystem). The groundwater beside the bed (B0286) is read
+ * every brook it names (ase-pl-water, WaterHostStrmExptSystem). The groundwater beside the bed (B0286) is read
  * from its own two keys and fails no record: the plugin files them only while ase-gis has mapped the cell at the
  * start of the bed (N0484: layer GIS_LYR_HYD_LEVEL, answered as GIS_HYD_CELL_LEVEL); before, record_value gives
  * NaN, the fields keep it, and the view's bridge logs the gap on its edge (VivariumView::follow_scene).
@@ -614,6 +619,7 @@ bool current_view_of(const KernelHostRecord& record, VivariumCurrentView& out) {
     out.bloom_kg_m3 = std::nan("");
     out.rot_kg_m3 = std::nan("");
     out.salt_kg_m3 = std::nan("");
+    out.hue_deg = std::nan("");
     return std::isfinite(out.x) && std::isfinite(out.z);
 }
 
@@ -626,9 +632,11 @@ void quality_into(const KernelHostRecord& record, VivariumCurrentView& cell) {
     constexpr const char* KEY_BLOOM = "curr_bloom_kg_m3";  // WATR_HOST_KEY_CURR_BLOOM: GIS_HYD_CELL_CURR_BLOOM, kg/m3
     constexpr const char* KEY_ROT = "curr_rot_kg_m3";      // WATR_HOST_KEY_CURR_ROT: GIS_HYD_CELL_CURR_ROT, kg/m3
     constexpr const char* KEY_SALT = "curr_salt_kg_m3";    // WATR_HOST_KEY_CURR_SALT: GIS_HYD_CELL_CURR_SALT, kg/m3
+    constexpr const char* KEY_HUE = "curr_hue_deg";        // WATR_HOST_KEY_CURR_HUE: GIS_HYD_CELL_CURR_HUE, degrees
     cell.bloom_kg_m3 = record_value(record, KEY_BLOOM);
     cell.rot_kg_m3 = record_value(record, KEY_ROT);
     cell.salt_kg_m3 = record_value(record, KEY_SALT);
+    cell.hue_deg = record_value(record, KEY_HUE);
 }
 
 /** Whether two reads of the current port carry the same water, cell for cell in port order. */
@@ -643,7 +651,8 @@ bool same_currents(const std::vector<VivariumCurrentView>& read, const std::vect
             !same_water_value(read[i].east, held[i].east) || !same_water_value(read[i].north, held[i].north) ||
             !same_water_value(read[i].bloom_kg_m3, held[i].bloom_kg_m3) ||
             !same_water_value(read[i].rot_kg_m3, held[i].rot_kg_m3) ||
-            !same_water_value(read[i].salt_kg_m3, held[i].salt_kg_m3)) {
+            !same_water_value(read[i].salt_kg_m3, held[i].salt_kg_m3) ||
+            !same_water_value(read[i].hue_deg, held[i].hue_deg)) {
             return false;
         }
     }
@@ -652,20 +661,22 @@ bool same_currents(const std::vector<VivariumCurrentView>& read, const std::vect
 
 /**
  * One pit record as a view. false for a record without its place: the pit port lays pit_x and pit_z with every
- * record it lays (ase-pl-hydrogeology, HydrogeologyHostPitExptSystem). The water over the floor and over the rim
- * come only where the ase-gis cell answered them; a missing one stays NaN and fails no record.
+ * record it lays (ase-pl-hydrogeology, HydrogeologyHostPitExptSystem). The water over the floor, over the rim and
+ * the ice on it come only where the ase-gis cell answered them; a missing one stays NaN and fails no record.
  */
 bool pit_view_of(const KernelHostRecord& record, VivariumPitView& out) {
     constexpr const char* KEY_X = "pit_x";              // HYG_HOST_KEY_PIT_X: east of the pit centre, metres
     constexpr const char* KEY_Z = "pit_z";              // HYG_HOST_KEY_PIT_Z: north of the pit centre, metres
     constexpr const char* KEY_DEPTH = "pit_depth_m";    // HYG_HOST_KEY_PIT_DEPTH: GIS_HYD_CELL_PIT_DEPTH, metres
     constexpr const char* KEY_SPILL = "pit_spill_m3_s";  // HYG_HOST_KEY_PIT_SPILL: GIS_HYD_CELL_PIT_SPILL, m3/s
+    constexpr const char* KEY_ICE = "pit_ice_m";        // HYG_HOST_KEY_PIT_ICE: GIS_HYD_CELL_PIT_ICE, metres (H.11)
     out = VivariumPitView{};
     out.object_id = record.object_id;
     out.x = record_value(record, KEY_X);
     out.z = record_value(record, KEY_Z);
     out.depth_m = record_value(record, KEY_DEPTH);
     out.spill_m3_s = record_value(record, KEY_SPILL);
+    out.ice_m = record_value(record, KEY_ICE);
     return std::isfinite(out.x) && std::isfinite(out.z);
 }
 
@@ -677,7 +688,8 @@ bool same_pits(const std::vector<VivariumPitView>& read, const std::vector<Vivar
     for (std::size_t i = 0u; i < read.size(); ++i) {
         if (read[i].object_id != held[i].object_id || read[i].x != held[i].x || read[i].z != held[i].z ||
             !same_water_value(read[i].depth_m, held[i].depth_m) ||
-            !same_water_value(read[i].spill_m3_s, held[i].spill_m3_s)) {
+            !same_water_value(read[i].spill_m3_s, held[i].spill_m3_s) ||
+            !same_water_value(read[i].ice_m, held[i].ice_m)) {
             return false;
         }
     }
@@ -687,7 +699,8 @@ bool same_pits(const std::vector<VivariumPitView>& read, const std::vector<Vivar
 /**
  * One groundwater record as a view. false for a record without its chunk: the groundwater port lays the three grid
  * coordinates with every record it lays (ase-pl-hydrogeology, HydrogeologyHostGndwExptSystem). Table, standing
- * water, stock and bank flow come only where the ase-gis cell answered them; a missing one stays NaN.
+ * water, stock, bank flow and spring discharge come only where the ase-gis cell answered them; a missing one stays
+ * NaN.
  */
 bool groundwater_view_of(const KernelHostRecord& record, VivariumGroundwaterView& out) {
     constexpr const char* KEY_CHUNK_X = "chunk_x";  // HYG_HOST_KEY_CHUNK_X: chunk grid X of the row
@@ -697,6 +710,7 @@ bool groundwater_view_of(const KernelHostRecord& record, VivariumGroundwaterView
     constexpr const char* KEY_DEPTH = "depth_m";    // HYG_HOST_KEY_DEPTH: standing water over the lowest ground, metres
     constexpr const char* KEY_STOCK = "stock_m3";   // HYG_HOST_KEY_STOCK: groundwater stock against the rest table, m3
     constexpr const char* KEY_BANK = "bank_m3_s";   // HYG_HOST_KEY_BANK: water the stock gives the brooks, m3/s
+    constexpr const char* KEY_SPRN = "sprn_m3_s";   // HYG_HOST_KEY_SPRN: the spring's part of the bank, m3/s (H.2)
     out = VivariumGroundwaterView{};
     out.object_id = record.object_id;
     out.chunk_x = record_value(record, KEY_CHUNK_X);
@@ -706,6 +720,7 @@ bool groundwater_view_of(const KernelHostRecord& record, VivariumGroundwaterView
     out.depth_m = record_value(record, KEY_DEPTH);
     out.stock_m3 = record_value(record, KEY_STOCK);
     out.bank_m3_s = record_value(record, KEY_BANK);
+    out.sprn_m3_s = record_value(record, KEY_SPRN);
     // a chunk grid coordinate is a signed whole number (types::chunk_id_to_coords), and whole() takes no negative
     // one; the grid stays far below 2^24, where ase::math::floor in float is exact
     const auto grid = [](double value) {
@@ -726,11 +741,122 @@ bool same_groundwater(const std::vector<VivariumGroundwaterView>& read,
             !same_water_value(read[i].table_m, held[i].table_m) ||
             !same_water_value(read[i].depth_m, held[i].depth_m) ||
             !same_water_value(read[i].stock_m3, held[i].stock_m3) ||
-            !same_water_value(read[i].bank_m3_s, held[i].bank_m3_s)) {
+            !same_water_value(read[i].bank_m3_s, held[i].bank_m3_s) ||
+            !same_water_value(read[i].sprn_m3_s, held[i].sprn_m3_s)) {
             return false;
         }
     }
     return true;
+}
+
+/**
+ * The measuring point of a changed groundwater read (H.2, H.3): how many chunks the port carries, how many of them
+ * a spring runs in and with how much water, and the highest and the deepest table among them. Counted from the
+ * records as they came, a value the cell never answered (NaN) counts in no sum; nothing here feeds the image.
+ */
+void note_groundwater(KernelEmbeddedHost& host, const std::vector<VivariumGroundwaterView>& groundwater) {
+    uint32_t springs = 0u;
+    uint32_t tables = 0u;
+    double spring_sum = 0.0;
+    double table_high = 0.0;
+    double table_deep = 0.0;
+    for (const VivariumGroundwaterView& chunk : groundwater) {
+        if (std::isfinite(chunk.sprn_m3_s) && chunk.sprn_m3_s > 0.0) {
+            springs += 1u;
+            spring_sum += chunk.sprn_m3_s;
+        }
+        if (std::isfinite(chunk.table_m)) {
+            table_high = tables == 0u || chunk.table_m < table_high ? chunk.table_m : table_high;
+            table_deep = tables == 0u || chunk.table_m > table_deep ? chunk.table_m : table_deep;
+            tables += 1u;
+        }
+    }
+    std::string line = "groundwater chunks ";
+    line += std::to_string(groundwater.size());
+    line += " springs ";
+    line += std::to_string(springs);
+    line += " spring_m3_s=";
+    line += std::to_string(spring_sum);
+    line += " tables ";
+    line += std::to_string(tables);
+    line += " table_m=";
+    line += std::to_string(table_high);
+    line += "..";
+    line += std::to_string(table_deep);
+    (void)host.note(GODOT_LOG_SOURCE, line.c_str());
+}
+
+}  // namespace
+
+/**
+ * One salt record as a view (H.9, I-4). false for a record without its chunk or with a half missing: the salt port
+ * lays a record only where the ase-gis cell answered the water half, the soil half and their sum
+ * (ase-pl-hydrogeology, HydrogeologyHostSlntExptSystem), so a record short of one is a broken port, never a gap.
+ * Declared in godot_salt_records.hpp, so the host tests lay a hand-built record out the way read_salt does.
+ */
+bool salt_view_of(const KernelHostRecord& record, VivariumSaltView& out) {
+    constexpr const char* KEY_CHUNK_X = "chunk_x";      // HYG_HOST_KEY_CHUNK_X: chunk grid X of the row
+    constexpr const char* KEY_CHUNK_Z = "chunk_z";      // HYG_HOST_KEY_CHUNK_Z: chunk grid Z of the row
+    constexpr const char* KEY_HYD = "salt_hyd_kg";      // HYG_HOST_KEY_SLNT_HYD: GIS_SLNT_CHK_HYD_KG, kg
+    constexpr const char* KEY_SOIL = "salt_soil_kg";    // HYG_HOST_KEY_SLNT_SOIL: GIS_SLNT_CHK_SOIL_KG, kg
+    constexpr const char* KEY_SUM = "salt_kg";          // HYG_HOST_KEY_SLNT_SUM: GIS_SLNT_CHK_KG, kg
+    out = VivariumSaltView{};
+    out.object_id = record.object_id;
+    out.chunk_x = record_value(record, KEY_CHUNK_X);
+    out.chunk_z = record_value(record, KEY_CHUNK_Z);
+    out.hyd_kg = record_value(record, KEY_HYD);
+    out.soil_kg = record_value(record, KEY_SOIL);
+    out.sum_kg = record_value(record, KEY_SUM);
+    const auto grid = [](double value) {
+        return std::isfinite(value) && ase::math::floor(static_cast<float>(value)) == static_cast<float>(value);
+    };
+    return grid(out.chunk_x) && grid(out.chunk_z) && std::isfinite(out.hyd_kg) && std::isfinite(out.soil_kg) &&
+           std::isfinite(out.sum_kg);
+}
+
+namespace {
+
+/** Whether two reads of the salt port carry the same salt, chunk for chunk in port order. */
+bool same_salt(const std::vector<VivariumSaltView>& read, const std::vector<VivariumSaltView>& held) {
+    if (read.size() != held.size()) {
+        return false;
+    }
+    for (std::size_t i = 0u; i < read.size(); ++i) {
+        if (read[i].object_id != held[i].object_id || read[i].chunk_x != held[i].chunk_x ||
+            read[i].chunk_z != held[i].chunk_z || read[i].hyd_kg != held[i].hyd_kg ||
+            read[i].soil_kg != held[i].soil_kg || read[i].sum_kg != held[i].sum_kg) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * The measuring point of a changed salt read (H.9, I-4): how many chunks the port carries and the three sums over
+ * them, the water half, the soil half and the total ase-gis added. The I-4 balance of Seed 42 reads this line: the
+ * total over the world stays constant while salt moves between water and soil, and the residue of total minus both
+ * halves is the closing error of the addition. Nothing here feeds the image.
+ */
+void note_salt(KernelEmbeddedHost& host, const std::vector<VivariumSaltView>& salt) {
+    double hyd_sum = 0.0;
+    double soil_sum = 0.0;
+    double total_sum = 0.0;
+    for (const VivariumSaltView& chunk : salt) {
+        hyd_sum += chunk.hyd_kg;
+        soil_sum += chunk.soil_kg;
+        total_sum += chunk.sum_kg;
+    }
+    std::string line = "salt chunks ";
+    line += std::to_string(salt.size());
+    line += " hyd_kg=";
+    line += std::to_string(hyd_sum);
+    line += " soil_kg=";
+    line += std::to_string(soil_sum);
+    line += " total_kg=";
+    line += std::to_string(total_sum);
+    line += " residue_kg=";
+    line += std::to_string(total_sum - hyd_sum - soil_sum);
+    (void)host.note(GODOT_LOG_SOURCE, line.c_str());
 }
 
 /**
@@ -838,6 +964,48 @@ bool template_corner_view_of(const KernelHostRecord& record, VivariumTemplateCor
     }
     out.code = static_cast<uint32_t>(code);
     out.index = static_cast<uint32_t>(index);
+    return true;
+}
+
+/**
+ * The corner a template tangent record belongs to, as one number: its template code in the high half and its
+ * index in the low half, the same pair template_corner_view_of reads off the corner record.
+ */
+uint64_t template_corner_key(uint32_t code, uint32_t index) {
+    return (static_cast<uint64_t>(code) << 32u) | static_cast<uint64_t>(index);
+}
+
+/**
+ * One template tangent record (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.6) put on its corner of `corners`, found
+ * through `place_of` (template_corner_key to the position in `corners`). false for a record that misses a key,
+ * names no known template code or no whole index, names a corner the corner port did not carry, names a corner
+ * a second time, or carries a tangent that is no finite number or a bitangent sign of 0: the tangent port
+ * writes all six keys of every corner (ase-pl-flora, FloraHostTmplTngExptSystem), so a gap is a broken port -
+ * never a tangent along the origin.
+ */
+bool template_tangent_onto(const KernelHostRecord& record, const std::unordered_map<uint64_t, std::size_t>& place_of,
+                           std::vector<VivariumTemplateCornerView>& corners, std::vector<bool>& carried) {
+    const double code = record_value(record, GODOT_KEY_TEMPLATE);
+    const double index = record_value(record, GODOT_KEY_INDEX);
+    const double tx = record_value(record, GODOT_KEY_TX);
+    const double ty = record_value(record, GODOT_KEY_TY);
+    const double tz = record_value(record, GODOT_KEY_TZ);
+    const double tw = record_value(record, GODOT_KEY_TW);
+    if (!whole(code) || code >= static_cast<double>(GODOT_TMPL_COUNT) || !whole(index) ||
+        index > static_cast<double>(UINT32_MAX) || !std::isfinite(tx) || !std::isfinite(ty) || !std::isfinite(tz) ||
+        !std::isfinite(tw) || tw == 0.0) {
+        return false;
+    }
+    const auto found = place_of.find(template_corner_key(static_cast<uint32_t>(code), static_cast<uint32_t>(index)));
+    if (found == place_of.end() || carried[found->second]) {
+        return false;
+    }
+    VivariumTemplateCornerView& corner = corners[found->second];
+    corner.tx = tx;
+    corner.ty = ty;
+    corner.tz = tz;
+    corner.tw = tw;
+    carried[found->second] = true;
     return true;
 }
 
@@ -1340,7 +1508,7 @@ bool stars_view_of(const std::vector<KernelHostRecord>& records, uint32_t writte
 }
 
 /**
- * The ports and operations every host of the Vivarium needs: patch, forecast, stem, autumn, clock, date, scene, ground, brook,
+ * The ports and operations every host of the Vivarium needs: patch, forecast, stem, autumn, cap, clock, date, scene, ground, brook,
  * terrain, ground cell, the six organ ports, the five instance ports, the sky port, the stars port, the seed port, the
  * tile port, the sway port, the stream port, the level, the flatten, the lower, the raise and the elevation port and the two
  * template ports, irrigate, prune, level, flatten, lower, raise, shape and lay - every port boot()
@@ -1354,13 +1522,15 @@ bool ports_named(const VivariumStartConfig& config) {
                  !config.stage_port.empty() &&
                  !config.stem_port.empty() &&
                  !config.autumn_port.empty() &&
+                 !config.cap_port.empty() &&
                  !config.clock_port.empty() &&
                  !config.date_port.empty() &&
                  !config.scene_port.empty() &&
                  !config.ground_port.empty() && !config.brook_port.empty() && !config.terrain_port.empty() &&
                  !config.ground_cell_port.empty() && !config.sky_port.empty() && !config.stars_port.empty() &&
                  !config.seed_port.empty() &&
-                 !config.tile_port.empty() && !config.sway_port.empty() && !config.bend_port.empty() &&
+                 !config.tile_port.empty() && !config.lineage_port.empty() &&
+                 !config.sway_port.empty() && !config.bend_port.empty() &&
                  !config.tint_port.empty() && !config.atlas_port.empty() &&
                  !config.bark_port.empty() &&
                  !config.knot_port.empty() && !config.foot_port.empty() && !config.scar_port.empty() &&
@@ -1370,6 +1540,7 @@ bool ports_named(const VivariumStartConfig& config) {
                  !config.op_lower.empty() && !config.op_raise.empty() &&
                  !config.elevation_port.empty() && !config.op_shape.empty() &&
                  !config.template_corner_port.empty() && !config.template_triangle_port.empty() &&
+                 !config.template_tangent_port.empty() &&
                  !config.op_irrigate.empty() &&
                  !config.op_prune.empty() && !config.op_level.empty() && !config.op_flatten.empty() &&
                  !config.op_lay.empty() && !config.real_port.empty() && !config.op_real.empty();
@@ -1827,15 +1998,20 @@ bool run_camp_action(KernelEmbeddedHost& host, const toml::table& action, const 
         const double drop = (*part)[GODOT_SELFTEST_KEY_DROP].value_or(std::nan(""));
         const double fall = (*part)[GODOT_SELFTEST_KEY_FALL].value_or(std::nan(""));
         const double mass = (*part)[GODOT_SELFTEST_KEY_MASS].value_or(std::nan(""));
+        const double rough = (*part)[GODOT_SELFTEST_KEY_ROUGH].value_or(std::nan(""));
+        const double turn_x = (*part)[GODOT_SELFTEST_KEY_TURN_X].value_or(std::nan(""));
+        const double turn_y = (*part)[GODOT_SELFTEST_KEY_TURN_Y].value_or(std::nan(""));
+        const double turn_z = (*part)[GODOT_SELFTEST_KEY_TURN_Z].value_or(std::nan(""));
         const bool fuel = (*part)[GODOT_SELFTEST_KEY_FUEL].value_or(false);
         const std::string expected = (*part)[GODOT_SELFTEST_KEY_STATUS].value_or(std::string());
         const uint32_t patch = object_at(host, config, place, state);
         if (make.empty() || patch == GODOT_NO_OBJECT || !std::isfinite(east) || !std::isfinite(north) ||
-            !std::isfinite(drop) || !std::isfinite(fall) || !(mass > 0.0) || expected.empty() ||
+            !std::isfinite(drop) || !std::isfinite(fall) || !(mass > 0.0) || !(rough >= 0.0) ||
+            !std::isfinite(turn_x) || !std::isfinite(turn_y) || !std::isfinite(turn_z) || expected.empty() ||
             config.camp_part_port.empty()) {
             report_broken(label, GODOT_SELFTEST_KEY_PART,
-                          "needs make, the place of a laid patch, finite x, z, drop and fall, a positive mass, status "
-                          "and the camp_part port",
+                          "needs make, the place of a laid patch, finite x, z, drop, fall, tx, ty and tz, a positive "
+                          "mass, a roughness of at least 0, status and the camp_part port",
                           result, report);
             return false;
         }
@@ -1847,6 +2023,10 @@ bool run_camp_action(KernelEmbeddedHost& host, const toml::table& action, const 
         (void)put_value(input, kCampKeyFall, fall);
         (void)put_value(input, kCampKeyMass, mass);
         (void)put_value(input, kCampKeyMake, static_cast<double>(KernelEmbeddedHost::name_id(make.c_str())));
+        (void)put_value(input, kCampKeyRough, rough);
+        (void)put_value(input, kCampKeyTurnX, turn_x);
+        (void)put_value(input, kCampKeyTurnY, turn_y);
+        (void)put_value(input, kCampKeyTurnZ, turn_z);
         if (fuel) {
             (void)put_value(input, kCampKeyFuel, kCampFuelMark);
         }
@@ -2329,6 +2509,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.stage_port.c_str()) &&
                    host_->has_port(config_.stem_port.c_str()) &&
                    host_->has_port(config_.autumn_port.c_str()) &&
+                   host_->has_port(config_.cap_port.c_str()) &&
                    host_->has_port(config_.clock_port.c_str()) &&
                    host_->has_port(config_.date_port.c_str()) &&
                    host_->has_port(config_.scene_port.c_str()) && host_->has_port(config_.ground_port.c_str()) &&
@@ -2336,6 +2517,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.ground_cell_port.c_str()) && host_->has_port(config_.sky_port.c_str()) &&
                    host_->has_port(config_.stars_port.c_str()) &&
                    host_->has_port(config_.seed_port.c_str()) && host_->has_port(config_.tile_port.c_str()) &&
+                   host_->has_port(config_.lineage_port.c_str()) &&
                    host_->has_port(config_.sway_port.c_str()) && host_->has_port(config_.bend_port.c_str()) &&
                    host_->has_port(config_.tint_port.c_str()) && host_->has_port(config_.atlas_port.c_str()) &&
                    host_->has_port(config_.bark_port.c_str()) &&
@@ -2347,6 +2529,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.elevation_port.c_str()) &&
                    host_->has_port(config_.template_corner_port.c_str()) &&
                    host_->has_port(config_.template_triangle_port.c_str()) &&
+                   host_->has_port(config_.template_tangent_port.c_str()) &&
                    host_->has_port(config_.real_port.c_str());
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         offered = offered && host_->has_port(config_.organ_ports[c].c_str());
@@ -2438,6 +2621,7 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     failure_status_ = status;
     patches_.clear();
     places_.clear();
+    caps_.clear();
     clock_ = VivariumClockView{};
     weather_ = VivariumWeatherView{};
     sap_ = VivariumSapView{};
@@ -2463,6 +2647,8 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     pit_generation_ += 1u;
     groundwater_.clear();
     groundwater_generation_ += 1u;
+    salt_.clear();
+    salt_generation_ += 1u;
     template_corners_.clear();
     template_triangles_.clear();
     template_generation_ += 1u;
@@ -2944,6 +3130,35 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         found->second.autumn = autumn;
     }
 
+    // THE CAP IS THE INDIVIDUAL'S OWN (FLORA_HOST_PORT_CAP, usecase:101362 scale the organ templates): ase-pl-flora
+    // files one record per patch whose fruit body has a cap, its object id the patch, cap_radius the radius
+    // ase-phytomer passed on for its individual (PHY_CAP_RADIUS). A patch without such a record has no fruit body to
+    // draw; a record that names no patch of the patch port, or carries no finite radius, is a broken port.
+    caps_.clear();
+    status = snapshot_all(*host_, config_.cap_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        patches_.clear();
+        places_.clear();
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = records_[i];
+        if (patches_.find(record.object_id) == patches_.end()) {
+            patches_.clear();
+            places_.clear();
+            caps_.clear();
+            return refuse_record(*host_, config_.cap_port, record.object_id, "cap of no patch");
+        }
+        const double cap_radius = record_value(record, GODOT_KEY_CAP_RADIUS);
+        if (!std::isfinite(cap_radius)) {
+            patches_.clear();
+            places_.clear();
+            caps_.clear();
+            return refuse_record(*host_, config_.cap_port, record.object_id, "cap without a radius");
+        }
+        caps_[record.object_id] = cap_radius;
+    }
+
     std::vector<KernelHostRecord> clock_records(1u);
     status = snapshot_all(*host_, config_.clock_port, clock_records, written);
     if (status != ase::kernel::HostStatusOk) {
@@ -3262,6 +3477,10 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     if (groundwater != ase::kernel::HostStatusOk) {
         return groundwater;
     }
+    const HostStatus salt = read_salt();
+    if (salt != ase::kernel::HostStatusOk) {
+        return salt;
+    }
     const HostStatus templates = read_templates();
     if (templates != ase::kernel::HostStatusOk) {
         return templates;
@@ -3368,6 +3587,12 @@ HostStatus GodotHostResourceManager::read_organs() {
                 return refuse_record(*host_, config_.organ_ports[c], organ_records_[i].object_id,
                                      "bark of the internode missing or out of range");
             }
+            // the leaf port carries the card of every leaf as its twelfth value (TREEGEN T.6)
+            if (c == GODOT_ORGAN_LEAF && !leaf_template_of(organ_records_[i], view)) {
+                organs_[c].clear();
+                return refuse_record(*host_, config_.organ_ports[c], organ_records_[i].object_id,
+                                     "card of the leaf missing or no leaf template");
+            }
             organs_[c].push_back(view);
         }
     }
@@ -3393,6 +3618,33 @@ HostStatus GodotHostResourceManager::read_organs() {
             if (!segment_tile_of(organ_records_[i], segments[found->second])) {
                 return refuse_record(*host_, config_.tile_port, organ_records_[i].object_id,
                                      "bark tiling missing or out of range");
+            }
+        }
+    }
+    // The lineage of every shown organ, from the same Production run (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.9, the round
+    // trip S0, S1, S0): one record per internode, leaf, catkin and fruit stand, its object id the organ; an organ
+    // without one keeps GODOT_LINEAGE_NONE. The object id is the entity and changes with a new resolution, the lineage
+    // does not, so the host test of the round trip compares the organs by it.
+    {
+        uint32_t written = 0u;
+        const HostStatus status = snapshot_all(*host_, config_.lineage_port, organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        std::unordered_map<uint32_t, VivariumOrganView*> organ_at;
+        for (uint32_t c = 0u; c < GODOT_DRAWN_COUNT; ++c) {
+            for (VivariumOrganView& organ : organs_[c]) {
+                organ_at.emplace(organ.object_id, &organ);
+            }
+        }
+        for (uint32_t i = 0u; i < written; ++i) {
+            const auto found = organ_at.find(organ_records_[i].object_id);
+            if (found == organ_at.end()) {
+                continue;  // the organ left its port in the same run; its lineage names nothing shown
+            }
+            if (!organ_lineage_of(organ_records_[i], *found->second)) {
+                return refuse_record(*host_, config_.lineage_port, organ_records_[i].object_id,
+                                     "lineage missing or no whole number in range");
             }
         }
     }
@@ -3846,6 +4098,38 @@ HostStatus GodotHostResourceManager::read_groundwater() {
     groundwater_ = std::move(groundwater);
     if (changed) {
         groundwater_generation_ += 1u;
+        note_groundwater(*host_, groundwater_);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_salt() {
+    // THE SALT OF EVERY CHUNK (H.9, I-4): ase-hydro owns the water half, ase-pedosphere the soil half, ase-gis adds
+    // both under HUB_TERN_CHK and ase-pl-hydrogeology lays one record per chunk on hydrogeology.salt.v1. Read once
+    // the plugin offers the port, as the groundwater.
+    if (config_.salt_port.empty() || !host_->has_port(config_.salt_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.salt_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    std::vector<VivariumSaltView> salt;
+    salt.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        VivariumSaltView view;
+        if (!salt_view_of(organ_records_[i], view)) {
+            salt_.clear();
+            return refuse_record(*host_, config_.salt_port, organ_records_[i].object_id, "salt without its chunk");
+        }
+        salt.push_back(view);
+    }
+    const bool changed = !same_salt(salt, salt_);
+    salt_ = std::move(salt);
+    if (changed) {
+        salt_generation_ += 1u;
+        note_salt(*host_, salt_);
     }
     return ase::kernel::HostStatusOk;
 }
@@ -3853,7 +4137,7 @@ HostStatus GodotHostResourceManager::read_groundwater() {
 HostStatus GodotHostResourceManager::read_templates() {
     // THE TEMPLATES ARE BUILT ONCE (usecase:101011 tessellate the organ templates). ase-render-data builds the fine
     // and the coarse cylinder and the unit leaf in the Initialization of its host and keeps their rows; the
-    // plugin lays them on its two template ports in every Production run. So both ports are read with every
+    // plugin lays them on its three template ports in every Production run. So the ports are read with every
     // snapshot until each carries a set, and not again while this host runs. Until the plugin's first
     // Production run both sets are empty: the templates are not known yet, and nothing is broken.
     if (!template_corners_.empty() && !template_triangles_.empty()) {
@@ -3873,6 +4157,35 @@ HostStatus GodotHostResourceManager::read_templates() {
                                  "template corner incomplete or out of range");
         }
         corners.push_back(view);
+    }
+    // THE TANGENT OF EVERY CORNER (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.6) comes on a port of its own, since the
+    // corner record is full; each record names its corner by code and index and is joined to it here. The
+    // plugin lays it in the same Production run as the corners, so a set whose tangents are all missing is not
+    // known yet and is read again with the next snapshot; a set with some corners missing theirs is broken.
+    status = snapshot_all(*host_, config_.template_tangent_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    if (written == 0u) {
+        return ase::kernel::HostStatusOk;
+    }
+    std::unordered_map<uint64_t, std::size_t> place_of;
+    place_of.reserve(corners.size());
+    for (std::size_t c = 0u; c < corners.size(); ++c) {
+        place_of.emplace(template_corner_key(corners[c].code, corners[c].index), c);
+    }
+    std::vector<bool> carried(corners.size(), false);
+    for (uint32_t i = 0u; i < written; ++i) {
+        if (!template_tangent_onto(organ_records_[i], place_of, corners, carried)) {
+            return refuse_record(*host_, config_.template_tangent_port, organ_records_[i].object_id,
+                                 "template tangent incomplete, out of range or without its corner");
+        }
+    }
+    for (std::size_t c = 0u; c < corners.size(); ++c) {
+        if (!carried[c]) {
+            return refuse_record(*host_, config_.template_tangent_port, corners[c].object_id,
+                                 "template corner without its tangent");
+        }
     }
     status = snapshot_all(*host_, config_.template_triangle_port, organ_records_, written);
     if (status != ase::kernel::HostStatusOk) {
@@ -4179,7 +4492,8 @@ HostStatus GodotHostResourceManager::read_survival_smokes() {
         VivariumSurvivalSmokeView view;
         view.object_id = record.object_id;
         view.soot = record_value(record, kSurvivalKeySoot);
-        if (std::isinf(view.soot)) {
+        view.smell = record_value(record, kSurvivalKeySmell);
+        if (std::isinf(view.soot) || std::isinf(view.smell)) {
             survival_smokes_.clear();
             return refuse_record(*host_, config_.survival_smoke_port, record.object_id, "survival smoke value not finite");
         }
@@ -4849,9 +5163,11 @@ HostStatus GodotHostResourceManager::file_hull(uint32_t corner, uint32_t make, d
 }
 
 HostStatus GodotHostResourceManager::file_part(uint32_t patch, double east, double north, double drop, double fall,
-                                               double mass, uint32_t make, bool fuel) {
-    // One part of the camp as a rigid body (T.3): the plugin files HUB_PHYS_REG_BODY_ADD_CAMP and ase-physics drops
-    // it under gravity onto the height field; fuel travels only on a part that burns, its presence is the mark.
+                                               double mass, uint32_t make, double rough, double turn_x,
+                                               double turn_y, double turn_z, bool fuel) {
+    // One part of the camp as a rigid body (T.3): the plugin files HUB_PHYS_REG_BODY_ADD_CAMP and ase-physics lays
+    // it in its turn a few millimetres above its ground, where it settles; fuel travels only on a part that burns,
+    // its presence is the mark. Eleven values, inside the twelve a record holds.
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
@@ -4866,6 +5182,10 @@ HostStatus GodotHostResourceManager::file_part(uint32_t patch, double east, doub
     (void)put_value(input, kCampKeyFall, fall);
     (void)put_value(input, kCampKeyMass, mass);
     (void)put_value(input, kCampKeyMake, static_cast<double>(make));
+    (void)put_value(input, kCampKeyRough, rough);
+    (void)put_value(input, kCampKeyTurnX, turn_x);
+    (void)put_value(input, kCampKeyTurnY, turn_y);
+    (void)put_value(input, kCampKeyTurnZ, turn_z);
     if (fuel) {
         (void)put_value(input, kCampKeyFuel, kCampFuelMark);
     }
@@ -5165,6 +5485,10 @@ const VivariumPatchView* GodotHostResourceManager::get_patch_at(uint32_t place) 
     return found == places_.end() ? nullptr : get_patch(found->second);
 }
 
+const std::unordered_map<uint32_t, double>& GodotHostResourceManager::get_caps() const {
+    return caps_;
+}
+
 double GodotHostResourceManager::stage_due_h(const VivariumPatchView& patch, uint8_t position) const {
     if (stage_named(position, GODOT_KEY_STGE_GROW)) {
         return patch.grow_at_h;
@@ -5278,6 +5602,14 @@ const std::vector<VivariumGroundwaterView>& GodotHostResourceManager::get_ground
 
 uint64_t GodotHostResourceManager::groundwater_generation() const {
     return groundwater_generation_;
+}
+
+const std::vector<VivariumSaltView>& GodotHostResourceManager::get_salt() const {
+    return salt_;
+}
+
+uint64_t GodotHostResourceManager::salt_generation() const {
+    return salt_generation_;
 }
 
 const std::vector<VivariumTemplateCornerView>& GodotHostResourceManager::get_template_corners() const {
@@ -5566,6 +5898,7 @@ void GodotHostResourceManager::clear_all() {
     }
     patches_.clear();
     places_.clear();
+    caps_.clear();
     clock_ = VivariumClockView{};
     weather_ = VivariumWeatherView{};
     records_.clear();
@@ -5598,6 +5931,8 @@ void GodotHostResourceManager::clear_all() {
     pit_generation_ += 1u;      // and the water of its pits
     groundwater_.clear();
     groundwater_generation_ += 1u;  // and its groundwater
+    salt_.clear();
+    salt_generation_ += 1u;  // and its salt
     template_corners_.clear();
     template_triangles_.clear();
     template_generation_ += 1u;  // and its templates

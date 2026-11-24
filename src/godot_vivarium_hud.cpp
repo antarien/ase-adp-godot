@@ -44,6 +44,7 @@
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/host/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
+#include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/viewport.hpp>
@@ -62,12 +63,18 @@ namespace {
 // reaches a higher stage; {stage} is the word texts.hud.stages.<n> of the stage reached.
 constexpr const char* HUD_TOAST_NEW_STAGE = "toast.new_stage";
 constexpr const char* HUD_WORD_STAGE = "stages.";
+// B0783: the share of fuel the line `hud survival` names in whole tenths, so the line moves on a tenth, never per tick
+constexpr double HUD_FUEL_TENTHS = 10.0;
 
 /**
  * The states the survival layer of `frame` draws by, as the line `hud survival ...` (U0245): the rest card (U05),
- * the four signs of the rail SINAIS (U02), the air mark (U06), the food of the bag and whether its spoil stands above
- * 0, the boundary the ring ESTRAGO draws a bow from (U07); the turbid drop of U08 follows poisoned. Every field is a
- * flag, so the line changes only on an edge of a state, never per tick.
+ * the four signs of the rail SINAIS (U02), the air mark (U06: the owner's grade of the air, and the soot in the air of the
+ * seat's cell, which draws its smoke glyph without the word), the food of the bag and whether its spoil stands above
+ * 0, the boundary the ring ESTRAGO draws a bow from (U07); the turbid drop of U08 follows poisoned; and the camp fire
+ * of the card FOGO (U04, B0783): whether a fire stands by the figure, its stage (0 ignite to 4 ash) and whether it
+ * burns at a rate, and the share of fuel left in whole tenths (HUB_FIRE_CELL_FUEL over HUB_FIRE_CELL_FUEL_LAID of
+ * ingle.fire.v1, rounded down). Every field is a flag, a stage or a tenth, so the line changes only on an edge, never
+ * per tick: the fuel falls every tick, its tenth about ten times over a whole burn.
  */
 std::string survival_line(const VivariumHudFrame& frame) {
     const auto bit = [](bool on) { return on ? "1" : "0"; };
@@ -75,7 +82,14 @@ std::string survival_line(const VivariumHudFrame& frame) {
     return std::string("hud survival resting=") + bit(frame.rest.shown) + " sleeping=" + bit(frame.rest.sleeping) +
            " poisoned=" + bit(body.poisoned) + " bleeding=" + bit(body.bleeding) + " emaciated=" +
            bit(body.emaciated) + " well_rested=" + bit(body.well_rested) + " toxic=" + bit(frame.air.toxic) +
-           " food=" + bit(frame.food.shown) + " spoiling=" + bit(frame.food.shown && frame.food.spoil > 0.0);
+           // the smoke glyph of the air mark also stands on the soot of the seat's cell (SurvivalAirMark::set, D2500)
+           " smoke=" + bit(frame.air.soot > 0.0 || frame.air.smell > 0.0) + " food=" + bit(frame.food.shown) + " spoiling=" + bit(frame.food.shown && frame.food.spoil > 0.0) +
+           " fire=" + bit(frame.fire.shown) + " fire_stage=" + std::to_string(frame.fire.stage) + " burning=" +
+           bit(frame.fire.shown && frame.fire.burning) + " fuel_tenths=" +
+           // the share lies in 0 to 1, so the cast toward zero is the rounding down
+           std::to_string(frame.fire.shown
+                              ? static_cast<int32_t>(ase::math::clamp(frame.fire.fuel, 0.0, 1.0) * HUD_FUEL_TENTHS)
+                              : 0);
 }
 }  // namespace
 
@@ -334,10 +348,11 @@ bool VivariumView::fill_hud(std::string& failed) {
         // when it changes, so a sign beside the water names what put it there.
         const float left = hud_now_.cover.surface.position.x;
         std::string brook_line;
-        SignMarker::follow_brook(streams.front(), ground_surface_.arrays, hud_anchor_, hud_ground_, left,
-                                 left + hud_now_.cover.surface.size.x, signs.brook, brook_line);
-        if (brook_line != hud_brook_told_) {
-            hud_brook_told_ = brook_line;
+        SignMarker::follow_brook(streams.front(), ground_surface_.arrays, ground_surface_.revision, hud_anchor_,
+                                 hud_ground_, left, left + hud_now_.cover.surface.size.x, hud_brook_, signs.brook,
+                                 brook_line);
+        if (brook_line != hud_brook_.told) {
+            hud_brook_.told = brook_line;
             note(::godot::String(brook_line.c_str()));
         }
     }

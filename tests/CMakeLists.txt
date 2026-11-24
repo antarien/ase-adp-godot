@@ -9,9 +9,12 @@ The same form as plugins/ase-pl-vegetation/tests.
 
   ase-adp-godot-host-test     GodotHostResourceManager against the REAL bundle of the client, with its
                               one game host: boot with four patches, start values, the log, pouring,
-                              the organ and instance ports, the cycle line, catching up, refused dt, the
-                              self-test beside the game host and the idempotent teardown. No Godot in
-                              the process - that is what the host part carries no Godot type for.
+                              the organ and instance ports, the cycle line, the self-test beside the game
+                              host and the idempotent teardown. No Godot in the process - that is what the
+                              host part carries no Godot type for.
+  ase-adp-godot-clock-test    The clock of a game host of its own (PLAN_ASE_VIVARIUM_PHASE_01_INTEG L5):
+                              a long frame as one tick and one filed real position, the time lapse as a
+                              pace of ase-time's clock, refused dt.
   ase-adp-godot-refusal-test  The same manager without a game host: the bundle index, a missing bundle,
                               every incomplete configuration and every port the set does not offer, the
                               words of the start configuration, a missing unit (L8), and the self-test
@@ -31,6 +34,9 @@ The same form as plugins/ase-pl-vegetation/tests.
                               (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE 07.5, 07.6, 07-A, 07-G, usecase:101588 move
                               player figure over ground): cam.mode there and back to the fixed view, the drag
                               and the zoom of the player camera, the rim of the area on the camera record.
+  ase-adp-godot-cap-test      The cap port of ase-pl-flora on a game host of its own (usecase:101362 scale
+                              the organ templates, B0605): the death cap on place 1 carries the radius of
+                              its catalog row, a species without the key carries no record.
   ase-adp-godot-layout-test   place_view, band_offset and in_one_band on the surfaces of the Android
                               market (PLAN_ASE_VIVARIUM_PHASE_02_ANDROID 02.3): logical size, a 9:20
                               handset, camera and gesture bar insets, a 3:4 tablet, a safe area too
@@ -41,9 +47,14 @@ The same form as plugins/ase-pl-vegetation/tests.
   ase-adp-godot-bark-test     The bark share and tiling as custom data of each instance (03.11). Pure.
   ase-adp-godot-tubes-test    tubes_by_body: the bark port laid out into one mesh per body, the knot rings
                               shared, the ring radius and axis order beside every vertex (B0295). Pure.
+  ase-adp-godot-stroke-test   stroke_run, stroke_bound, stroke_lay: the mesh of ui_stroke never lays more corners
+                              or indices than the bound its arrays are sized to, open, closed, one point, a
+                              hairpin, a thick zigzag (P0692, T0357). Pure computation.
   ase-adp-godot-impostor-test impostor_of: from where the card of a far body takes over, by the one-pixel
                               rule of the bark shader, and the size of card and texture (B0295). Pure.
   ase-adp-godot-templates-test build_template from the template ports (03.11). Pure computation.
+  ase-adp-godot-capscale-test cap_scale and the cap role and node of a species (usecase:101362 scale the
+                              organ templates, B0605). Pure computation.
   ase-adp-godot-stand-test    Soil water and condition of a patch for its materials (03.2). Pure.
   ase-adp-godot-binding-test  bind_assets against a test manifest, stand-in colours (03.2). Pure.
   ase-adp-godot-ground-test   build_ground, mark_ground (levelled disc, brook bed) and the uniforms of
@@ -92,7 +103,7 @@ endif()
 # manager it drives: a .cpp whose name carries resource_manager is a resource manager implementation
 # (file_types.json, resource_mgr_impl). Each target writes its own log file - ABSOLUTE, like the
 # user:// path the node hands over - so no run rotates the file of another.
-foreach(_adp_godot_bundle_test host refusal scene tree figure camera)
+foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap)
     if(_adp_godot_bundle_test STREQUAL "host")
         set(_adp_godot_bundle_source test_godot_host.cpp)
     else()
@@ -123,7 +134,7 @@ foreach(_adp_godot_bundle_test host refusal scene tree figure camera)
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring knots impostor templates stand binding ground figlayout hold water waterpit keeper focus seed exposure window context signs chips pose showcase)
+foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor templates capscale stand binding ground figlayout hold water waterpit keeper focus seed exposure window context signs chips pose showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
@@ -138,12 +149,16 @@ foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring knots i
         set(_adp_godot_pure_source test_godot_plant_tubes.cpp)  # usecase:101613 show the plant bark tubes
     elseif(_adp_godot_pure_test STREQUAL "ring")
         set(_adp_godot_pure_source test_godot_tube_ring.cpp)  # usecase:101644 count ring corners by size
+    elseif(_adp_godot_pure_test STREQUAL "stroke")
+        set(_adp_godot_pure_source test_godot_stroke_mesh.cpp)  # usecase:101440 grow the interface with skills, T0357
     elseif(_adp_godot_pure_test STREQUAL "knots")
         set(_adp_godot_pure_source test_godot_knot_store.cpp)  # usecase:101613 show the plant bark tubes, N0543
     elseif(_adp_godot_pure_test STREQUAL "impostor")
         set(_adp_godot_pure_source test_godot_plant_impostor.cpp)  # usecase:101613, the card of a far body
     elseif(_adp_godot_pure_test STREQUAL "templates")
         set(_adp_godot_pure_source test_godot_plant_templates.cpp)
+    elseif(_adp_godot_pure_test STREQUAL "capscale")
+        set(_adp_godot_pure_source test_godot_cap_scale.cpp)  # usecase:101362 scale the organ templates
     elseif(_adp_godot_pure_test STREQUAL "stand")
         set(_adp_godot_pure_source test_godot_plant_stand.cpp)
     elseif(_adp_godot_pure_test STREQUAL "binding")

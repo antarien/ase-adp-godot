@@ -29,6 +29,7 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/godot_plant_clouds.hpp>
 #include <ase/adp/godot/host/types.hpp>
@@ -74,6 +75,18 @@ void VivariumView::fill_hud_debug(const VivariumPatchView* patch) {
         debug.cover = patch->coverage;
         debug.soil_mm = patch->soil_mm;
         debug.soil_rel = patch->soil_rel;
+    }
+    // The salt of every chunk as the salt port laid it (H.9, I-4): summed here for the status line only, every
+    // value is ase-hydro's, ase-pedosphere's and ase-gis's; read every frame, so the line follows the port.
+    const std::vector<VivariumSaltView>& salt = resources_.get_salt();
+    debug.salt_chunks = static_cast<uint64_t>(salt.size());
+    debug.salt_hyd_kg = 0.0;
+    debug.salt_soil_kg = 0.0;
+    debug.salt_kg = 0.0;
+    for (const VivariumSaltView& chunk : salt) {
+        debug.salt_hyd_kg += chunk.hyd_kg;
+        debug.salt_soil_kg += chunk.soil_kg;
+        debug.salt_kg += chunk.sum_kg;
     }
     static_cast<void>(shown_date(debug.date));
     debug.typing = debug_.date.typing;

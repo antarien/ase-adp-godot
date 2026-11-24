@@ -45,6 +45,7 @@ struct VivariumCurrentView {
     double   bloom_kg_m3 = 0.0;  // algae dry mass in the water of the cell, kg/m3 (water.quality.v1, D2508); NaN when unanswered
     double   rot_kg_m3 = 0.0;    // dissolved rot in the water of the cell, kg/m3 (water.quality.v1, D2508); NaN when unanswered
     double   salt_kg_m3 = 0.0;   // dissolved salt in the water of the cell, kg/m3 (water.quality.v1, D2508); NaN when unanswered
+    double   hue_deg = 0.0;      // hue the water of the cell shows the eye, degrees 0 to 360 (water.quality.v1, curr_hue_deg, CAUSA_ASE_SIGNATURE); NaN when unanswered
 };
 
 }  // namespace ase::adp::godot

@@ -26,7 +26,9 @@
  *              as they do in the browser's shape.
  *
  *              The mesh goes onto the pen's canvas item under the inverse of screen(); the frame the caller set is
- *              set again after it, so the next shape of the caller lies where it did.
+ *              set again after it, so the next shape of the caller lies where it did. The pieces are laid by
+ *              stroke_lay (stroke/godot_stroke_mesh.hpp), which carries no Godot type, so a host test holds the mesh
+ *              against the bound its arrays are sized to (T0357); its measures stand in stroke/types.hpp.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -44,17 +46,13 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 
 namespace ase::adp::godot {
-
-constexpr float GODOT_STROKE_POINT_EPS_PX = 1.0e-3f;  // screen-pixel distance at which two points of a stroke count as one
-constexpr float GODOT_STROKE_JOIN_EPS = 1.0e-4f;      // smallest 1 + cosine of a knee's turn at which its inner sides still meet in one point
-constexpr float GODOT_STROKE_INNER_SHARE = 0.5f;      // share of each segment the inner meeting point of a knee may reach back along it
 
 /**
  * The polyline `points` in the units of `frame` stroked at `width` in `color` with stroke-linejoin round and, when it

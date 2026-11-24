@@ -16,8 +16,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-11-22
- * @modified    2026-11-22
- * @version     00.00.04.00024 [seed]
+ * @modified    2026-11-23
+ * @version     00.00.28.00028 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -43,6 +43,22 @@ struct VivariumGroundwaterView {
     double   depth_m = 0.0;     // standing water over the lowest ground of the chunk, metres; NaN when unanswered
     double   stock_m3 = 0.0;    // groundwater stock of the chunk against its rest table, cubic metres; NaN when unanswered
     double   bank_m3_s = 0.0;   // water the stock gives the brooks crossing the chunk, m3/s, negative where it draws; NaN when unanswered
+    double   sprn_m3_s = 0.0;   // the part of the bank the outcropping aquifer gives its brook as a spring, m3/s; NaN when unanswered
+};
+
+/**
+ * The salt of one chunk as the last read of the salt port showed it (H.9, I-4; ase-pl-hydrogeology
+ * HydrogeologyHostSlntExptSystem): the water half ase-hydro owns, the soil half ase-pedosphere owns and the sum
+ * ase-gis added. The port lays a record only where the cell answered all three, so every field is a number; the
+ * view computes none of them.
+ */
+struct VivariumSaltView {
+    uint32_t object_id = 0;     // the chunk, its HUB_TERN_CHK row as the plugin names it on its port
+    double   chunk_x = 0.0;     // chunk grid X of the row
+    double   chunk_z = 0.0;     // chunk grid Z of the row
+    double   hyd_kg = 0.0;      // salt dissolved in the water of the chunk, kg (GIS_SLNT_CHK_HYD_KG)
+    double   soil_kg = 0.0;     // salt held in the soil cells of the chunk, kg (GIS_SLNT_CHK_SOIL_KG)
+    double   sum_kg = 0.0;      // both halves as ase-gis added them, kg (GIS_SLNT_CHK_KG)
 };
 
 }  // namespace ase::adp::godot

@@ -370,12 +370,22 @@ bool VivariumCarryBridge::engine_fill(const std::vector<VivariumFigureGearView>&
     rose_to = -1.0;
     const uint32_t can_kind = ase::kernel::KernelEmbeddedHost::name_id(can_item_.c_str());
     for (const VivariumFigureGearView& piece : gear) {
-        if (!piece.vessel || piece.kind != can_kind) {
+        if (piece.kind != can_kind) {
             continue;
         }
         Carried* can = find(can_item_);
         if (can == nullptr) {
             return false;
+        }
+        // A CAN THE OWNER NEVER FILLED HOLDS NOTHING. ase-equipment lays the water state of a piece with its first
+        // draw (EquipmentHubWatrSyncSystem, EquipmentReqWatrSystem), and until then the gear port carries no
+        // water_l for it (figure_gear_of: no vessel). The fill of the design tokens is the mockup's, never the
+        // owner's: kept, it showed 2 L in a can that poured nothing (run 1123-treegen-stages-b, `hud pour end
+        // litres=1`, soil 0.007 to 0.047 mm, `water not applied`).
+        if (!piece.vessel) {
+            engine_water_l_ = 0.0;
+            can->fill_l = 0.0;
+            return true;
         }
         if (piece.water_l != engine_water_l_) {
             if (engine_water_l_ >= 0.0 && piece.water_l > engine_water_l_) {

@@ -22,7 +22,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-22
- * @modified    2026-11-22
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -90,6 +90,7 @@ constexpr const char* GODOT_PLANT_SCARS = "PlantScars";           // the wood di
 constexpr const char* GODOT_PLANT_SCAR_TWIGS = "PlantScarTwigs";  // the same disks on the stubs above the shown orders, drawn by the coarse pass of the bark shader as the twigs they close
 constexpr uint32_t GODOT_TWIG_LEAST_CORNERS = 3u;                 // corners of a knot ring a twig is drawn with at least: the fewest that close a surface, RENDER_DATA_TMPL_CYL_SIDES_CORS of ase-render-data
 constexpr const char* GODOT_PLANT_LEAVES = "PlantLeaves";         // the leaves as instances
+constexpr const char* GODOT_PLANT_LEAVES_CORS = "PlantLeavesCors";  // the leaves of a body in the far band as instances of the coarse 1 x 1 card (TREEGEN T.6, GODOT_TMPL_LEAF_CORS)
 constexpr const char* GODOT_PLANT_MALE = "PlantMale";             // the male catkins as instances
 constexpr const char* GODOT_PLANT_FEMALE = "PlantFemale";         // the female catkins as instances
 constexpr const char* GODOT_PLANT_FRUIT = "PlantFruit";           // the fruit stands as instances

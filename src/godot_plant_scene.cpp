@@ -13,7 +13,9 @@
  *              plant's node comes with its body and goes with it. Materials and organ template files are bound
  *              once (godot_plant_look.hpp); a fill only hands the bound resources on. Soil water and condition
  *              go to the ground and leaf nodes as instance shader parameters every frame (mark_plant_stands):
- *              the value of the record, a Nil where it carried none.
+ *              the value of the record, a Nil where it carried none. The bodies on the patch beside the plants -
+ *              seeds and the fruit bodies of the cap patches - stand in godot_plant_scene_patch.cpp; both units
+ *              find their nodes and templates through godot_plant_scene_parts.hpp.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -23,7 +25,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-11-14
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -32,6 +34,7 @@
  */
 
 #include <ase/adp/godot/godot_plant_scene.hpp>
+#include <ase/adp/godot/godot_plant_scene_parts.hpp>
 #include <ase/adp/godot/godot_asset_showcase_scene.hpp>
 #include <ase/adp/godot/godot_plant_environment.hpp>
 #include <ase/adp/godot/godot_plant_haze.hpp>
@@ -40,11 +43,15 @@
 #include <ase/adp/godot/godot_plant_look_shader.hpp>
 #include <ase/adp/godot/godot_plant_sky.hpp>
 #include <ase/adp/godot/godot_plant_templates.hpp>
+#include <ase/adp/godot/godot_plant_template_mesh.hpp>
 #include <ase/adp/godot/godot_plant_tubes.hpp>
 #include <ase/adp/godot/tube/godot_knot_resource_manager.hpp>
 #include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/cap/types.hpp>
+#include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
+#include <ase/adp/godot/template/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/array_mesh.hpp>
@@ -53,6 +60,7 @@
 #include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
+#include <godot_cpp/classes/multi_mesh.hpp>
 #include <godot_cpp/classes/multi_mesh_instance3d.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/viewport.hpp>
@@ -64,38 +72,22 @@
 #include <godot_cpp/variant/variant.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
 
 namespace ase::adp::godot {
 
-namespace {
-
-/** The node of `scene` with that name, cast to its class; nullptr when the scene has none. */
-template <typename T>
-T* part_of(::godot::Node3D* scene, const char* name) {
-    return ::godot::Object::cast_to<T>(scene->get_node_or_null(::godot::NodePath(name)));
-}
-
-/** A node of class T under `scene` with that name. */
-template <typename T>
-T* add_part(::godot::Node3D* scene, const char* name) {
-    T* part = memnew(T);
-    part->set_name(name);
-    scene->add_child(part);
-    return part;
-}
-
-/**
- * The organ template `code` of the template ports as a mesh (usecase:101011 tessellate the organ templates): the
- * corners and triangles ase-render-data laid, through build_template. Empty while the ports carry no set.
- */
 ::godot::Ref<::godot::Mesh> template_mesh(const GodotHostResourceManager& resources, uint32_t code) {
     PlantMeshArrays arrays;
-    (void)build_template(resources.get_template_corners(), resources.get_template_triangles(), code, arrays);
-    return ::godot::Ref<::godot::Mesh>(mesh_of(arrays));
+    std::vector<float> tangents;
+    (void)build_template(resources.get_template_corners(), resources.get_template_triangles(), code, arrays,
+                         tangents);
+    return ::godot::Ref<::godot::Mesh>(template_mesh_of(arrays, tangents));
 }
+
+namespace {
 
 /** The name of the node a plant stands as: GODOT_PLANT_BODY_PREFIX and the object id of its patch. */
 ::godot::String body_name(uint32_t body) {
@@ -113,7 +105,8 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
 /**
  * The node of the plant on `body` under `bodies`, made when it has none yet with its bark node (GODOT_PLANT_BARK,
  * usecase:101613) holding the empty fine and coarse tube (GODOT_PLANT_TUBES, GODOT_PLANT_TWIGS), the empty fine and
- * coarse wood disks of its cut stubs (GODOT_PLANT_SCARS, GODOT_PLANT_SCAR_TWIGS) and its four empty instance nodes.
+ * coarse wood disks of its cut stubs (GODOT_PLANT_SCARS, GODOT_PLANT_SCAR_TWIGS) and its five empty instance nodes:
+ * the fine and the coarse leaves (TREEGEN T.6), the male and female catkins and the fruit stands.
  */
 ::godot::Node3D* plant_node(::godot::Node3D* bodies, uint32_t body) {
     const ::godot::String name = body_name(body);
@@ -130,7 +123,8 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
     (void)add_part<::godot::MeshInstance3D>(bark, GODOT_PLANT_TWIGS);
     (void)add_part<::godot::MeshInstance3D>(bark, GODOT_PLANT_SCARS);
     (void)add_part<::godot::MeshInstance3D>(bark, GODOT_PLANT_SCAR_TWIGS);
-    for (const char* part : {GODOT_PLANT_LEAVES, GODOT_PLANT_MALE, GODOT_PLANT_FEMALE, GODOT_PLANT_FRUIT}) {
+    for (const char* part :
+         {GODOT_PLANT_LEAVES, GODOT_PLANT_LEAVES_CORS, GODOT_PLANT_MALE, GODOT_PLANT_FEMALE, GODOT_PLANT_FRUIT}) {
         (void)add_part<::godot::MultiMeshInstance3D>(plant, part);
     }
     make_impostor(plant);
@@ -154,6 +148,7 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
     build_plant_water(scene);
     (void)add_part<::godot::Node3D>(scene, GODOT_PLANT_BODIES);
     (void)add_part<::godot::MultiMeshInstance3D>(scene, GODOT_PLANT_SEEDS);
+    (void)add_part<::godot::Node3D>(scene, GODOT_PLANT_CAPS);
     build_plant_sky(scene);
     build_plant_haze(scene);
     return scene;
@@ -186,6 +181,7 @@ void fill_plant_ground(::godot::Node3D* scene, const std::vector<VivariumTerrain
         (void)build_ground(samples, cells, surface.arrays, surface.slots);
         (void)mark_ground(discs, beds, surface.arrays);
         surface.cells = cells;
+        surface.revision += 1u;  // a ground built anew moves every place a reader derived from (P0692)
         const ::godot::Ref<::godot::ArrayMesh> built = mesh_of(surface.arrays);
         node->set_mesh(built);
         hold_ground_surface(built, surface);
@@ -226,6 +222,9 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
     const ::godot::Ref<::godot::Mesh> fine = template_mesh(resources, GODOT_TMPL_FINE);
     const ::godot::Ref<::godot::Mesh> stand_in_leaf = template_mesh(resources, GODOT_TMPL_LEAF);
     const ::godot::Ref<::godot::Mesh> leaf = look.leaf.shape.is_valid() ? look.leaf.shape : stand_in_leaf;
+    // the leaves of a body in the far band on the coarse 1 x 1 card of ase-render-data (TREEGEN T.6): four corners
+    // and two triangles a face, never the fine lattice of the file
+    const ::godot::Ref<::godot::Mesh> coarse_leaf = template_mesh(resources, GODOT_TMPL_LEAF_CORS);
     const ::godot::Ref<::godot::Mesh> male = look.male.shape.is_valid() ? look.male.shape : fine;
     const ::godot::Ref<::godot::Mesh> female = look.female.shape.is_valid() ? look.female.shape : fine;
     const ::godot::Ref<::godot::Mesh> fruit = look.fruit.shape.is_valid() ? look.fruit.shape : fine;
@@ -234,9 +233,12 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
     // internodes are no bundle any more - their bark is one tube per axis (usecase:101613), the shown orders reach
     // its shader - so every bundle draws all its records, the half above GODOT_ORDER_EVERY. The leaves carry the
     // bend of their cards as custom data (PLAN_ASE_VIVARIUM_TREEGEN T.6); the vertex shader lifts the lattice by it.
+    // The leaves are two bundles: the card each leaf record names (its twelfth value) puts it on the fine card of its
+    // file near the observer or on the coarse 1 x 1 card in the far band (TREEGEN T.6).
     struct Bundle {
         const char* node;
         uint32_t organ_class;
+        uint32_t card;
         std::vector<float> PlantBodyRows::*half;
         std::vector<float> PlantBodyRows::*custom;
         std::vector<float> PlantBodyRows::*sway;
@@ -244,20 +246,23 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
         const ::godot::Ref<::godot::Material>* material;
     };
     const Bundle bundles[] = {
-        {GODOT_PLANT_LEAVES, GODOT_ORGAN_LEAF, &PlantBodyRows::above, &PlantBodyRows::above_custom,
+        {GODOT_PLANT_LEAVES, GODOT_ORGAN_LEAF, GODOT_TMPL_LEAF, &PlantBodyRows::above, &PlantBodyRows::above_custom,
          &PlantBodyRows::above_sway, &leaf, &look.leaf.material},
-        {GODOT_PLANT_MALE, GODOT_ORGAN_MALE, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &male,
-         &look.male.material},
-        {GODOT_PLANT_FEMALE, GODOT_ORGAN_FEMALE, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &female,
-         &look.female.material},
-        {GODOT_PLANT_FRUIT, GODOT_ORGAN_FRUIT, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway, &fruit,
-         &look.fruit.material},
+        {GODOT_PLANT_LEAVES_CORS, GODOT_ORGAN_LEAF, GODOT_TMPL_LEAF_CORS, &PlantBodyRows::above,
+         &PlantBodyRows::above_custom, &PlantBodyRows::above_sway, &coarse_leaf, &look.leaf.material},
+        {GODOT_PLANT_MALE, GODOT_ORGAN_MALE, GODOT_TMPL_LEAF, &PlantBodyRows::above, nullptr, &PlantBodyRows::above_sway,
+         &male, &look.male.material},
+        {GODOT_PLANT_FEMALE, GODOT_ORGAN_FEMALE, GODOT_TMPL_LEAF, &PlantBodyRows::above, nullptr,
+         &PlantBodyRows::above_sway, &female, &look.female.material},
+        {GODOT_PLANT_FRUIT, GODOT_ORGAN_FRUIT, GODOT_TMPL_LEAF, &PlantBodyRows::above, nullptr,
+         &PlantBodyRows::above_sway, &fruit, &look.fruit.material},
     };
-    // the records of every bundled class by body
-    std::unordered_map<uint32_t, PlantBodyRows> rows[GODOT_DRAWN_COUNT];
+    // the records of every bundle by body, in the order of the bundles: two bundles share the leaf class
+    std::vector<std::unordered_map<uint32_t, PlantBodyRows>> rows;
+    rows.reserve(sizeof(bundles) / sizeof(bundles[0]));
     for (const Bundle& bundle : bundles) {
-        rows[bundle.organ_class] = rows_by_body(resources.get_instances(bundle.organ_class),
-                                                resources.get_organs(bundle.organ_class), GODOT_ORDER_EVERY);
+        rows.push_back(rows_by_body(resources.get_instances(bundle.organ_class), resources.get_organs(bundle.organ_class),
+                                    GODOT_ORDER_EVERY, bundle.card));
     }
     // the bark of every body: one continuous tube per axis, its rings laid around every knot of the knot and foot
     // ports from radius, quaternion and v, the cut face of every stub closed on its knot (usecase:101613, B0677)
@@ -300,9 +305,10 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
                       body_tube.scar_indices, look.wood, shown_orders, true);
         }
         std::vector<const std::vector<float>*> drawn_rows;
-        for (const Bundle& bundle : bundles) {
-            const auto found = rows[bundle.organ_class].find(origin.first);
-            const PlantBodyRows& body_rows = found == rows[bundle.organ_class].end() ? none : found->second;
+        for (std::size_t b = 0u; b < rows.size(); ++b) {
+            const Bundle& bundle = bundles[b];
+            const auto found = rows[b].find(origin.first);
+            const PlantBodyRows& body_rows = found == rows[b].end() ? none : found->second;
             const std::vector<float>* custom = bundle.custom == nullptr ? nullptr : &(body_rows.*bundle.custom);
             fill_instances(part_of<::godot::MultiMeshInstance3D>(plant, bundle.node), *bundle.shape,
                            body_rows.*bundle.half, custom, *bundle.material, &(body_rows.*bundle.sway));
@@ -327,48 +333,15 @@ void mark_plant_stands(::godot::Node3D* scene, const std::unordered_map<uint32_t
         if (plant == nullptr) {
             continue;
         }
-        ::godot::MultiMeshInstance3D* leaves = part_of<::godot::MultiMeshInstance3D>(plant, GODOT_PLANT_LEAVES);
-        hand_on(leaves, GODOT_SHADER_WILTED, stand.second.condition_known, stand.second.wilted);
-        hand_on(leaves, GODOT_SHADER_DEAD, stand.second.condition_known, stand.second.dead);
-        // its own autumn colour (usecase:101646 colour the leaves in autumn): unknown hands the default back, the green
-        hand_on(leaves, GODOT_SHADER_AUTUMN, stand.second.autumn_known, stand.second.autumn);
-    }
-}
-
-void fill_plant_seeds(::godot::Node3D* scene, const GodotHostResourceManager& resources,
-                      const std::unordered_map<uint32_t, PlantOrigin>& origins, const PlantSceneLook& look) {
-    ::godot::MultiMeshInstance3D* node = part_of<::godot::MultiMeshInstance3D>(scene, GODOT_PLANT_SEEDS);
-    if (node == nullptr) {
-        return;
-    }
-    // the nutlet template carries its own size; the leaf template of the ports stands in at the width of a
-    // winged nutlet
-    const bool bound = look.nutlet.shape.is_valid();
-    const ::godot::Ref<::godot::Mesh> shape = bound ? look.nutlet.shape : template_mesh(resources, GODOT_TMPL_LEAF);
-    const float scale = bound ? 1.0f : GODOT_NUTLET_STAND_IN_M;
-    // one 3x4 per seed in the row order of MultiMesh: the axes at that scale, the origin at the stem base of its
-    // body plus the place the port carried
-    const std::vector<VivariumSeedView>& seeds = resources.get_seeds();
-    std::vector<float> rows;
-    rows.reserve(seeds.size() * GODOT_INSTANCE_VALUES);
-    for (const VivariumSeedView& seed : seeds) {
-        const auto origin = origins.find(seed.body);
-        if (origin == origins.end()) {
-            continue;
-        }
-        // all three axes in the frame of the stem foot, the height too: ase-physics lands the seed on the ground
-        // its contact measures at the terrain sample, over the levelled disc too, so a hole dug into the disc
-        // takes the seed down (D2315); the view adds no ground height of its own (D2312)
-        const float at[3] = {static_cast<float>(origin->second.x + seed.x), static_cast<float>(origin->second.y + seed.y),
-                             static_cast<float>(origin->second.z + seed.z)};
-        for (uint32_t r = 0u; r < 3u; ++r) {
-            for (uint32_t c = 0u; c < 3u; ++c) {
-                rows.push_back(r == c ? scale : 0.0f);
-            }
-            rows.push_back(at[r]);
+        // both leaf bundles, the fine near card and the coarse far card (TREEGEN T.6), wilt, die and colour alike
+        for (const char* part : {GODOT_PLANT_LEAVES, GODOT_PLANT_LEAVES_CORS}) {
+            ::godot::MultiMeshInstance3D* leaves = part_of<::godot::MultiMeshInstance3D>(plant, part);
+            hand_on(leaves, GODOT_SHADER_WILTED, stand.second.condition_known, stand.second.wilted);
+            hand_on(leaves, GODOT_SHADER_DEAD, stand.second.condition_known, stand.second.dead);
+            // its own autumn colour (usecase:101646 colour the leaves in autumn): unknown hands the default back, the green
+            hand_on(leaves, GODOT_SHADER_AUTUMN, stand.second.autumn_known, stand.second.autumn);
         }
     }
-    fill_instances(node, shape, rows, nullptr, look.nutlet.material, nullptr);
 }
 
 void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky, const SkyOvercastShade& overcast,

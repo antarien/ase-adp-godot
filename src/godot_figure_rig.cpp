@@ -329,6 +329,20 @@ void drive_figure_motion(::godot::Node3D* body, double gait, double gait_stand, 
     motion->set_meta(kFigureMetaPose, static_cast<int64_t>(pose));
 }
 
+bool figure_motion_pose(::godot::Node3D* body, uint8_t& pose) {
+    const ::godot::TypedArray<::godot::Node> trees = body->find_children(kFigureMotion, "AnimationTree", true, false);
+    if (trees.is_empty()) {
+        return false;
+    }
+    auto* motion = ::godot::Object::cast_to<::godot::AnimationTree>(trees[0]);
+    if (motion == nullptr || !motion->has_meta(kFigureMetaPoses) || !static_cast<bool>(motion->get_meta(kFigureMetaPoses)) ||
+        !motion->has_meta(kFigureMetaPose)) {
+        return false;
+    }
+    pose = static_cast<uint8_t>(static_cast<int64_t>(motion->get_meta(kFigureMetaPose)));
+    return true;
+}
+
 bool figure_eye_level(::godot::Node* model, double& eye) {
     ::godot::Skeleton3D* skeleton = rig_skeleton(model);
     if (skeleton == nullptr) {

@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_leader_line.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 
 #include <ase/math/math.hpp>

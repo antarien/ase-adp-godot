@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_action_fan.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
 
 #include <godot_cpp/variant/string.hpp>

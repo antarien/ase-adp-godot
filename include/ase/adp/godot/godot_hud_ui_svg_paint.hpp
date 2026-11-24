@@ -39,7 +39,7 @@
 
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/transform2d.hpp>

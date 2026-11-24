@@ -169,6 +169,7 @@ struct VivariumSurvivalFoodView {
 struct VivariumSurvivalSmokeView {
     uint32_t object_id = 0;  // the figure whose cell the soot hangs in
     double   soot = 0.0;     // GIS_LOCAL_SOOT: kg of soot the fires gave to the air of the figure's cell, 0 where none smoked
+    double   smell = 0.0;    // PER_SMELL_SMOKE: share of smoke the figure's nose caught in the sphere around it (wind-carried, B3)
 };
 
 class GodotKnotResourceManager;  // tube/godot_knot_resource_manager.hpp: the knots and feet of the bark tubes (N0543)
@@ -455,6 +456,12 @@ public:
     // the position is read under; every other position and an unknown one have no forecast (GODOT_HOUR_NONE).
     [[nodiscard]] double stage_due_h(const VivariumPatchView& patch, uint8_t position) const;
     [[nodiscard]] bool has_patch(uint32_t object_id) const;
+    /**
+     * The cap radius of the fruit body of every patch whose species carries one, in metres, keyed by the patch's
+     * object id (flora.cap.v1, PHY_CAP_RADIUS, usecase:101362 scale the organ templates). Read with every snapshot;
+     * a patch without a record of the cap port has no entry and shows no fruit body.
+     */
+    [[nodiscard]] const std::unordered_map<uint32_t, double>& get_caps() const;
     [[nodiscard]] uint32_t patch_count() const;
     [[nodiscard]] const VivariumClockView& get_clock() const;
     /**
@@ -545,6 +552,13 @@ public:
     /** Grows by one every time the groundwater of a chunk differs from the last read. */
     [[nodiscard]] uint64_t groundwater_generation() const;
     /**
+     * The salt of every chunk as the salt port of ase-pl-hydrogeology showed it (H.9, I-4): water half, soil half
+     * and sum, read with every snapshot once the plugin offers the port; empty before.
+     */
+    [[nodiscard]] const std::vector<VivariumSaltView>& get_salt() const;
+    /** Grows by one every time the salt of a chunk differs from the last read. */
+    [[nodiscard]] uint64_t salt_generation() const;
+    /**
      * The corners of the organ templates as the template corner port showed them, every code together
      * (usecase:101011 tessellate the organ templates). ase-render-data builds the templates once when the host
      * starts, so the ports are read with every snapshot until both carry a set, and not again until a
@@ -607,11 +621,14 @@ public:
     ase::kernel::HostStatus file_hull(uint32_t corner, uint32_t make, double hx, double hy, double hz);
     /**
      * Lays one part of the camp as a rigid body on ingle.part.v1 (T.3): in the frame of the patch `patch`,
-     * `east`, `north` of its stem foot, released at `drop` above it, with fall speed, mass and make; `fuel` gives
-     * it a fire cell of ase-fire. The plugin files it to ase-physics, which drops it onto the ground.
+     * `east`, `north` of its stem foot, its centre of mass at `drop` above it, in the turn `turn_x`, `turn_y`,
+     * `turn_z` (rotation vector, radians) the pyramid of the camp lays it in, with fall speed, mass, make and the
+     * roughness `rough` of its export; `fuel` gives it a fire cell of ase-fire. The plugin files it to
+     * ase-physics, which lets it settle on the ground and on the parts laid before it.
      */
     ase::kernel::HostStatus file_part(uint32_t patch, double east, double north, double drop, double fall,
-                                      double mass, uint32_t make, bool fuel);
+                                      double mass, uint32_t make, double rough, double turn_x, double turn_y,
+                                      double turn_z, bool fuel);
     /** true when the running host offers the camp place, hull and part ports of the start configuration. */
     [[nodiscard]] bool camp_offered() const;
     /** Every camp part body as ingle.body.v1 showed it, read with every snapshot; empty without the port. */
@@ -739,6 +756,7 @@ private:
     ase::kernel::HostStatus read_currents();
     ase::kernel::HostStatus read_pits();
     ase::kernel::HostStatus read_groundwater();
+    ase::kernel::HostStatus read_salt();
     ase::kernel::HostStatus read_templates();
     ase::kernel::HostStatus read_sky();
     ase::kernel::HostStatus read_stars();
@@ -773,6 +791,7 @@ private:
     std::vector<ase::kernel::KernelHostRecord>       records_;
     std::unordered_map<uint32_t, VivariumPatchView>  patches_;
     std::unordered_map<uint32_t, uint32_t>           places_;      // place → object id of the last snapshot
+    std::unordered_map<uint32_t, double>             caps_;        // patch object id → cap radius in metres of the cap port, last read (usecase:101362 scale the organ templates)
     VivariumClockView                                clock_;
     VivariumWeatherView                              weather_;     // the weather of the sky, last read (N0449)
     VivariumSapView                                  sap_;         // the birch's tap and bark vessel, last read (N0457)
@@ -804,6 +823,8 @@ private:
     uint64_t                                         pit_generation_ = 0;
     std::vector<VivariumGroundwaterView>             groundwater_;  // the groundwater of every chunk, last read
     uint64_t                                         groundwater_generation_ = 0;
+    std::vector<VivariumSaltView>                    salt_;      // the salt of every chunk, last read
+    uint64_t                                         salt_generation_ = 0;
     std::vector<VivariumTemplateCornerView>          template_corners_;    // the corners of the organ templates, every code
     std::vector<VivariumTemplateTriangleView>        template_triangles_;  // the triangles of the organ templates, every code
     uint64_t                                         template_generation_ = 0;

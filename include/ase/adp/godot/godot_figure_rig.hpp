@@ -74,6 +74,13 @@ void drive_figure_motion(::godot::Node3D* body, double gait, double gait_stand, 
                          bool bend, uint8_t pose);
 
 /**
+ * The pose (FIGURE_POSE_*) the mix of the figure node `body` last travelled to, as drive_figure_motion noted it on the
+ * AnimationTree: the pose the figure is drawn in, never the one the rest record asks for. false when the node carries
+ * no mix with the camp clips (B0783: the pose line of the view and the camp pictures of the acceptance read it).
+ */
+bool figure_motion_pose(::godot::Node3D* body, uint8_t& pose);
+
+/**
  * The height of the eyes of the figure file `model` in the frame of its parent, metres: the mean of the rest
  * origins of L_Eye and R_Eye. false when the file carries no Skeleton3D or its skeleton lacks an eye bone.
  */

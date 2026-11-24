@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_text_block.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_vivarium_watch.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 

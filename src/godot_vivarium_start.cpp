@@ -37,6 +37,7 @@
  */
 
 #include <ase/adp/godot/godot_config_read.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_vivarium_start_choice.hpp>
@@ -176,18 +177,32 @@ uint8_t VivariumStartChoice::tap(const ::godot::Vector2& point) {
     return GODOT_START_MODE_NONE;
 }
 
-bool VivariumStartChoice::take_begin_place(::godot::Vector2& centre, double& radius) {
+bool VivariumStartChoice::take_begin_place(const ::godot::Transform2D& frame, ::godot::Vector2& centre,
+                                           double& radius) {
     if (!placed_) {
         return false;
     }
-    if (begin_announced_once_ && begin_announced_ == begin_at_.centre && begin_announced_radius_ == begin_at_.radius) {
+    // the frame scales uniformly (draw_start_screen: k on both axes), so one axis carries the radius
+    const ::godot::Vector2 at = frame.xform(begin_at_.centre);
+    const double across = begin_at_.radius * static_cast<double>(frame.get_scale().x);
+    if (begin_announced_once_ && begin_announced_ == at && begin_announced_radius_ == across) {
         return false;
     }
     begin_announced_once_ = true;
-    begin_announced_ = begin_at_.centre;
-    begin_announced_radius_ = begin_at_.radius;
-    centre = begin_at_.centre;
-    radius = begin_at_.radius;
+    begin_announced_ = at;
+    begin_announced_radius_ = across;
+    centre = at;
+    radius = across;
+    return true;
+}
+
+bool VivariumStartChoice::initial_place(::godot::Vector2& centre, double& radius) const {
+    // the row NOVO / RETOMAR is drawn only under OFFLINE (draw), so only then has initial_at_ a place
+    if (!placed_ || !offline_chosen_) {
+        return false;
+    }
+    centre = initial_at_.centre;
+    radius = initial_at_.radius;
     return true;
 }
 
@@ -272,12 +287,22 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
             // The start chip on the canvas, in the logical pixels a tap arrives in (start_input carries it back
             // under start_frame_): named once per new place, so a run that starts the world by tapping it, as the
             // keeper does, reads where it stands instead of guessing it (usecase:100387).
-            ::godot::Vector2 begin_centre;
+            ::godot::Vector2 at;
             double begin_radius = 0.0;
-            if (start_choice_.take_begin_place(begin_centre, begin_radius)) {
-                const ::godot::Vector2 at = start_frame_.xform(begin_centre);
+            if (start_choice_.take_begin_place(start_frame_, at, begin_radius)) {
                 note(::godot::String("start choice begin x=") + ::godot::String::num(at.x, 1) + " y=" +
-                     ::godot::String::num(at.y, 1) + " r=" + ::godot::String::num(begin_radius * k, 1));
+                     ::godot::String::num(at.y, 1) + " r=" + ::godot::String::num(begin_radius, 1));
+                // the chip NOVO moves only with the start chip (one row above it, VivariumStartChoice::draw), so
+                // its place is named beside each new place of the start chip: a run that starts OFFLINE NOVO
+                // taps it first, as the keeper does (ST04 of the task inventory)
+                ::godot::Vector2 initial_centre;
+                double initial_radius = 0.0;
+                if (start_choice_.initial_place(initial_centre, initial_radius)) {
+                    const ::godot::Vector2 initial_at = start_frame_.xform(initial_centre);
+                    note(::godot::String("start choice initial x=") + ::godot::String::num(initial_at.x, 1) +
+                         " y=" + ::godot::String::num(initial_at.y, 1) + " r=" +
+                         ::godot::String::num(initial_radius * k, 1));
+                }
             }
         }
     } else {

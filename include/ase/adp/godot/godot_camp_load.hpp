@@ -8,7 +8,8 @@
  * @description PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP T.1, T.3, T.9: every part of the camp fire comes from a Blender
  *              recipe, exported as one glTF file per role (camp.stone, camp.log, camp.stick, camp.tinder). One node
  *              per variant, named by its make (camp_stone.<variant>), its origin the centre of mass; the node extras
- *              carry make, mass_kg and hull - the corners of the convex hull in the axes of the file, which glTF
+ *              carry make, mass_kg, roughness_m (how deep the deepest valley of the surface lies beneath the hull,
+ *              required: a part without it is not known) and hull - the corners of the convex hull in the axes of the file, which glTF
  *              writes as Godot's: x east, y up, z north. The task parses the file, reads the extras from the JSON
  *              of the document and keeps each variant's mesh; nothing of it enters the scene tree.
  *
@@ -26,7 +27,7 @@
  * @usecase     usecase:5436 - kindle fire
  * @actor       Funken (FNKN)
  * @created     2026-11-21
- * @modified    2026-11-21
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -50,6 +51,7 @@ struct CampMake {
     uint32_t                    make = 0;      // its name id, the value the host ports carry
     uint32_t                    variant = 0;   // the suffix of the make, the index camp.parts names
     double                      mass_kg = 0.0; // the mass of the variant, kg (extras mass_kg)
+    double                      roughness_m = 0.0; // depth of its surface beneath its convex hull, m (extras roughness_m)
     std::vector<double>         hull;          // the hull corners, three values each: east, up, north of the centre of mass, m
     ::godot::Ref<::godot::Mesh> mesh;          // the mesh of the node, its surfaces with the materials of the file
 };
@@ -62,7 +64,9 @@ struct CampRoleLoad {
     std::string           role;         // the role of the view, camp.stone
     ::godot::String       asset_root;   // the asset root the file stands below
     std::string           file;         // the bound file below it; empty when the stage binds none
-    std::vector<CampMake> makes;        // written by the task: every node that carries make, mass_kg and hull
+    std::vector<CampMake> makes;        // written by the task: every node that carries make, mass_kg, roughness_m and hull
+    uint32_t              refused = 0u; // written by the task: the nodes with a make string that lack another extra
+    std::string           refusal;      // written by the task: the first of them and the extra it lacks, or why the file failed
     int64_t               task = -1;    // the WorkerThreadPool task while it runs or its makes were not taken; -1 when none runs
     bool                  taken = false; // the makes were taken once
 };

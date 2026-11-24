@@ -29,6 +29,8 @@
 #include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/asset/types.hpp>
+#include <ase/adp/godot/cap/godot_cap_scale.hpp>
+#include <ase/adp/godot/cap/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
@@ -78,6 +80,13 @@ std::unordered_map<std::string, uint32_t> stand_ins_of(const std::unordered_map<
         const auto named = roles.find(role);
         if (named != roles.end()) {
             stand_ins[named->second] = colour;
+        }
+    }
+    // the fruit body of every species (GODOT_ROLE_CAP before its catalog id, usecase:101362 scale the organ
+    // templates): each cap role the stage names keeps the stand-in colour of the cap
+    for (const auto& [role, name] : roles) {
+        if (!cap_species_of(role).empty()) {
+            stand_ins[name] = GODOT_COLOR_STAND_IN_CAP;
         }
     }
     return stand_ins;

@@ -21,8 +21,9 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_cover.hpp>
+#include <ase/adp/godot/pen/types.hpp>
 
 namespace ase::adp::godot {
 

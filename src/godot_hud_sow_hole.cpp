@@ -24,6 +24,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_sow_hole.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 
 #include <godot_cpp/variant/vector2.hpp>
 

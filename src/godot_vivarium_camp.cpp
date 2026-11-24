@@ -29,7 +29,7 @@
  * @usecase     usecase:5436 - kindle fire
  * @actor       Funken (FNKN)
  * @created     2026-11-21
- * @modified    2026-11-21
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -43,8 +43,10 @@
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/types.hpp>
 
+#include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -96,6 +98,8 @@ const CampMake* find_make(const VivariumCampState& camp, const std::string& role
 void restart_camp(VivariumCampState& camp) {
     camp.camp_laid = false;
     camp.hulls_filed = false;
+    camp.hulls_taken = 0u;
+    camp.hulls_refused = 0u;
     camp.parts_filed = false;
     camp.refuels_laid.clear();
     camp.next_log = 0u;
@@ -105,6 +109,14 @@ void restart_camp(VivariumCampState& camp) {
         }
     }
     camp.drawn.clear();
+    camp.framed.clear();
+    for (auto& [cell, flame] : camp.flames) {
+        if (flame != nullptr) {
+            flame->queue_free();
+        }
+    }
+    camp.flames.clear();
+    camp.flame_noted.clear();
 }
 
 void end_camp(VivariumCampState& camp) {
@@ -143,7 +155,9 @@ void VivariumView::follow_camp() {
             for (const CampMake& make : load.makes) {
                 camp_.meshes[make.make] = make.mesh;
             }
-            note("camp role " + text_of(role) + " makes=" + ::godot::String::num_uint64(load.makes.size()));
+            note("camp role " + text_of(role) + " makes=" + ::godot::String::num_uint64(load.makes.size()) +
+                 " refused=" + ::godot::String::num_uint64(load.refused) +
+                 (load.refusal.empty() ? ::godot::String() : " first=" + text_of(load.refusal)));
         }
         loading = loading || load.task >= 0;
     }
@@ -161,24 +175,47 @@ void VivariumView::follow_camp() {
     if (loading) {
         return;
     }
-    // 3. THE HULLS (T.1): every corner of every make, before the first part of it, on a frame of their own.
+    // 3. THE HULLS (T.1): every corner of every make, before the first part of it. The request queue of the port holds
+    // fewer corners than the camp carries and empties once per host tick (IngleHostHullSystem), so a full queue is no
+    // refusal: the corners go on from the first one it did not take, on the next frame, until every corner stands. A
+    // part goes out only after that - IngleHostPartSystem files no body for a make whose corners are short.
     if (!camp_.hulls_filed) {
-        camp_.hulls_filed = true;
-        uint64_t filed = 0u;
+        uint64_t index = 0u;
+        uint64_t total = 0u;
         uint64_t refused = 0u;
+        bool full = false;
         for (const auto& [role, load] : camp_.loads) {
             for (const CampMake& make : load.makes) {
-                for (size_t i = 0u; i + 2u < make.hull.size(); i += 3u) {
+                for (size_t i = 0u; i + 2u < make.hull.size(); i += 3u, ++index) {
+                    total += 1u;
+                    if (full || index < camp_.hulls_taken) {
+                        continue;  // taken on an earlier frame, or the queue is full for this frame
+                    }
                     const HostStatus status = resources_.file_hull(static_cast<uint32_t>(i / 3u), make.make,
                                                                    make.hull[i], make.hull[i + 1u], make.hull[i + 2u]);
-                    (status == ase::kernel::HostStatusOk ? filed : refused) += 1u;
+                    if (status == ase::kernel::HostStatusCapacity) {
+                        full = true;  // the port takes the rest after the host tick drained it
+                        continue;
+                    }
+                    refused += status == ase::kernel::HostStatusOk ? 0u : 1u;
+                    camp_.hulls_taken = index + 1u;
                 }
             }
         }
-        note("camp hulls filed=" + ::godot::String::num_uint64(filed) + " refused=" + ::godot::String::num_uint64(refused));
+        camp_.hulls_refused += refused;
+        if (refused > 0u) {
+            note("camp hulls refused=" + ::godot::String::num_uint64(refused) + " (not a full queue)");
+        }
+        if (full) {
+            return;
+        }
+        camp_.hulls_filed = true;
+        note("camp hulls filed=" + ::godot::String::num_uint64(total - camp_.hulls_refused) + " of " +
+             ::godot::String::num_uint64(total) + " refused=" + ::godot::String::num_uint64(camp_.hulls_refused));
         return;
     }
-    // 4. THE PARTS (T.3): in the frame of the patch of camp.place, each once; ase-physics lets them fall.
+    // 4. THE PARTS (T.3): in the frame of the patch of camp.place, each once, laid in its turn as the pyramid of
+    //    camp.parts names it; ase-physics lets them settle.
     const VivariumPatchView* patch = resources_.get_patch_at(start_.camp_place);
     if (!camp_.parts_filed && patch != nullptr) {
         camp_.parts_filed = true;
@@ -189,8 +226,9 @@ void VivariumView::follow_camp() {
                      " has no make in its export");
                 continue;
             }
-            const HostStatus status = resources_.file_part(patch->object_id, part.east, part.north, part.drop,
-                                                           part.fall, make->mass_kg, make->make, part.fuel);
+            const HostStatus status =
+                resources_.file_part(patch->object_id, part.east, part.north, part.drop, part.fall, make->mass_kg,
+                                     make->make, make->roughness_m, part.tx, part.ty, part.tz, part.fuel);
             note("camp part " + text_of(make->name) + " east=" + ::godot::String::num(part.east, 3) + " north=" +
                  ::godot::String::num(part.north, 3) + " result=" + GodotHostResourceManager::status_name(status));
         }
@@ -201,6 +239,10 @@ void VivariumView::follow_camp() {
         camp_.root->set_name(kCampRootName);
         scene_->add_child(camp_.root);
     }
+    // THE PICTURE: a body counts as framed when its place lies in the frustum of the camera that draws the frame,
+    // the same measure as the figure (take_figure_pose); the line is written when the body enters or leaves it,
+    // so the acceptance judges each shot from the lines of the same frame, never from a body merely drawn.
+    const ::godot::Camera3D* eye = node_->get_viewport() != nullptr ? node_->get_viewport()->get_camera_3d() : nullptr;
     std::unordered_set<uint32_t> seen;
     for (const VivariumCampBodyView& body : resources_.get_camp_bodies()) {
         const VivariumPatchView* frame = resources_.get_patch(body.patch);
@@ -220,16 +262,33 @@ void VivariumView::follow_camp() {
         const ::godot::Vector3 origin(static_cast<float>(frame->x + body.x), static_cast<float>(frame->y + body.y),
                                       static_cast<float>(frame->z + body.z));
         node->set_transform(::godot::Transform3D(turn_of(body), origin));
+        const bool inside = eye != nullptr && eye->is_position_in_frustum(origin);
+        const auto noted = camp_.framed.find(body.object_id);
+        if (noted == camp_.framed.end() || noted->second != inside) {
+            camp_.framed[body.object_id] = inside;
+            // the place in the frame of the patch, as ase-physics holds it: beside the east and north of the part
+            // (`camp part ... east= north=`) it shows whether a body rests where it was laid or left the ring
+            note("camp body " + ::godot::String::num_uint64(body.object_id) + " framed " + (inside ? "1" : "0") +
+                 " make " + ::godot::String::num_uint64(body.make) + " east=" + ::godot::String::num(body.x, 3) +
+                 " up=" + ::godot::String::num(body.y, 3) + " north=" + ::godot::String::num(body.z, 3));
+        }
     }
     for (auto drawn = camp_.drawn.begin(); drawn != camp_.drawn.end();) {
         if (seen.count(drawn->first) == 0u) {
             if (drawn->second != nullptr) {
                 drawn->second->queue_free();
             }
+            camp_.framed.erase(drawn->first);
             drawn = camp_.drawn.erase(drawn);
         } else {
             ++drawn;
         }
+    }
+    // THE FLAME: over every body ase-fire burns, shaped from the cell the owner holds (godot_vivarium_camp_flame.cpp)
+    std::vector<::godot::String> flame_lines;
+    follow_camp_flames(camp_, resources_.get_survival_fires(), eye, flame_lines);
+    for (const ::godot::String& line : flame_lines) {
+        note(line);
     }
     // THE WOOD (T.7): one new log above the body a keeper tends, once while his action stands.
     const auto& logs = camp_.loads[kCampLogRole].makes;
@@ -262,8 +321,12 @@ void VivariumView::follow_camp() {
         }
         const CampMake& log = logs[camp_.next_log % logs.size()];
         camp_.next_log += 1u;
-        const HostStatus status = resources_.file_part(target->patch, target->x, target->z, target->y + log_spec->drop,
-                                                       log_spec->fall, log.mass_kg, log.make, true);
+        // The new log is laid as the first log of camp.parts lies, leaning into the fire in its turn, its centre of
+        // mass that log's height above the tended body; ase-physics lets it settle on the pile.
+        const HostStatus status =
+            resources_.file_part(target->patch, target->x, target->z, target->y + log_spec->drop, log_spec->fall,
+                                 log.mass_kg, log.make, log.roughness_m, log_spec->tx, log_spec->ty, log_spec->tz,
+                                 true);
         note("camp refuel keeper=" + ::godot::String::num_uint64(refuel.keeper) + " body=" +
              ::godot::String::num_uint64(refuel.body) + " log=" + text_of(log.name) +
              " result=" + GodotHostResourceManager::status_name(status));

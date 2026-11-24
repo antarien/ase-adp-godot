@@ -12,6 +12,12 @@
  *              the course, the depth turns the shallow colour to the deep one; the view computes no water. The two
  *              colours are those of brook water, not of the sea: murky, dark, and slightly green from the algae and the
  *              suspended silt a lowland brook carries; the shallow colour shows the bed through it.
+ *              THE HUE OF THE WATER IS THE CELL'S: the second UV carries the hue the nearest current cell answered
+ *              (water.quality.v1 curr_hue_deg, the circular mean ase-signature files over what the water of the cell
+ *              carries, CAUSA_ASE_SIGNATURE; fill_plant_water, godot_plant_brook.hpp), x the hue over a turn of the
+ *              colour circle, y 1 where a cell answered. There the own colour takes that hue and keeps its saturation
+ *              and its brightness, so depth and murk stay as the two colours paint them; where no cell answered the
+ *              own colour stands as it is. The shader computes no hue, it only turns the colour to the one filed.
  *              Over that own colour lies the sky the brook reflects (PLAN_ASE_VIVARIUM_PHASE_06_HUD row N07, m.html
  *              drawWater 429 to 433): the far colour at depth z 0, the near colour at depth z 1, z a row of the screen
  *              measured as the ground measures it (the global ground_rows light_plant_ground_season sets), so water
@@ -74,6 +80,23 @@ varying float flow;
 varying float deep;
 varying vec2 course;
 varying vec3 world_pos;
+// the cell's hue (UV2): x the hue over a turn, y above HUE_ANSWERED where a cell answered one
+varying vec2 water_hue;
+const float HUE_ANSWERED = 0.5;
+// rgb to hue, saturation and value, each 0..1 (the branchless form of the colour circle's six sectors)
+vec3 water_to_hsv(vec3 c) {
+    vec4 k = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, k.wz), vec4(c.gb, k.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+// hue, saturation and value back to rgb
+vec3 water_to_rgb(vec3 c) {
+    vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
 float ripple_hash(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float ripple_at(vec2 p) {
     vec2 i = floor(p);
@@ -152,6 +175,7 @@ void vertex() {
     deep = COLOR.g;
     course = vec2(COLOR.b, COLOR.a) * 2.0 - 1.0;
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    water_hue = UV2;
 }
 void fragment() {
     vec2 dir = length(course) > 0.001 ? normalize(course) : vec2(0.0, 1.0);
@@ -204,6 +228,10 @@ void fragment() {
     }
     float stroke = on_axis * brook_streak_color.a * sky_light;
     vec3 own = mix(shallow_color.rgb, deep_color.rgb, clamp(deep, 0.0, 1.0));
+    if (water_hue.y > HUE_ANSWERED) {
+        vec3 own_hsv = water_to_hsv(own);
+        own = water_to_rgb(vec3(fract(water_hue.x), own_hsv.y, own_hsv.z));
+    }
     ALBEDO = own;
     EMISSION = (sky * reflect_share + brook_streak_color.rgb * stroke) / max(scene_lift, 1.0);
     ALPHA = mix(0.82, 0.95, clamp(deep, 0.0, 1.0));

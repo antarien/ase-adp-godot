@@ -14,7 +14,7 @@
  * @usecase     usecase:101120 - clock the growth cycle
  * @actor       Growth Clock Controller (GROWCLOCON)
  * @created     2026-11-10
- * @modified    2026-11-12
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -23,6 +23,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_debug_layer.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
@@ -110,7 +111,8 @@ bool DebugLayer::bind(const UiTheme& theme, std::string& failed) {
     for (const std::pair<const char*, std::vector<HudRun>*>& slot :
          std::initializer_list<std::pair<const char*, std::vector<HudRun>*>>{
              {"debug_build", &build_words_}, {"debug_time", &time_words_},
-             {"debug_patch", &patch_words_}, {"debug_open", &open},        {"debug_close", &close},
+             {"debug_patch", &patch_words_}, {"debug_salt", &salt_words_},
+             {"debug_open", &open},          {"debug_close", &close},
              {"debug_title", &title}}) {
         if (!theme.words(slot.first, *slot.second)) {
             failed = std::string("texts.hud.") + slot.first;
@@ -132,9 +134,30 @@ bool DebugLayer::bind(const UiTheme& theme, std::string& failed) {
             return false;
         }
     }
-    return line_.bind_data(theme, failed) && open_.bind_data(theme, failed) && close_.bind_data(theme, failed) &&
-           title_.bind_data(theme, failed) && label_.bind_data(theme, failed) && note_.bind_data(theme, failed) &&
-           open_.set(open, failed) && close_.set(close, failed) && title_.set(title, failed);
+    theme_ = &theme;
+    chip_labels_.clear();
+    date_labels_.clear();
+    date_values_.clear();
+    return build_line_.bind_data(theme, failed) && time_line_.bind_data(theme, failed) &&
+           patch_line_.bind_data(theme, failed) && salt_line_.bind_data(theme, failed) && open_.bind_data(theme, failed) && close_.bind_data(theme, failed) &&
+           title_.bind_data(theme, failed) && note_.bind_data(theme, failed) && open_.set(open, failed) &&
+           close_.set(close, failed) && title_.set(title, failed);
+}
+
+bool DebugLayer::grown(std::vector<UiTextBlock>& blocks, size_t count, std::string& failed) {
+    if (theme_ == nullptr) {
+        failed = "debug layer: a text block was asked for before bind() read the theme";
+        return false;
+    }
+    // A longer body binds its new blocks once; the blocks it had keep their shaped text.
+    for (size_t index = blocks.size(); index < count; ++index) {
+        blocks.emplace_back();
+        if (!blocks.back().bind_data(*theme_, failed)) {
+            blocks.pop_back();
+            return false;
+        }
+    }
+    return true;
 }
 
 bool DebugLayer::draw_lines(UiPen& canvas, const ::godot::Transform2D& frame, const DebugLayerFrame& now,
@@ -145,11 +168,11 @@ bool DebugLayer::draw_lines(UiPen& canvas, const ::godot::Transform2D& frame, co
                     {HudPortValue{"adapter", now.adapter}, HudPortValue{"client", now.client},
                      HudPortValue{"units", hud_whole(static_cast<int64_t>(now.units))}},
                     failed) ||
-        !line_.set(build, failed)) {
+        !build_line_.set(build, failed)) {
         return false;
     }
     line.at = ::godot::Vector2(static_cast<float>(x_), static_cast<float>(y_));
-    line_.draw(canvas, frame, line);
+    build_line_.draw(canvas, frame, line);
 
     // The clock line, from the bridged clock record.
     std::vector<HudRun> time = time_words_;
@@ -159,39 +182,59 @@ bool DebugLayer::draw_lines(UiPen& canvas, const ::godot::Transform2D& frame, co
                      HudPortValue{"sim", hud_rounded(now.simulation_s, static_cast<int32_t>(GODOT_TEXT_DECIMALS))},
                      HudPortValue{"steps", hud_whole(static_cast<int64_t>(now.steps))}},
                     failed) ||
-        !line_.set(time, failed)) {
+        !time_line_.set(time, failed)) {
         return false;
     }
     line.at = ::godot::Vector2(static_cast<float>(x_), static_cast<float>(y_ + line_step_));
-    line_.draw(canvas, frame, line);
+    time_line_.draw(canvas, frame, line);
 
     // The patch line only while a patch is chosen and read.
-    if (!now.patch) {
+    double next_y = y_ + 2.0 * line_step_;
+    if (now.patch) {
+        std::vector<HudRun> patch = patch_words_;
+        if (!fill_words(patch,
+                        {HudPortValue{"cover", hud_rounded(now.cover * GODOT_PERCENT, static_cast<int32_t>(GODOT_TEXT_DECIMALS))},
+                         HudPortValue{"mm", hud_rounded(now.soil_mm, static_cast<int32_t>(GODOT_TEXT_DECIMALS))},
+                         HudPortValue{"rel", hud_rounded(now.soil_rel * GODOT_PERCENT, static_cast<int32_t>(GODOT_TEXT_DECIMALS))}},
+                        failed) ||
+            !patch_line_.set(patch, failed)) {
+            return false;
+        }
+        line.at = ::godot::Vector2(static_cast<float>(x_), static_cast<float>(next_y));
+        patch_line_.draw(canvas, frame, line);
+        next_y += line_step_;
+    }
+
+    // The salt line (H.9, I-4) only while the salt port laid records: the world's salt in water, in soil and their
+    // sum as ase-gis added it per chunk, read from the port every frame, so a move between water and soil shows as
+    // it happens while the sum stays.
+    if (now.salt_chunks == 0u) {
         return true;
     }
-    std::vector<HudRun> patch = patch_words_;
-    if (!fill_words(patch,
-                    {HudPortValue{"cover", hud_rounded(now.cover * GODOT_PERCENT, static_cast<int32_t>(GODOT_TEXT_DECIMALS))},
-                     HudPortValue{"mm", hud_rounded(now.soil_mm, static_cast<int32_t>(GODOT_TEXT_DECIMALS))},
-                     HudPortValue{"rel", hud_rounded(now.soil_rel * GODOT_PERCENT, static_cast<int32_t>(GODOT_TEXT_DECIMALS))}},
+    std::vector<HudRun> salt = salt_words_;
+    if (!fill_words(salt,
+                    {HudPortValue{"sum", hud_rounded(now.salt_kg, static_cast<int32_t>(GODOT_TEXT_DECIMALS))},
+                     HudPortValue{"hyd", hud_rounded(now.salt_hyd_kg, static_cast<int32_t>(GODOT_TEXT_DECIMALS))},
+                     HudPortValue{"soil", hud_rounded(now.salt_soil_kg, static_cast<int32_t>(GODOT_TEXT_DECIMALS))},
+                     HudPortValue{"chunks", hud_whole(static_cast<int64_t>(now.salt_chunks))}},
                     failed) ||
-        !line_.set(patch, failed)) {
+        !salt_line_.set(salt, failed)) {
         return false;
     }
-    line.at = ::godot::Vector2(static_cast<float>(x_), static_cast<float>(y_ + 2.0 * line_step_));
-    line_.draw(canvas, frame, line);
+    line.at = ::godot::Vector2(static_cast<float>(x_), static_cast<float>(next_y));
+    salt_line_.draw(canvas, frame, line);
     return true;
 }
 
 bool DebugLayer::chip(UiPen& canvas, const ::godot::Transform2D& frame, const DebugLayerChip& chip,
-                      const DebugLayerFrame& now, std::string& failed) {
+                      const DebugLayerFrame& now, UiTextBlock& label, std::string& failed) {
     UiSvgOutline outline;
     svg_append_rounded_rect(outline, chip.rect, static_cast<float>(chip_radius_));
     canvas.draw_set_transform_matrix(frame);
     svg_fill(canvas, outline, chip.on ? ground_ : chip_off_);
     svg_stroke(canvas, outline, edge_, chip_line_);
     canvas.draw_set_transform_matrix(::godot::Transform2D());
-    if (!label_.set(chip.label, failed)) {
+    if (!label.set(chip.label, failed)) {
         return false;
     }
     UiTextPlace text;
@@ -202,7 +245,7 @@ bool DebugLayer::chip(UiPen& canvas, const ::godot::Transform2D& frame, const De
     text.opacity = 1.0;
     text.elapsed = now.elapsed;
     text.still = now.still;
-    label_.draw(canvas, frame, text);
+    label.draw(canvas, frame, text);
     return true;
 }
 
@@ -267,28 +310,33 @@ bool DebugLayer::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Vi
     close_.draw(canvas, frame, fold);
 
     // The tabs and the chips of the open tab, then the labels and values of the date fields.
-    for (const DebugLayerChip& one : body.chips) {
-        if (!chip(canvas, frame, one, now, failed)) {
+    if (!grown(chip_labels_, body.chips.size(), failed) || !grown(date_labels_, body.fields.size(), failed) ||
+        !grown(date_values_, body.fields.size(), failed)) {
+        return false;
+    }
+    for (size_t place = 0; place < body.chips.size(); ++place) {
+        if (!chip(canvas, frame, body.chips[place], now, chip_labels_[place], failed)) {
             return false;
         }
     }
-    for (const DebugLayerField& field : body.fields) {
+    for (size_t place = 0; place < body.fields.size(); ++place) {
+        const DebugLayerField& field = body.fields[place];
         UiTextPlace label = text;
         label.at = field.label_at;
         label.size = date_label_size_;
-        if (!label_.set(field.label, failed)) {
+        if (!date_labels_[place].set(field.label, failed)) {
             return false;
         }
-        label_.draw(canvas, frame, label);
+        date_labels_[place].draw(canvas, frame, label);
         UiTextPlace value = text;
         value.at = field.value_at;
         value.size = date_value_size_;
         value.anchor = GODOT_TEXT_ANCHOR_MIDDLE;
         value.color = field.part == now.typing ? ink_on_ : ink_;
-        if (!label_.set(hud_rounded(now.date[field.part], 0), failed)) {
+        if (!date_values_[place].set(hud_rounded(now.date[field.part], 0), failed)) {
             return false;
         }
-        label_.draw(canvas, frame, value);
+        date_values_[place].draw(canvas, frame, value);
     }
 
     // The note of the tab.

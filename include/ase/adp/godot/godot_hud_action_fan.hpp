@@ -46,7 +46,7 @@
 #include <ase/adp/godot/godot_hud_ui_item_sprite.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 #include <godot_cpp/variant/vector2.hpp>

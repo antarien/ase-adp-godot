@@ -226,12 +226,16 @@ bool VivariumView::figure_input(const ::godot::Ref<::godot::InputEvent>& local) 
         // release over a block the HUD draws above the world - a fan chip, a sign, the hand - finishes there and never
         // opens the figure's focus underneath: the water chip at 268,820 lay over the figure and its take never came.
         // Only where the HUD hits the world itself (ground, tree, trunk, a thing or the place on the ground) or
-        // nothing at all do the comb, the figure and its arc answer the tap.
+        // nothing at all do the comb, the figure and its arc answer the tap. A tool at the tool place is a thing of
+        // the ground too, but the world never draws it (WorldDrop skips at_rack): a hit on it is its row in the rack
+        // list above the world, and the tap stays the HUD's, so the row's tap reaches tap_item (B0790).
         if (hud_live()) {
             const VivariumHudHit over = hud_.hit(point, hud_now_);
+            const VivariumHudThing* held = over.key.empty() ? nullptr : hud_.thing(over.key, hud_now_);
+            const bool racked = held != nullptr && held->rack;
             const bool world = over.act == nullptr || over.act == VivariumHud::ACT_GROUND ||
                                over.act == VivariumHud::ACT_TREE || over.act == VivariumHud::ACT_TRUNK ||
-                               (over.from != nullptr && over.from == GODOT_HUD_PLACE_GROUND);
+                               (over.from != nullptr && std::string(over.from) == GODOT_HUD_PLACE_GROUND && !racked);
             if (!world) {
                 return taken;
             }

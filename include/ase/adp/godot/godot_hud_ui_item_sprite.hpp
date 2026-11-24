@@ -49,7 +49,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-09
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -61,7 +61,7 @@
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
@@ -138,10 +138,14 @@ private:
     void draw_local(UiPen& canvas, const ::godot::Transform2D& frame, const ::godot::Transform2D& local,
                     const UiItemSpritePlace& place) const;
 
-    /** Fills and strokes one run of view-box points moved by `local` into frame units. */
-    void paint(UiPen& canvas, const UiSvgOutline& outline, const ::godot::Transform2D& local,
-               const ::godot::Color* fill, const ::godot::Color* stroke, double width,
-               const UiItemSpritePlace& place) const;
+    /**
+     * Fills and strokes one run of view-box points moved by `local` into frame units. The stroke is ui_stroke's one
+     * round-joined mesh under `frame` (P0692): stroke-linejoin and stroke-linecap round as the browser lays them,
+     * never a polyline with a disc drawn on every corner.
+     */
+    void paint(UiPen& canvas, const ::godot::Transform2D& frame, const UiSvgOutline& outline,
+               const ::godot::Transform2D& local, const ::godot::Color* fill, const ::godot::Color* stroke,
+               double width, const UiItemSpritePlace& place) const;
 
     const UiTheme* theme_ = nullptr;
     double stroke_scale_ = 0.0;   // hud_item_stroke_scale
@@ -154,6 +158,8 @@ private:
     UiItemSpriteLevel level_;
     bool has_level_ = false;
     mutable UiItemShadow shadows_;  // the blurred silhouettes rastered so far (godot_hud_ui_item_shadow.hpp)
+    mutable UiSvgOutline level_outline_;  // the level's outline at level_share_, laid again only when the level moves
+    mutable double level_share_ = 0.0;    // the share level_outline_ was laid for, 0 before the first (P0692)
 };
 
 }  // namespace ase::adp::godot

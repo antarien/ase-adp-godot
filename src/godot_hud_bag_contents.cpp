@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_bag_contents.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>

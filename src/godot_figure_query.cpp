@@ -35,8 +35,11 @@
 
 #include <ase/adp/godot/godot_figure_scene.hpp>
 #include <ase/adp/godot/godot_figure_node.hpp>
+#include <ase/adp/godot/godot_figure_rig.hpp>
+#include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/classes/base_material3d.hpp>
+#include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
@@ -184,6 +187,30 @@ bool take_figure_water(::godot::Node3D* scene, uint32_t object_id, double& litre
     }
     body->set_meta(kFigureMetaWaterNoted, carried);
     litres = carried;
+    return true;
+}
+
+bool take_figure_pose(::godot::Node3D* scene, uint32_t object_id, uint8_t& pose, bool& framed) {
+    ::godot::Node3D* body = figure_body(scene, object_id);
+    uint8_t drawn = 0;
+    if (body == nullptr || !body->has_meta(kFigureMetaHeight) || !figure_motion_pose(body, drawn)) {
+        return false;
+    }
+    // the middle of the body, half its height above the soles: a seated or lying figure still has it in the frame
+    // when its head or feet leave it, a figure behind the camera never does
+    const auto* eye = figure_child_of<::godot::Camera3D>(scene, GODOT_PLANT_CAMERA);
+    const float middle = static_cast<float>(static_cast<double>(body->get_meta(kFigureMetaHeight)) * 0.5);
+    const bool inside =
+        eye != nullptr && eye->is_position_in_frustum(body->get_global_position() + ::godot::Vector3(0.0f, middle, 0.0f));
+    if (body->has_meta(kFigureMetaPoseNoted) && body->has_meta(kFigureMetaFramedNoted) &&
+        static_cast<int64_t>(body->get_meta(kFigureMetaPoseNoted)) == static_cast<int64_t>(drawn) &&
+        static_cast<bool>(body->get_meta(kFigureMetaFramedNoted)) == inside) {
+        return false;
+    }
+    body->set_meta(kFigureMetaPoseNoted, static_cast<int64_t>(drawn));
+    body->set_meta(kFigureMetaFramedNoted, inside);
+    pose = drawn;
+    framed = inside;
     return true;
 }
 

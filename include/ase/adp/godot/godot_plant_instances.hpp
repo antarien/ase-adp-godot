@@ -24,7 +24,7 @@
  * @usecase     usecase:101348 - hand organ instances to app
  * @actor       Organ Instance Courier (ORGNINST)
  * @created     2026-10-26
- * @modified    2026-10-26
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -65,10 +65,13 @@ struct PlantBodyRows {
  * (usecase:101335 animate the branch sway; all zero for an organ without a sway record). A record
  * without an organ record is not drawn: both ports are read in the same snapshot, so the gap is a broken
  * port, never an organ of an unknown plant. GODOT_ORDER_EVERY as `split_order` puts every organ above it -
- * a class the order budget does not split.
+ * a class the order budget does not split. `card` keeps only the organs whose view carries that template
+ * code (VivariumOrganView::card): GODOT_TMPL_LEAF for the near leaves and every class without a card,
+ * GODOT_TMPL_LEAF_CORS for the leaves of a body in the far band, which the scene draws as a bundle of its
+ * own on the coarse 1 x 1 card (PLAN_ASE_VIVARIUM_TREEGEN T.6).
  */
 std::unordered_map<uint32_t, PlantBodyRows> rows_by_body(const std::vector<VivariumInstanceView>& instances,
                                                          const std::vector<VivariumOrganView>& organs,
-                                                         double split_order);
+                                                         double split_order, uint32_t card);
 
 }  // namespace ase::adp::godot

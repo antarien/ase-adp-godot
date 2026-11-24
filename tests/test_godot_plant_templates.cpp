@@ -18,7 +18,7 @@
  * @usecase     usecase:101011 - tessellate the organ templates
  * @actor       Organ Template Tessellator (TMPLTESS)
  * @created     2026-10-26
- * @modified    2026-10-26
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -30,6 +30,7 @@
 
 #include <ase/adp/godot/godot_plant_templates.hpp>
 #include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/template/types.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -53,6 +54,10 @@ VivariumTemplateCornerView corner(uint32_t code, uint32_t index) {
     view.nz = 0.3 * index;
     view.u = 0.01 * index;
     view.v = 0.02 * index;
+    view.tx = 0.4 * index;  // a tangent the view never computes either (TREEGEN T.6): the tangent port's
+    view.ty = 0.5 * index;
+    view.tz = 0.6 * index;
+    view.tw = (index % 2u == 0u) ? 1.0 : -1.0;  // the sign of the bitangent, both signs among the corners
     return view;
 }
 
@@ -77,11 +82,14 @@ TEST_CASE("usecase:101011 tessellate the organ templates: a template is built fr
         triangle(GODOT_TMPL_FINE, 0u, 2u, 3u), triangle(GODOT_TMPL_CORS, 0u, 0u, 0u),
         triangle(GODOT_TMPL_FINE, 0u, 3u, 1u)};
     PlantMeshArrays fine;
-    CHECK(build_template(corners, triangles, GODOT_TMPL_FINE, fine) == 2u);
+    std::vector<float> fine_tangents;
+    CHECK(build_template(corners, triangles, GODOT_TMPL_FINE, fine, fine_tangents) == 2u);
     // one vertex per corner of the code, in port order - the coarse corner is not among them
     REQUIRE(fine.positions.size() == 4u * 3u);
     REQUIRE(fine.normals.size() == 4u * 3u);
     REQUIRE(fine.uvs.size() == 4u * 2u);
+    // four tangent floats per vertex, the form of ARRAY_TANGENT (TREEGEN T.6)
+    REQUIRE(fine_tangents.size() == 4u * 4u);
     const uint32_t port_order[4] = {2u, 0u, 1u, 3u};
     for (std::size_t v = 0u; v < 4u; ++v) {
         const VivariumTemplateCornerView carried = corner(GODOT_TMPL_FINE, port_order[v]);
@@ -93,6 +101,10 @@ TEST_CASE("usecase:101011 tessellate the organ templates: a template is built fr
         CHECK(fine.normals[v * 3u + 2u] == doctest::Approx(carried.nz));
         CHECK(fine.uvs[v * 2u] == doctest::Approx(carried.u));
         CHECK(fine.uvs[v * 2u + 1u] == doctest::Approx(carried.v));
+        CHECK(fine_tangents[v * 4u] == doctest::Approx(carried.tx));
+        CHECK(fine_tangents[v * 4u + 1u] == doctest::Approx(carried.ty));
+        CHECK(fine_tangents[v * 4u + 2u] == doctest::Approx(carried.tz));
+        CHECK(fine_tangents[v * 4u + 3u] == doctest::Approx(carried.tw));
     }
     // every triangle over the vertices its corner indices name, in the order the record names them
     REQUIRE(fine.indices.size() == 2u * 3u);
@@ -105,24 +117,33 @@ TEST_CASE("usecase:101011 tessellate the organ templates: a template is built fr
 
     // the coarse template takes only its own records; a degenerate record still names known corners
     PlantMeshArrays coarse;
-    CHECK(build_template(corners, triangles, GODOT_TMPL_CORS, coarse) == 1u);
+    std::vector<float> coarse_tangents;
+    CHECK(build_template(corners, triangles, GODOT_TMPL_CORS, coarse, coarse_tangents) == 1u);
     CHECK(coarse.positions.size() == 3u);
-    // a triangle whose corner the port did not carry is not drawn; an index named twice is drawn once
+    CHECK(coarse_tangents.size() == 4u);
+    // a triangle whose corner the port did not carry is not drawn; an index named twice is drawn once, and its
+    // tangent with it - the tangents stay one per vertex, never one per record
     std::vector<VivariumTemplateCornerView> holed = corners;
     holed.erase(holed.begin());  // fine corner 2, a corner of the first triangle only
     holed.push_back(corner(GODOT_TMPL_FINE, 0u));
     PlantMeshArrays partial;
-    CHECK(build_template(holed, triangles, GODOT_TMPL_FINE, partial) == 1u);
+    std::vector<float> partial_tangents;
+    CHECK(build_template(holed, triangles, GODOT_TMPL_FINE, partial, partial_tangents) == 1u);
     CHECK(partial.positions.size() == 3u * 3u);
+    CHECK(partial_tangents.size() == 3u * 4u);
     // a code the ports carry no records for, no corners, no triangles: nothing at all
     PlantMeshArrays leaf;
-    CHECK(build_template(corners, triangles, GODOT_TMPL_LEAF, leaf) == 0u);
+    std::vector<float> leaf_tangents;
+    CHECK(build_template(corners, triangles, GODOT_TMPL_LEAF, leaf, leaf_tangents) == 0u);
     CHECK(leaf.positions.empty());
+    CHECK(leaf_tangents.empty());
     PlantMeshArrays none;
-    CHECK(build_template({}, triangles, GODOT_TMPL_FINE, none) == 0u);
+    std::vector<float> none_tangents;
+    CHECK(build_template({}, triangles, GODOT_TMPL_FINE, none, none_tangents) == 0u);
     CHECK(none.indices.empty());
     PlantMeshArrays bare;
-    CHECK(build_template(corners, {}, GODOT_TMPL_FINE, bare) == 0u);
+    std::vector<float> bare_tangents;
+    CHECK(build_template(corners, {}, GODOT_TMPL_FINE, bare, bare_tangents) == 0u);
     CHECK(bare.indices.empty());
 }
 

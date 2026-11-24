@@ -16,7 +16,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-11-21
- * @modified    2026-11-21
+ * @modified    2026-11-24
  * @version     00.00.04.00024 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -25,7 +25,9 @@
  */
 
 #include <ase/adp/godot/leaf/types.hpp>
+#include <ase/adp/godot/lineage/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/template/types.hpp>
 
 #include <cstdint>
 
@@ -54,6 +56,7 @@ struct VivariumOrganView {
     double   length = 0.0;    // metres (leaf: edge of the equal square; catkin and fruit stand: hang)
     double   radius = 0.0;    // metres (internode and root segment; else 0)
     double   bark = 0.0;      // share of the stem-base bark at its middle, 0..1 (internode, GODOT_KEY_BARK; else 0)
+    double   lineage = GODOT_LINEAGE_NONE;  // the name of the organ's seeded draws, kept across a release and a new resolution (lineage port; a root segment none)
     double   tile_around = GODOT_TILE_NONE;  // tiles of the white bark around the tube (internode, tile port; else none)
     double   tile_along = GODOT_TILE_NONE;   // tiles of the white bark along the tube (internode, tile port; else none)
     double   tile_base = GODOT_TILE_NONE;    // tiles of the stem-base bark per white tile (internode, tile port; else none)
@@ -69,6 +72,7 @@ struct VivariumOrganView {
     double   tint_offset = GODOT_TINT_NONE;  // colour offset of the card, laid on its albedo as 1 + offset (leaf, tint port; else the colour of its species)
     double   atlas_cell = GODOT_ATLS_CELL_NONE;    // cell of the leaf texture the card shows, below atlas_cells (leaf, atlas port; else the only cell)
     double   atlas_cells = GODOT_ATLS_CELLS_NONE;  // cells of the leaf texture of its species along u (leaf, atlas port; else the whole texture)
+    uint32_t card = GODOT_TMPL_LEAF;  // template code of the leaf card: GODOT_TMPL_LEAF near, GODOT_TMPL_LEAF_CORS in the far band (leaf, twelfth value of the leaf port, GODOT_KEY_TEMPLATE; else unused)
 };
 
 /**

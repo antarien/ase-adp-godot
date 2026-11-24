@@ -16,7 +16,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-11-19
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -86,6 +86,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.autumn");
     }
     start_.autumn_port = utf8_of(text);
+    // The cap radii of the fruit bodies (usecase:101362 scale the organ templates): a port of their own, one record
+    // per patch whose fruit body has a cap, its value the cap radius ase-phytomer passed on for its individual.
+    if (!read_text(ports, "cap", text)) {
+        return fail_config("ports.cap");
+    }
+    start_.cap_port = utf8_of(text);
     if (!read_text(ports, "clock", text)) {
         return fail_config("ports.clock");
     }
@@ -125,6 +131,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.template_triangle");
     }
     start_.template_triangle_port = utf8_of(text);
+    // The tangent of every template corner (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.6): a port of its own,
+    // since the corner record is full; the view joins it to the corner and computes no tangent.
+    if (!read_text(ports, "template_tangent", text)) {
+        return fail_config("ports.template_tangent");
+    }
+    start_.template_tangent_port = utf8_of(text);
     // The sky and the light of the scene (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3): the one port
     // of ase-pl-sky; the view lights the care scene from it and computes no light of its own.
     if (!read_text(ports, "sky", text)) {
@@ -160,6 +172,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.tile");
     }
     start_.tile_port = utf8_of(text);
+    // The lineage of every shown organ (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.9, the round trip S0, S1, S0):
+    // ase-phytomer gave it, the view names each organ by it across a release and a new resolution, computes none.
+    if (!read_text(ports, "lineage", text)) {
+        return fail_config("ports.lineage");
+    }
+    start_.lineage_port = utf8_of(text);
     // The sway of the organs on a branch (usecase:101335 animate the branch sway): ase-phytomer computed it, the view
     // swings the instances by it in their shaders and computes none of its values.
     if (!read_text(ports, "sway", text)) {
@@ -235,6 +253,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.groundwater");
     }
     start_.groundwater_port = utf8_of(text);
+    // The salt of every chunk (H.9, I-4): the water half of ase-hydro, the soil half of ase-pedosphere and the sum
+    // ase-gis adds; ase-pl-hydrogeology carries all three and the debug status line of the HUD shows their world sums.
+    if (!read_text(ports, "salt", text)) {
+        return fail_config("ports.salt");
+    }
+    start_.salt_port = utf8_of(text);
     // The level requests of the player (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8 point 2): a port of their
     // own, the patch port takes only pours.
     if (!read_text(ports, "level", text)) {

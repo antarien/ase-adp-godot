@@ -20,7 +20,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-18
- * @modified    2026-11-12
+ * @modified    2026-11-24
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -32,6 +32,7 @@
 
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/adp/godot/port/types.hpp>
+#include <ase/adp/godot/template/types.hpp>
 #include <ase/adp/godot/types.hpp>
 #include <ase/math/math.hpp>
 
@@ -110,6 +111,12 @@ TEST_CASE("usecase:101011 tessellate the organ templates: the template ports car
     }
     // the fine cylinder has more corners than the coarse one: that is the line the order budget moves
     CHECK(corners[GODOT_TMPL_FINE] > corners[GODOT_TMPL_CORS]);
+    // the bent 3 x 3 leaf has more corners and triangles than the flat card of the far band (TREEGEN T.6), and
+    // both leaves carry their two faces: an even number of corners and of triangles each
+    CHECK(corners[GODOT_TMPL_LEAF] > corners[GODOT_TMPL_LEAF_CORS]);
+    CHECK(triangles[GODOT_TMPL_LEAF] > triangles[GODOT_TMPL_LEAF_CORS]);
+    CHECK(corners[GODOT_TMPL_LEAF_CORS] % 2u == 0u);
+    CHECK(triangles[GODOT_TMPL_LEAF_CORS] % 2u == 0u);
 
     // the templates are read once and kept: more frames leave the set and its generation as they are
     advance_frames(resources, 8u);

@@ -282,23 +282,4 @@ constexpr const char* GODOT_KEY_NW = "nw";                    // ground cell rec
 constexpr const char* GODOT_TERRAIN_SCHEDULE = "Dissemination"; // schedule in which ase-terrain publishes changed sample heights
 constexpr uint32_t GODOT_TERRAIN_READS_PER_RUN = 2u;          // terrain reads after a new run: that frame and the next, as for the organs
 
-/**
- * The organ templates (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 2, usecase:101011 tessellate the organ templates):
- * ase-render-data builds the fine and the coarse cylinder and the unit leaf on the unit, ase-pl-flora lays
- * their corners on one port and their triangles on another, each record with the code of its template. The
- * codes and keys are the plugin's (ase-pl-flora types.hpp, FLORA_HOST_TMPL_*, FLORA_HOST_KEY_*), repeated
- * here because the adapter reads the port and never links the plugin. A corner record carries the code,
- * its index and x, y, z, nx, ny, nz, u, v; a triangle record the code and three corner indices, clockwise
- * seen from outside. The adapter builds no ring and decides no winding.
- */
-constexpr const char* GODOT_KEY_TEMPLATE = "template";        // template records: the code of the template, GODOT_TMPL_*
-constexpr const char* GODOT_KEY_INDEX = "index";              // corner record: its place in the template, named by the triangles
-constexpr const char* GODOT_KEY_CORNER_A = "a";               // triangle record: index of its first corner
-constexpr const char* GODOT_KEY_CORNER_B = "b";               // triangle record: index of its second corner
-constexpr const char* GODOT_KEY_CORNER_C = "c";               // triangle record: index of its third corner
-constexpr uint32_t GODOT_TMPL_FINE = 0u;                      // template code: the fine cylinder, the internodes up to the shown orders
-constexpr uint32_t GODOT_TMPL_CORS = 1u;                      // template code: the coarse cylinder, the internodes above them
-constexpr uint32_t GODOT_TMPL_LEAF = 2u;                      // template code: the unit leaf, the stand-in of a leaf or a seed whose template file is missing
-constexpr uint32_t GODOT_TMPL_COUNT = 3u;                     // template codes the ports carry
-
 }  // namespace ase::adp::godot

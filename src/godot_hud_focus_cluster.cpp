@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_focus_cluster.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 

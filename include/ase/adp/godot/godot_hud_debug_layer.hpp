@@ -15,7 +15,8 @@
  *              hud_debug_line_size in DEBUG_INK: texts.hud.debug_build ({adapter} {client} {units}),
  *              texts.hud.debug_time ({day} the day of the year, {hour} {sim} {steps}, from the clock record the
  *              bridge has filled, VivariumView::bridge_clock) and texts.hud.debug_patch ({cover} {mm} {rel},
- *              empty while no patch is chosen).
+ *              empty while no patch is chosen) and texts.hud.debug_salt ({sum} {hyd} {soil} {chunks}, the salt of
+ *              every chunk of hydrogeology.salt.v1 summed, H.9 I-4; empty while the port laid no record).
  *
  *              THE HANDLE. Closed, a rounded rectangle hud_debug_handle_x, _y, _w, _h of hud_debug_handle_radius
  *              in DEBUG_GROUND with a DEBUG_LINE outline of hud_debug_chip_line, and texts.hud.debug_open middle at
@@ -74,7 +75,7 @@
  * @usecase     usecase:101120 - clock the growth cycle
  * @actor       Growth Clock Controller (GROWCLOCON)
  * @created     2026-11-10
- * @modified    2026-11-12
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -82,13 +83,13 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_hud_ui_text_block.hpp>
+#include <ase/adp/godot/godot_hud_ui_text_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 #include <ase/adp/godot/godot_vivarium_debug.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
@@ -118,6 +119,10 @@ struct DebugLayerFrame {
     double cover = 0.0;                         // its coverage, share 0..1
     double soil_mm = 0.0;                       // its soil water, millimetres
     double soil_rel = 0.0;                      // its soil water, share 0..1 of the field capacity
+    uint64_t salt_chunks = 0;                   // chunks the salt port carries (hydrogeology.salt.v1, H.9 I-4); 0: no salt line
+    double salt_hyd_kg = 0.0;                   // salt in the water of those chunks, kg, summed over the port's records
+    double salt_soil_kg = 0.0;                  // salt in their soil, kg, summed the same way
+    double salt_kg = 0.0;                       // the sum ase-gis added per chunk, kg, summed the same way
     double date[GODOT_DATE_PARTS] = {};         // the date the entry shows, by GODOT_DATE_PART_*
     uint8_t typing = GODOT_DATE_PART_NONE;      // GODOT_DATE_PART_* the keys type into; NONE: no field picked
     double elapsed = 0.0;                       // seconds since the layer appeared
@@ -199,7 +204,9 @@ private:
     bool draw_lines(UiPen& canvas, const ::godot::Transform2D& frame, const DebugLayerFrame& now,
                     const UiTextPlace& text, std::string& failed);
     bool chip(UiPen& canvas, const ::godot::Transform2D& frame, const DebugLayerChip& chip,
-              const DebugLayerFrame& now, std::string& failed);
+              const DebugLayerFrame& now, UiTextBlock& label, std::string& failed);
+    /** Grows `blocks` to `count`, each new block bound as data text from theme_; false with the reason. */
+    bool grown(std::vector<UiTextBlock>& blocks, size_t count, std::string& failed);
 
     double x_ = 0.0;                  // hud_debug_x
     double y_ = 0.0;                  // hud_debug_y
@@ -279,17 +286,27 @@ private:
     std::vector<HudRun> build_words_;   // texts.hud.debug_build
     std::vector<HudRun> time_words_;    // texts.hud.debug_time
     std::vector<HudRun> patch_words_;   // texts.hud.debug_patch
+    std::vector<HudRun> salt_words_;    // texts.hud.debug_salt
     std::string less_;                  // texts.hud.debug_date_less
     std::string more_;                  // texts.hud.debug_date_more
     std::vector<std::string> tabs_;     // texts.hud.debug_tabs.<tab>, by GODOT_HUD_DEBUG_TAB_*
     std::vector<std::string> notes_;    // texts.hud.debug_notes.<tab>, by GODOT_HUD_DEBUG_TAB_*
 
-    UiTextBlock line_;                // a status line, class d
-    UiTextBlock open_;                // texts.hud.debug_open, class d
+    UiTextBlock open_;              // texts.hud.debug_open, class d
     UiTextBlock close_;               // texts.hud.debug_close, class d
     UiTextBlock title_;               // texts.hud.debug_title, class d
-    UiTextBlock label_;               // a chip label, a date label or value, class d
     UiTextBlock note_;                // the note of the tab, class d
+
+    // One block per line of text, so each keeps its shaped glyphs while its text and size stand (P0692): one block
+    // set to another text or size for every line of a frame shaped again on every draw.
+    const UiTheme* theme_ = nullptr;          // the theme bind() read, to bind a block a longer list adds
+    UiTextBlock build_line_;                  // texts.hud.debug_build, class d
+    UiTextBlock time_line_;                   // texts.hud.debug_time, class d
+    UiTextBlock patch_line_;                  // texts.hud.debug_patch, class d
+    UiTextBlock salt_line_;                   // texts.hud.debug_salt, class d
+    std::vector<UiTextBlock> chip_labels_;    // the label of each chip of the open tab, by its place in the body
+    std::vector<UiTextBlock> date_labels_;    // the label of each date field, by its place in the body
+    std::vector<UiTextBlock> date_values_;    // the value of each date field, by its place in the body
 };
 
 }  // namespace ase::adp::godot

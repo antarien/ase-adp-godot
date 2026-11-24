@@ -22,7 +22,9 @@
  */
 
 #include <ase/adp/godot/godot_hud_hourglass.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
+#include <ase/adp/godot/godot_hud_ui_raster.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
 #include <godot_cpp/core/math.hpp>

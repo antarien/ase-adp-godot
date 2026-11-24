@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ground_crumbs.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_rng.hpp>
 
 #include <godot_cpp/core/math.hpp>

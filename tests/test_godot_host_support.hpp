@@ -33,7 +33,7 @@
  * @actor       Entity Component System (ECS)
  * @created     2026-10-18
  * @modified    2026-11-23
- * @version     00.00.22.00022 [init]
+ * @version     00.00.28.00028 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -51,6 +51,7 @@
 #include <ase/log/log_display.hpp>
 #include <ase/utils/fs.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -106,6 +107,9 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // The autumn colours of the individuals (usecase:101646 colour the leaves in autumn): read_snapshot merges them
     // into the patches by object id, so boot() asks the set for this port as well.
     config.autumn_port = "flora.autumn.v1";
+    // The cap radii of the fruit bodies (usecase:101362 scale the organ templates): read_snapshot keeps them per
+    // patch object id, so boot() asks the set for this port as well.
+    config.cap_port = "flora.cap.v1";
     config.clock_port = "flora.clock.v1";
     // The SURA date record (FloraHostClkExptSystem): snapshot() reads it beside the clock, so boot()
     // asks the set for this port as well.
@@ -126,7 +130,7 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // The ground of the scene (03.8) and the sky of the scene (03.11 step 3): boot() asks the set for
     // these ports like for the others, so the tests name them as the client's start configuration does.
     config.ground_port = "flora.ground.v1";
-    config.brook_port = "flora.brook.v1";
+    config.brook_port = "water.brook.v1";
     config.terrain_port = "flora.terrain.v1";
     config.sky_port = "sky.scene.v1";
     // The visible star set of ase-pl-sky: boot() asks the set for this port as well.
@@ -135,6 +139,8 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.seed_port = "flora.seed.v1";
     // The bark tiling of the internodes (03.11 step 2): boot() asks the set for this port as well.
     config.tile_port = "flora.tile.v1";
+    // The lineage of every shown organ (TREEGEN T.9 round trip): boot() asks the set for this port as well.
+    config.lineage_port = "flora.lineage.v1";
     // The sway of the internodes (usecase:101335): boot() asks the set for this port as well.
     config.sway_port = "flora.sway.v1";
     // The bend of every leaf card (TREEGEN T.6): boot() asks the set for this port as well.
@@ -150,13 +156,15 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.knot_port = "flora.mesh.knot.v1";
     config.foot_port = "flora.mesh.foot.v1";
     config.scar_port = "flora.mesh.scar.v1";
-    // The water of the brooks (usecase:100399): boot() asks the set for this port as well.
-    config.stream_port = "flora.stream.v1";
+    // The water of the brooks (usecase:100399): boot() asks the set for this port as well. ase-pl-water serves
+    // the brook and its water since PLAN_ASE_VIVARIUM_PHASE_10_HYDRO H.8, as the start configuration names it.
+    config.stream_port = "water.stream.v1";
     // The water of every kind beside the brooks (PLAN_ASE_VIVARIUM_PHASE_10_HYDRO): read once its plugin offers it,
     // so every snapshot of a host test runs the three readers against the records the real bundle lays.
     config.current_port = "water.current.v1";
     config.pit_port = "hydrogeology.pit.v1";
     config.groundwater_port = "hydrogeology.groundwater.v1";
+    config.salt_port = "hydrogeology.salt.v1";  // the salt of every chunk (H.9, I-4), read as the groundwater
     // The level requests of the player (03.8 point 2): boot() asks the set for this port as well.
     config.level_port = "flora.level.v1";
     // The flatten requests of the player at a place (03.8): boot() asks the set for this port as well.
@@ -170,9 +178,11 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     config.elevation_port = "flora.elevation.v1";
     // The place of the view's camera (03.11 point 7, the level of detail): view() submits on this port.
     config.view_port = "flora.view.v1";
-    // The organ templates of ase-render-data (usecase:101011 tessellate the organ templates): both ports as well.
+    // The organ templates of ase-render-data (usecase:101011 tessellate the organ templates): all three ports as
+    // well, the tangent of every corner on its own (TREEGEN T.6).
     config.template_corner_port = "flora.template.corner.v1";
     config.template_triangle_port = "flora.template.triangle.v1";
+    config.template_tangent_port = "flora.template.tangent.v1";
     config.organ_ports[GODOT_ORGAN_SEGMENT] = "flora.organ.segment.v1";
     config.organ_ports[GODOT_ORGAN_LEAF] = "flora.organ.leaf.v1";
     config.organ_ports[GODOT_ORGAN_MALE] = "flora.organ.male.v1";
@@ -363,6 +373,30 @@ inline const VivariumPatchView& patch_at(const GodotHostResourceManager& resourc
     const VivariumPatchView* patch = resources.get_patch_at(place);
     REQUIRE(patch != nullptr);
     return *patch;
+}
+
+// THE CAPACITY OF THE SOIL CLASS COMES SOME FRAMES AFTER THE PATCH (usecase:100364): the soil record of a patch
+// stands on its port one Dissemination run per link after the patch record (HYD_SOIL_WATER_REL →
+// GisHydSoilSynSystem → GIS_SOIL_WATER → FloraInpSoilComponent → flora.soil.v1), and until HydroSoilCapCalcSystem
+// replaced it, the port carries NaN and then the lay capacity kPatchCapacityMm. A case that reads the capacity as
+// a bound - how much to pour until a seed sprouts - reads it only after this wait: a NaN bound ends every loop
+// before its first pass. Bounded by `bound_frames`; true once every one of the four patches carries its class.
+inline bool await_soil_class(GodotHostResourceManager& resources, uint32_t bound_frames) {
+    for (uint32_t frame = 0u; frame <= bound_frames; ++frame) {
+        bool all = resources.patch_count() == 4u;
+        for (uint32_t place = 0u; all && place < 4u; ++place) {
+            const VivariumPatchView* waiting = resources.get_patch_at(place);
+            all = waiting != nullptr && !std::isnan(waiting->capacity_mm) &&
+                  waiting->capacity_mm != kPatchCapacityMm;
+        }
+        if (all) {
+            return true;
+        }
+        if (frame < bound_frames) {
+            advance_frames(resources, 1u);
+        }
+    }
+    return false;
 }
 
 }  // namespace ase::adp::godot::test

@@ -200,6 +200,16 @@ bool take_figure_level(::godot::Node3D* scene, uint32_t object_id, int32_t& leve
 bool take_figure_water(::godot::Node3D* scene, uint32_t object_id, double& litres);
 
 /**
+ * THE POSE OF A FIGURE AND WHETHER IT STANDS IN THE FRAME, BY CHANGE (B0783, T.11): true on the first call after the
+ * node of figure `object_id` carried a mix with the camp clips and then whenever its drawn pose (figure_motion_pose,
+ * FIGURE_POSE_*) or its stand in the frame differs from what was returned last. `framed` is true while the middle of
+ * the body (half the height of level 0 above its place) lies in the frustum of the scene's camera (GODOT_PLANT_CAMERA),
+ * the fixed view's and the player camera's alike. The node keeps both, so the view's pose line is written per change,
+ * never per frame. False while the scene stands no such node or its mix carries no camp clips.
+ */
+bool take_figure_pose(::godot::Node3D* scene, uint32_t object_id, uint8_t& pose, bool& framed);
+
+/**
  * THE FACE AND THE EYE AS THEY ARE DRAWN (07.3): the edges in texels of the albedo bound on the face material
  * (Std_Skin_Head of villager_body) and on the iris material (__Iris) of the node of figure `object_id` - the pack of
  * the stage or the image of the file - and in `level` the coarser of the detail levels the meshes carrying them

@@ -81,6 +81,7 @@ add_library(ase-adp-godot-host STATIC
     src/tube/godot_tube_ring.cpp     # one ring with the corners K of its axis and the K a knot walks down to (usecase:101644 count ring corners by size)
     src/godot_plant_impostor.cpp     # from where a far body is drawn as its card, and the size of card and texture (usecase:101613, B0295 point 4)
     src/godot_plant_templates.cpp    # the organ templates from the template ports (usecase:101342 hand organ shapes to app, 03.11)
+    src/godot_cap_scale.cpp          # the scale of a fruit body to its cap radius and the cap role and node of a species (usecase:101362 scale the organ templates, B0605)
     src/godot_plant_ground.cpp       # the ground mesh and the marks of its shader (usecase:101339 show the ground around plant, 03.8)
     src/godot_plant_water.cpp        # the water in every bed and its line for the brook's sign (usecase:100399 carry brook water, 03.11, B0285)
     src/godot_plant_water_ribbon.cpp # the ribbon of water along a course, build_water (usecase:100399 carry brook water, B0285)
@@ -98,6 +99,7 @@ add_library(ase-adp-godot-host STATIC
     src/godot_hud_context_resolver.cpp  # the brain of the HUD: mode, layers, fan, signs, offers, level (usecase:101440 grow the interface with skills, 06.2)
     src/godot_hud_context.cpp           # the rules of the chip spine the six buttons still run on, until ContextResolver carries them (usecase:101440, 06.11)
     src/godot_figure_pose.cpp           # the pose of a figure at the camp fire from its rest record (usecase:2157 go to Sleep, FIRECAMP T.11)
+    src/stroke/godot_stroke_mesh.cpp    # the round-joined mesh of ui_stroke as plain numbers, held against its bound by a host test (usecase:101440, P0692, T0357)
 
     #[[
     L5 RE-EXPORT HEADERS
@@ -106,8 +108,12 @@ add_library(ase-adp-godot-host STATIC
     the header ratchet, rule 6). No translation unit of the tree includes it, and that is its purpose:
     every reader includes the sub-header of the types it uses (rule 4), the collector stands for a
     consumer that takes the views as a whole. Form after core/ase-websocket/CMakeLists.txt.
+    godot_hud_ui_pen.hpp is the collector of the HUD pen in the same form (usecase:101440 grow the interface
+    with skills, P0722): its name, its measures and its class, each a sub-header of its own, and every reader
+    includes the sub-header of its purpose, never the collector.
     ]]
     include/ase/adp/godot/godot_host_resource_manager.hpp
+    include/ase/adp/godot/godot_hud_ui_pen.hpp
     include/ase/adp/godot/godot_host_resource_manager_class.hpp  # the class and the survival body view, apart from the view types (wipe_guard ratchet)
     include/ase/adp/godot/godot_host_bark_view.hpp      # the bark view, cut from the collector by reader circle (header ratchet, rule 6)
     include/ase/adp/godot/godot_host_bundle_info.hpp    # the bundle info of a boot
@@ -133,6 +139,7 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/godot_host_loose_view.hpp     # the loose view of flora.loose.v1: the soil's looseness raster cell by cell (usecase:100364, N0456)
     include/ase/adp/godot/godot_host_record.hpp
     include/ase/adp/godot/godot_organ_records.hpp
+    include/ase/adp/godot/godot_salt_records.hpp       # salt_view_of: one record of hydrogeology.salt.v1 as a view, callable by the host tests (usecase:100364, H.9 I-4)
     include/ase/adp/godot/godot_terrain_samples.hpp
     include/ase/adp/godot/godot_view_layout.hpp
     include/ase/adp/godot/godot_plant_geometry.hpp
@@ -143,6 +150,7 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/tube/godot_tube_ring.hpp
     include/ase/adp/godot/tube/types.hpp
     include/ase/adp/godot/leaf/types.hpp
+    include/ase/adp/godot/lineage/types.hpp
     include/ase/adp/godot/port/types.hpp
     include/ase/adp/godot/scene/types.hpp
     include/ase/adp/godot/asset/types.hpp
@@ -150,9 +158,24 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/loose/types.hpp
     include/ase/adp/godot/host/types.hpp
     include/ase/adp/godot/hud/types.hpp
+    include/ase/adp/godot/pen/types.hpp       # the HUD pen's measures in screen pixels, cut from godot_hud_ui_pen.hpp (usecase:101440, P0722)
+    include/ase/adp/godot/godot_hud_ui_pen_decl.hpp   # the name UiPen for a header that passes the pen on by reference (usecase:101440, P0722)
+    include/ase/adp/godot/godot_hud_ui_pen_class.hpp  # the class UiPen for a unit that draws with the pen (usecase:101440, P0722)
+    include/ase/adp/godot/glyph/types.hpp     # a HUD glyph's oversampling and design size at the text server, cut from godot_hud_ui_icon.hpp (usecase:101440, P0722)
+    include/ase/adp/godot/godot_hud_ui_raster.hpp     # hud_raster: the whole screen pixel size a HUD glyph is rastered at (usecase:101440, P0722)
+    include/ase/adp/godot/godot_hud_ui_icon_class.hpp # the class UiIcon for a block that holds or draws an icon (usecase:101440, P0722)
+    include/ase/adp/godot/godot_hud_ui_text_place.hpp # UiTextPlace: where and how a block lays its line this frame (usecase:101440, P0722)
+    include/ase/adp/godot/godot_hud_ui_text_class.hpp # the class UiTextBlock for a block that holds and draws a line (usecase:101440, P0722)
+    include/ase/adp/godot/stroke/types.hpp    # the corner and index counts that bound the stroke mesh's arrays (usecase:101440, P0692)
+    include/ase/adp/godot/stroke/godot_stroke_mesh.hpp  # stroke_run, stroke_bound, stroke_lay: the stroke mesh without a Godot type (usecase:101440, T0357)
     include/ase/adp/godot/godot_vivarium_hud_sample.hpp  # VivariumHudSample: the last HUD sample the view holds as hud_shown_, cut from godot_vivarium_node.hpp (R0217)
     include/ase/adp/godot/godot_plant_impostor.hpp
     include/ase/adp/godot/godot_plant_templates.hpp
+    include/ase/adp/godot/godot_plant_template_mesh.hpp  # template_mesh_of: an organ template with its tangents on ARRAY_TANGENT (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.6)
+    include/ase/adp/godot/template/types.hpp  # the record keys and template codes of the organ template ports, corner, triangle and tangent (usecase:101342, usecase:101011, T.6)
+    include/ase/adp/godot/cap/types.hpp       # the cap port key, the cap role and the cap node of a fruit body (usecase:101362 scale the organ templates, B0605)
+    include/ase/adp/godot/cap/godot_plant_cap.hpp  # the cap template bound, scaled to the cap radius and drawn at the stem base (usecase:101362 scale the organ templates, B0605)
+    include/ase/adp/godot/cap/godot_cap_scale.hpp  # cap_scale, cap_role_of, cap_species_of, cap_node_of without a Godot type (usecase:101362 scale the organ templates, B0605)
     include/ase/adp/godot/godot_plant_ground.hpp
     include/ase/adp/godot/godot_plant_water.hpp
     include/ase/adp/godot/godot_scene_exposure.hpp
@@ -210,6 +233,7 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_input.cpp        # VivariumView: taps and the selection of a patch
     src/godot_vivarium_water.cpp        # VivariumView: Regar, the pour to the patch port
     src/godot_vivarium_camp.cpp         # VivariumView: the camp fire laid through ase-pl-ingle, its bodies drawn, wood laid (usecase:5436 kindle fire, T.3)
+    src/godot_vivarium_camp_flame.cpp   # follow_camp_flames: tongue, light, smoke, sparks and ash bed of every fire cell (Endabnahme im Bild B2-B6)
     src/godot_vivarium_camp_config.cpp  # read_camp_config: the ports of ase-pl-ingle, the camp place and its parts (T.0, T.3)
     src/godot_vivarium_level.cpp        # VivariumView: Nivelar, the level request to the level port (03.8)
     src/godot_vivarium_prune.cpp        # VivariumView: cutting mode, the internode under the finger, the cut
@@ -360,6 +384,7 @@ add_library(ase-adp-godot SHARED
     src/godot_asset_loader.cpp   # the one loader of bound asset files: GLTFDocument, template mesh, material (03.2)
     src/godot_asset_showcase_scene.cpp  # the asset showcase in Godot: sphere, plane, model (04.7)
     src/godot_plant_scene.cpp    # the 3D scene of the care view: camera, sun, sky, ground, bark, instances (03.1)
+    src/godot_plant_scene_patch.cpp # the bodies on the patch beside the plants: seeds and caps (usecase:101362)
     src/godot_plant_scene_mesh.cpp # the meshes of that scene: one surface, the instance buffers, the bark tube of a body (usecase:101613, B0295)
     src/godot_plant_scene_impostor.cpp # the card of a far plant and the viewport that draws it once (usecase:101613, B0295 point 4)
     src/godot_plant_environment.cpp  # sky colour as a Sky shader, ambient light, fog and exposure of that scene (B0184)

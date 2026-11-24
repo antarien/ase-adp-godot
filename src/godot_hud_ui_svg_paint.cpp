@@ -12,7 +12,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-21
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_stroke.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
@@ -98,22 +99,38 @@ void svg_dash_points(UiPen& canvas, const ::godot::PackedVector2Array& points,
     if (!(dash > 0.0) || gap < 0.0 || !(width > 0.0)) {
         return;
     }
-    // stroke-dasharray dash gap over one polyline: the pattern's phase carries over each knee.
+    // stroke-dasharray dash gap over one polyline: the pattern's phase carries over each knee. Every dash, and each
+    // piece of a dash that crosses a knee, is one pair of ends, laid out first and read through one pointer each way
+    // instead of one call over the GDExtension border per point (P0692, as UiPen::moved reads its run, P0690).
     const double period = dash + gap;
+    const int64_t count = points.size();
+    const ::godot::Vector2* run = points.ptr();
+    // A segment holds at most one dash per period, plus one cut at each of its ends.
+    int64_t most = 0;
+    for (int64_t index = 1; index < count; ++index) {
+        most += static_cast<int64_t>(static_cast<double>(run[index - 1].distance_to(run[index])) / period) + 2;
+    }
+    if (most == 0) {
+        return;
+    }
+    ::godot::PackedVector2Array pairs;
+    pairs.resize(most * 2);
+    ::godot::Vector2* out = pairs.ptrw();
+    int64_t laid = 0;
     double phase = 0.0;
-    for (int64_t index = 1; index < points.size(); ++index) {
-        const ::godot::Vector2 from = points[index - 1];
-        const ::godot::Vector2 to = points[index];
+    for (int64_t index = 1; index < count; ++index) {
+        const ::godot::Vector2 from = run[index - 1];
+        const ::godot::Vector2 to = run[index];
         const double segment = static_cast<double>(from.distance_to(to));
         double along = 0.0;
         while (along < segment) {
             const bool on = phase < dash;
             const double left_in_phase = on ? dash - phase : period - phase;
             const double step = ase::math::min(left_in_phase, segment - along);
-            if (on) {
-                canvas.draw_line(from.lerp(to, static_cast<float>(along / segment)),
-                                 from.lerp(to, static_cast<float>((along + step) / segment)), color,
-                                 static_cast<float>(width), true);
+            if (on && laid + 2 <= most * 2) {
+                out[laid] = from.lerp(to, static_cast<float>(along / segment));
+                out[laid + 1] = from.lerp(to, static_cast<float>((along + step) / segment));
+                laid += 2;
             }
             along += step;
             phase += step;
@@ -122,6 +139,12 @@ void svg_dash_points(UiPen& canvas, const ::godot::PackedVector2Array& points,
             }
         }
     }
+    if (laid < 2) {
+        return;
+    }
+    // The pairs laid are handed to the pen at once: one canvas call for every dash of the stroke (UiPen::draw_multiline).
+    pairs.resize(laid);
+    canvas.draw_multiline(pairs, color, static_cast<float>(width), true);
 }
 
 }  // namespace ase::adp::godot

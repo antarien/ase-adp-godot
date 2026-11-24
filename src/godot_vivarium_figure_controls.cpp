@@ -37,6 +37,7 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_figure_scene.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
 #include <ase/adp/godot/hud/types.hpp>

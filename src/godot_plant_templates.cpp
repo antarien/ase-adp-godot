@@ -12,7 +12,7 @@
  * @usecase     usecase:101342 - hand organ shapes to app
  * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-10-26
- * @modified    2026-10-26
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -30,7 +30,7 @@ namespace ase::adp::godot {
 
 uint32_t build_template(const std::vector<VivariumTemplateCornerView>& corners,
                         const std::vector<VivariumTemplateTriangleView>& triangles, uint32_t code,
-                        PlantMeshArrays& out) {
+                        PlantMeshArrays& out, std::vector<float>& tangents) {
     // one vertex per corner of the template, in the order of the port; its slot by index
     std::unordered_map<uint32_t, int32_t> slot;
     for (const VivariumTemplateCornerView& corner : corners) {
@@ -45,6 +45,9 @@ uint32_t build_template(const std::vector<VivariumTemplateCornerView>& corners,
         append3(out.normals, static_cast<float>(corner.nx), static_cast<float>(corner.ny), static_cast<float>(corner.nz));
         out.uvs.push_back(static_cast<float>(corner.u));
         out.uvs.push_back(static_cast<float>(corner.v));
+        // the tangent along growing u and the sign of the bitangent, as the tangent port carried them
+        append3(tangents, static_cast<float>(corner.tx), static_cast<float>(corner.ty), static_cast<float>(corner.tz));
+        tangents.push_back(static_cast<float>(corner.tw));
     }
     // per triangle of the template its three corners, in the order the record names them (ase-render-data)
     uint32_t drawn = 0u;

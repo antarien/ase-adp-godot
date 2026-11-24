@@ -38,7 +38,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
 #include <godot_cpp/variant/color.hpp>
@@ -70,11 +70,23 @@ public:
     uint8_t chosen() const;
 
     /**
-     * The place of the start chip, once after a draw placed it anew (usecase:100387): true with its centre and
-     * radius in mockup units, false while it stands where it was announced. The view names it in its log, so a
-     * run that taps like the keeper finds the chip on the screen as drawn.
+     * The place of the start chip on the canvas, once after a draw put it anywhere new (usecase:100387): true
+     * with its centre and radius in the logical pixels a tap arrives in, carried out of mockup units by `frame`,
+     * false while it stands where it was announced. The view names it in its log, so a run that taps like the
+     * keeper finds the chip on the screen as drawn. The place is compared ON THE CANVAS, never in mockup units:
+     * a window that settles after its first frame moves the frame and leaves the mockup place where it was, and
+     * a place announced only in mockup units stays at the first frame's canvas place (run treegen_stages_1124e,
+     * stage 3: named at x=1157.5 on a surface 720 wide, tapped there, no world started).
      */
-    bool take_begin_place(::godot::Vector2& centre, double& radius);
+    bool take_begin_place(const ::godot::Transform2D& frame, ::godot::Vector2& centre, double& radius);
+
+    /**
+     * The place of the chip NOVO as the last draw put it (usecase:100387): true with its centre and radius in
+     * mockup units while the row NOVO / RETOMAR stands (OFFLINE chosen and a draw placed it), false otherwise.
+     * The row moves only with the start chip, so the view names it beside each new place of the start chip,
+     * and a run that starts OFFLINE NOVO taps it before the start chip.
+     */
+    bool initial_place(::godot::Vector2& centre, double& radius) const;
 
 private:
     UiHexChip online_;                  // start.online, start_glyph.online
@@ -95,8 +107,8 @@ private:
     bool offline_chosen_ = true;        // the first row stands on offline
     bool resume_chosen_ = true;         // the second row stands on the last kept state
     bool placed_ = false;               // a draw placed the chips
-    ::godot::Vector2 begin_announced_;  // the centre of the start chip take_begin_place last answered
-    double begin_announced_radius_ = 0.0;
+    ::godot::Vector2 begin_announced_;  // the canvas centre of the start chip take_begin_place last answered
+    double begin_announced_radius_ = 0.0;  // its canvas radius
     bool begin_announced_once_ = false;  // take_begin_place answered at least once
 };
 

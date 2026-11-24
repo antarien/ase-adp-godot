@@ -48,21 +48,22 @@
 #include <ase/adp/godot/godot_host_stream_view.hpp>
 #include <ase/adp/godot/godot_hud_context_resolver.hpp>
 #include <ase/adp/godot/godot_hud_sign_reading.hpp>
-#include <ase/adp/godot/godot_hud_ui_icon.hpp>
+#include <ase/adp/godot/godot_hud_ui_icon_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_motion.hpp>
 #include <ase/adp/godot/godot_hud_ui_ring.hpp>
-#include <ase/adp/godot/godot_hud_ui_text_block.hpp>
+#include <ase/adp/godot/godot_hud_ui_text_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
 #include <ase/adp/godot/godot_hud_ui_ground.hpp>
 #include <ase/adp/godot/godot_plant_geometry.hpp>
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 #include <godot_cpp/variant/vector2.hpp>
+#include <godot_cpp/variant/vector3.hpp>
 
 #include <cstdint>
 #include <string>
@@ -97,6 +98,28 @@ struct SignMarkerHit {
 struct SignMarkerPlace {
     uint32_t sign = UINT32_MAX;    // index into HudContextSpec::signs
     ::godot::Rect2 rect;
+};
+
+/**
+ * The brook's water as the eye last saw it (P0692): the world stations follow_brook took from build_water_line or
+ * build_bed_line, and the sight's account, kept with the ground revision, the brook and the eye they were read at.
+ * While all three stand as they stood, the stations hold and the march of UiGround::sees over every water vertex
+ * is not run again; the camera still places the stations each frame.
+ */
+struct BrookSight {
+    bool laid = false;                  // the stations below were read at least once
+    uint64_t ground = 0;                // PlantGroundSurface::revision they were read at
+    VivariumStreamView stream;          // the brook they were read of
+    bool eyed = false;                  // the anchor had an eye
+    ::godot::Vector3 eye;               // where it stood
+    std::vector<float> water;           // the stations, x y z each, world metres
+    uint32_t water_stations = 0;        // the stations with water seen
+    uint32_t bed_stations = 0;          // the stations of the bed, where the bank hid all the water
+    uint32_t hidden = 0;                // the water points the ground hid
+    ::godot::Vector3 point;             // the last of them
+    ::godot::Vector3 over;              // the ground that hid it
+    double least = 0.0;                 // the least height a hiding ground stood over the line, metres
+    std::string told;                   // the line's flank as the view last told it (hud brook line, B0285)
 };
 
 /** The signs of the care view. */
@@ -134,10 +157,12 @@ public:
      * placed through `anchor` in mockup units. Where the bank hides all of the water, the line is that of the
      * bed the eye sees (build_bed_line), which is then what the picture shows of the brook. `flank` is the
      * line's account (stations, points seen, the columns, the points), for the caller to tell when it changes.
+     * `kept` holds the stations between frames: they are read again only when `revision` (the ground's
+     * PlantGroundSurface::revision), the brook or the eye differ from the read it holds (P0692).
      */
-    static void follow_brook(const VivariumStreamView& stream, const PlantMeshArrays& ground, const UiAnchor& anchor,
-                             const UiGround& land, float left, float right, ::godot::PackedVector2Array& out,
-                             std::string& flank);
+    static void follow_brook(const VivariumStreamView& stream, const PlantMeshArrays& ground, uint64_t revision,
+                             const UiAnchor& anchor, const UiGround& land, float left, float right,
+                             BrookSight& kept, ::godot::PackedVector2Array& out, std::string& flank);
 
 private:
     /** One sign as SHA places and marks it. */

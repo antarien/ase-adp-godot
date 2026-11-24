@@ -42,6 +42,7 @@
 #include <ase/adp/godot/godot_plant_horizon_ridge.hpp>
 #include <ase/adp/godot/godot_plant_leaf_season.hpp>
 #include <ase/adp/godot/godot_vivarium_scene_counts.hpp>
+#include <ase/adp/godot/cap/godot_plant_cap.hpp>
 #include <ase/adp/godot/host/types.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
@@ -104,18 +105,23 @@ void VivariumView::follow_scene(double elapsed_s) {
     }
     // the water of the brooks (usecase:100399 carry brook water): in every bed at its bed plus the depth ase-hydro
     // gives it, and in every pit ase-hydro fills at its floor plus the depth of its record (build_water_table,
-    // D2506); laid anew when ase-hydro changed a stream or a pit or the ground under the water moved, never once
-    // per frame
+    // D2506); laid anew when ase-hydro changed a stream or a pit, when a current cell answered a new hue of its
+    // water (water.quality.v1 curr_hue_deg, the look ase-signature files per cell, CAUSA_ASE_SIGNATURE) or the
+    // ground under the water moved, never once per frame
     const uint64_t streams = resources_.stream_generation();
     const uint64_t pits = resources_.pit_generation();
-    if (ground_moved || streams != scene_streams_ || pits != scene_pits_) {
-        scene_streams_ = streams;
-        scene_pits_ = pits;
+    const uint64_t currents = resources_.current_generation();
+    if (ground_moved || streams != water_marks_.streams || pits != water_marks_.pits ||
+        currents != water_marks_.currents) {
+        water_marks_.streams = streams;
+        water_marks_.pits = pits;
+        water_marks_.currents = currents;
         // the edge of the bridge for the groundwater beside a brook (N0484): the stream port carries no level
         // until ase-gis has mapped the cell at the start of the bed (GIS_HYD_CELL_LEVEL, filed by
-        // FloraHostStrmExptSystem); logged once on its edge, the water stays in the beds meanwhile
+        // WaterHostStrmExptSystem of ase-pl-water since H.8); logged once on its edge, the water stays in the beds
+        // meanwhile
         constexpr const char* GAP_GROUNDWATER = "N0484";
-        constexpr const char* GROUNDWATER_FIELD = "flora.stream.v1.groundwater_level_m";
+        constexpr const char* GROUNDWATER_FIELD = "water.stream.v1.groundwater_level_m";
         bool groundwater = false;
         for (const VivariumStreamView& stream : resources_.get_streams()) {
             groundwater = groundwater || std::isfinite(stream.groundwater_level_m);
@@ -126,9 +132,10 @@ void VivariumView::follow_scene(double elapsed_s) {
             open_gap(GAP_GROUNDWATER, GROUNDWATER_FIELD);
         }
         const uint64_t water_start_usec = ticks->get_ticks_usec();
-        // the ground as fill_ground just left it: the table reads its vertices, never the ports by object id
-        const uint32_t wet =
-            fill_plant_water(scene_, resources_.get_streams(), resources_.get_pits(), ground_surface_.arrays);
+        // the ground as fill_ground just left it: the table reads its vertices, never the ports by object id; the
+        // current cells hand every vertex of the brook water the hue of the nearest cell that answered one
+        const uint32_t wet = fill_plant_water(scene_, resources_.get_streams(), resources_.get_pits(),
+                                              resources_.get_currents(), ground_surface_.arrays);
         const uint64_t water_usec = ticks->get_ticks_usec() - water_start_usec;
         note("scene water cells " + ::godot::String::num_int64(static_cast<int64_t>(wet)) + " brooks " +
              ::godot::String::num_int64(static_cast<int64_t>(resources_.get_streams().size())) + " pits " +
@@ -345,6 +352,9 @@ void VivariumView::follow_scene(double elapsed_s) {
     // contact measures the terrain sample, over the levelled disc too, so a dug hole takes it down (D2315), and the
     // view never reads a ground height of its own for it
     fill_plant_seeds(scene_, resources_, scene_origins_, scene_look_);
+    // the fruit body of every cap patch at its stem base, scaled to the cap radius of its individual (usecase:101362
+    // scale the organ templates): every frame the cap port carries, like the seeds, each by the body of its species
+    fill_plant_caps(scene_, resources_, scene_origins_, resources_.get_caps(), start_.patches);
 }
 
 ::godot::Ref<::godot::Material> VivariumView::ground_material() const {

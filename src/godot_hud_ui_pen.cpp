@@ -12,7 +12,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-11
- * @modified    2026-11-13
+ * @modified    2026-11-23
  * @version     00.00.21.00021 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -20,8 +20,9 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_cover.hpp>
+#include <ase/adp/godot/pen/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -226,6 +227,39 @@ void UiPen::draw_polyline(const ::godot::PackedVector2Array& points, const ::god
     plain();
     const float drawn = pen_core(pixels(width));
     canvas_.draw_polyline(trimmed(moved(points), drawn), tinted(color), drawn, true);
+}
+
+void UiPen::draw_multiline(const ::godot::PackedVector2Array& pairs, const ::godot::Color& color, float width,
+                           bool antialiased) {
+    (void)antialiased;
+    const int64_t count = pairs.size() - pairs.size() % 2;
+    if (count < 2) {
+        return;
+    }
+    plain();
+    const float drawn = pen_core(pixels(width));
+    // Each pair is an open line of two ends: both are pulled in by half the end feather, as draw_line trims its
+    // run, when the line is longer than the whole feather. The pairs are moved and trimmed through one pointer each
+    // way and reach the canvas in one call (P0692; one index per point is a call over the GDExtension border, P0690).
+    const float cut = pen_feather(drawn) * 0.5f;
+    ::godot::PackedVector2Array ends;
+    ends.resize(count);
+    const ::godot::Vector2* from = pairs.ptr();
+    ::godot::Vector2* to = ends.ptrw();
+    for (int64_t index = 0; index + 1 < count; index += 2) {
+        const ::godot::Vector2 start = device_.xform(from[index]);
+        const ::godot::Vector2 end = device_.xform(from[index + 1]);
+        const float length = (end - start).length();
+        if (cut > 0.0f && length > cut * 2.0f) {
+            const ::godot::Vector2 inward = (end - start) / length * cut;
+            to[index] = start + inward;
+            to[index + 1] = end - inward;
+        } else {
+            to[index] = start;
+            to[index + 1] = end;
+        }
+    }
+    canvas_.draw_multiline(ends, tinted(color), drawn, true);
 }
 
 void UiPen::draw_polygon(const ::godot::PackedVector2Array& points, const ::godot::PackedColorArray& colors) {

@@ -47,6 +47,8 @@ inline constexpr const char* kFigureMetaLevelDrawn = "figure_lod_drawn";    // m
 inline constexpr const char* kFigureMetaLevelNoted = "figure_lod_noted";    // meta of a figure's node: the detail level last handed to the view's level line
 inline constexpr const char* kFigureMetaWater = "figure_vessel_water_l";    // meta of a figure's node: litres of the carried vessel the gear port showed last, so a rise reads as one draw
 inline constexpr const char* kFigureMetaWaterNoted = "figure_water_noted";  // meta of a figure's node: the litres last handed to the view's water line
+inline constexpr const char* kFigureMetaPoseNoted = "figure_pose_noted";    // meta of a figure's node: the pose last handed to the view's pose line
+inline constexpr const char* kFigureMetaFramedNoted = "figure_framed_noted";  // meta of a figure's node: the frame state last handed to the view's pose line
 inline constexpr const char* kFigureMetaLevel = "figure_lod";      // meta of a mesh of the figure file: its detail level
 
 /** The node of `parent` with that name, cast to its class; nullptr when it has none. */

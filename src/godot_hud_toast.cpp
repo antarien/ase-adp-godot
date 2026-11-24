@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_toast.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 

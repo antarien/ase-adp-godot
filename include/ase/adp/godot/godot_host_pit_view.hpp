@@ -6,8 +6,8 @@
  * @file        godot_host_pit_view.hpp
  * @brief       The open water of every dug pit of the embedded host, as the last read of the pit port showed it
  * @description The copy GodotHostResourceManager keeps of every pit ase-pl-hydrogeology lays on hydrogeology.pit.v1
- *              (HydrogeologyHostPitExptSystem): the centre of the soil cell of the pit, the open water over its floor
- *              and the water running over its lowest rim. One purpose of its own (WRFL_ASE_TIER_WIPE, the header
+ *              (HydrogeologyHostPitExptSystem): the centre of the soil cell of the pit, the open water over its floor,
+ *              the water running over its lowest rim and the ice on that water. One purpose of its own (WRFL_ASE_TIER_WIPE, the header
  *              ratchet): only the units that draw or read the pit water include it.
  *
  * @module      ase-adp-godot
@@ -16,8 +16,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-11-22
- * @modified    2026-11-22
- * @version     00.00.04.00024 [seed]
+ * @modified    2026-11-24
+ * @version     00.00.05.00025 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -40,6 +40,7 @@ struct VivariumPitView {
     double   z = 0.0;           // centre of the soil cell of the pit, world metres north (pit_z)
     double   depth_m = 0.0;     // open water over the pit floor, metres; NaN when unanswered
     double   spill_m3_s = 0.0;  // water running over the lowest rim, cubic metres per second; NaN when unanswered
+    double   ice_m = 0.0;       // ice on the open water, metres (pit_ice_m, GIS_HYD_CELL_PIT_ICE, H.11); NaN when unanswered
 };
 
 }  // namespace ase::adp::godot

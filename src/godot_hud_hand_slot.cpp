@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_hand_slot.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_vivarium_watch.hpp>

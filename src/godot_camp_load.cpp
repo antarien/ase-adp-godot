@@ -7,10 +7,14 @@
  *              reads the extras of every node from the document's JSON and takes each node's mesh from the parsed
  *              state (GLTFNode → GLTFMesh → ImporterMesh); no scene is generated, so the task holds no Node and
  *              touches no tree, also when the pool runs a second camp task on its thread while a texture load
- *              of the first one waits. A node is a make only with all three extras -
- *              make a text ending in .<variant>, mass_kg a positive number, hull at least IGL_HULL_MIN_PNT corners
- *              of three finite numbers each; any other node is skipped, so a helper node of the recipe never
- *              becomes a body.
+ *              of the first one waits. A node is a make only with all four extras -
+ *              make a text ending in .<variant>, mass_kg a positive number, roughness_m a number not below zero,
+ *              hull at least IGL_HULL_MIN_PNT corners of three finite numbers each. A node without a make text is
+ *              skipped silently, so a helper node of the recipe never becomes a body; a node WITH a make text that
+ *              lacks another extra is counted on the load with the first one's missing extra, and so is a file
+ *              that cannot be read or parsed, because a role left with no make is otherwise drawn by nobody and
+ *              named by nothing (an export of an older recipe version, measured 2026-11-23: v1 carries no
+ *              roughness_m, every role came out with makes=0 and the log said only "has no make in its export").
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -107,33 +111,54 @@ bool hull_of(const ::godot::Variant& value, std::vector<double>& hull) {
     return true;
 }
 
-/** The make one glTF node carries in its extras; false for a node without make, mass_kg and hull of the recipe. */
-bool make_of(const ::godot::Dictionary& node, CampMake& make) {
+/** The make text of a node's extras; empty for a node without extras or without a make text (a helper node). */
+::godot::String make_text_of(const ::godot::Dictionary& node) {
     const ::godot::Variant extras_value = node.get("extras", ::godot::Variant());
     if (extras_value.get_type() != ::godot::Variant::DICTIONARY) {
-        return false;
+        return ::godot::String();
     }
     const ::godot::Dictionary extras = extras_value;
     const ::godot::Variant name = extras.get("make", ::godot::Variant());
-    const ::godot::Variant mass = extras.get("mass_kg", ::godot::Variant());
     if (name.get_type() != ::godot::Variant::STRING) {
-        return false;
+        return ::godot::String();
     }
+    return name;
+}
+
+/**
+ * The make one glTF node with a make text carries in its extras; returns nullptr when the node carries mass_kg,
+ * roughness_m and hull of the recipe, else the extra it lacks or holds out of range, so the view names why a role
+ * has no make. The roughness is required like the mass (ase-pl-ingle refuses a part without it); ase-physics
+ * bounds it. A node without a make text never reaches here (make_text_of).
+ */
+const char* make_of(const ::godot::Dictionary& node, const ::godot::String& text, CampMake& make) {
+    const ::godot::Dictionary extras = node.get("extras", ::godot::Dictionary());
+    const ::godot::Variant mass = extras.get("mass_kg", ::godot::Variant());
+    const ::godot::Variant rough = extras.get("roughness_m", ::godot::Variant());
     if (mass.get_type() != ::godot::Variant::FLOAT && mass.get_type() != ::godot::Variant::INT) {
-        return false;
+        return "mass_kg";
     }
-    const ::godot::String text = name;
+    if (rough.get_type() != ::godot::Variant::FLOAT && rough.get_type() != ::godot::Variant::INT) {
+        return "roughness_m";
+    }
     make.mass_kg = mass;
-    if (!(make.mass_kg > 0.0) || !std::isfinite(make.mass_kg) || !variant_of(text, make.variant)) {
-        return false;
+    make.roughness_m = rough;
+    if (!(make.mass_kg > 0.0) || !std::isfinite(make.mass_kg)) {
+        return "mass_kg";
+    }
+    if (!variant_of(text, make.variant)) {
+        return "make variant";
+    }
+    if (!(make.roughness_m >= 0.0) || !std::isfinite(make.roughness_m)) {
+        return "roughness_m";
     }
     if (!hull_of(extras.get("hull", ::godot::Variant()), make.hull)) {
-        return false;
+        return "hull";
     }
     const ::godot::CharString utf8 = text.utf8();
     make.name = std::string(utf8.get_data());
     make.make = ase::kernel::KernelEmbeddedHost::name_id(make.name.c_str());
-    return true;
+    return nullptr;
 }
 
 /**
@@ -176,6 +201,7 @@ void load_camp_file(void* userdata) {
     const ::godot::String path = load->asset_root.path_join(::godot::String::utf8(load->file.c_str()));
     const ::godot::PackedByteArray bytes = ::godot::FileAccess::get_file_as_bytes(path);
     if (bytes.is_empty()) {
+        load->refusal = "file " + load->file + " unreadable or empty";
         return;
     }
     ::godot::Ref<::godot::GLTFDocument> document;
@@ -183,6 +209,7 @@ void load_camp_file(void* userdata) {
     ::godot::Ref<::godot::GLTFState> state;
     state.instantiate();
     if (!parse_asset_bytes(document, state, load->asset_root, load->file, bytes)) {
+        load->refusal = "file " + load->file + " not parsed as glTF";
         return;
     }
     // the parsed nodes and meshes stand in the state in the order of the document's nodes, so json node i is
@@ -197,8 +224,19 @@ void load_camp_file(void* userdata) {
             if (nodes[i].get_type() != ::godot::Variant::DICTIONARY) {
                 continue;
             }
+            const ::godot::Dictionary node = nodes[i];
+            const ::godot::String text = make_text_of(node);
+            if (text.is_empty()) {
+                continue;
+            }
             CampMake make;
-            if (!make_of(nodes[i], make)) {
+            const char* lacks = make_of(node, text, make);
+            if (lacks != nullptr) {
+                if (load->refused == 0u) {
+                    const ::godot::CharString utf8 = text.utf8();
+                    load->refusal = std::string(utf8.get_data()) + " lacks " + lacks;
+                }
+                ++load->refused;
                 continue;
             }
             make.mesh = mesh_of(parsed_nodes, parsed_meshes, static_cast<int32_t>(i));
@@ -216,6 +254,8 @@ void start_camp_load(CampRoleLoad& load, const ::godot::String& asset_root) {
     }
     load.asset_root = asset_root;
     load.makes.clear();
+    load.refused = 0u;
+    load.refusal.clear();
     load.taken = false;
     load.task = pool->add_native_task(&load_camp_file, &load, false, kCampLoadTask);
 }

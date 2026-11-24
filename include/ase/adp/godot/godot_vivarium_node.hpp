@@ -125,6 +125,7 @@
 #include <ase/adp/godot/godot_vivarium_start_mode.hpp>
 #include <ase/adp/godot/godot_vivarium_view_config.hpp>
 #include <ase/adp/godot/godot_vivarium_camp.hpp>
+#include <ase/adp/godot/godot_vivarium_water_marks.hpp>
 #include <ase/adp/godot/godot_vivarium_water_pending.hpp>
 #include <ase/adp/godot/godot_vivarium_watch.hpp>
 #include <ase/adp/godot/host/types.hpp>
@@ -393,8 +394,7 @@ private:
     uint64_t                 scene_bark_ = 0;      // bark generation the tubes were last laid from: only a body that ticked moves it (usecase:101613)
     uint64_t                 scene_terrain_ = 0;   // terrain generation the ground was last built from
     PlantGroundSurface       ground_surface_;      // the ground as last handed to Godot, the input of its patch (P0690)
-    uint64_t                 scene_streams_ = 0;   // stream generation the brook water was last laid from (usecase:100399 carry brook water)
-    uint64_t                 scene_pits_ = 0;      // pit generation the water of the pits was last laid from (D2506, hydrogeology.pit.v1)
+    VivariumWaterMarks       water_marks_;         // the brook, pit and current generations the water was last laid from
     int64_t                  scene_hour_ = -1;     // whole game hour of the day of the last `scene hour` line, -1 before the clock
     uint64_t                 scene_stars_ = 0;     // star generation of the sky port at the last `scene sky` line, 0 before the first star set
     uint64_t                 scene_templates_ = 0; // template generation the plant was last filled from (usecase:101011 tessellate the organ templates)
@@ -454,7 +454,7 @@ private:
     std::vector<VivariumInstanceView> hud_segments_;  // the internodes of the plant in focus this frame
     std::unordered_map<std::string, VivariumHudVerb> hud_verbs_;  // hud.verbs: what each ground tool does
     uint8_t                  hud_stage_seen_ = GODOT_STAGE_NONE;  // the patch stage of the last frame: a rise is NOVO ESTÁGIO (m.html 1033)
-    std::string              hud_brook_told_;   // the brook's line last told on the flank (hud brook line, B0285)
+    BrookSight               hud_brook_;        // the brook's stations as the eye last saw them and the flank last told (P0692, B0285)
     std::string              hud_verb_seen_;    // the HUD's verb of the last frame: a change drops the bed's start (S.bedA=null, m.html 947)
     std::string              hud_mode_seen_;    // the HUD's mode of the last frame: setMode drops the bed's start too (m.html 933)
     ::godot::Transform2D     hud_frame_;        // mockup units onto the canvas: the middle band, logical over mockup width

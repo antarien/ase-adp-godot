@@ -4,10 +4,10 @@
  * @file        test_godot_host.cpp
  * @design      DSGN_021
  * @brief       Pins the one game host of GodotHostResourceManager against the real bundle: boot of the whole
- *              set, the log, pouring, the organ and instance ports, the cycle line, the return from the
- *              background as one filed real position, the time lapse as a pace and the teardown
- * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG, the parts of L1, L3 and L5 that do not need a window, and
- *              PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.6 and 03.11. The manager boots the SAME bundle Godot
+ *              set, the log, pouring, the organ and instance ports, the cycle line and the teardown
+ * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG, the parts of L1 and L3 that do not need a window, and
+ *              PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.6 and 03.11; the clock of L5 stands in
+ *              test_godot_host_clock.cpp on a game host of its own. The manager boots the SAME bundle Godot
  *              loads: every unit's library and staged manifest, the data root and the index, side by side
  *              in the build's bundle directory (clients/avt-client-android/cmake/AvtRuntime.cmake), with
  *              the configuration and the game host of test_godot_host_support.hpp. No Godot in this
@@ -24,8 +24,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Component System (ECS)
  * @created     2026-10-05
- * @modified    2026-11-23
- * @version     00.00.22.00022 [init]
+ * @modified    2026-11-24
+ * @version     00.00.28.00028 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -55,6 +55,7 @@ using test::any_line_carries;
 using test::environment;
 using test::patch_at;
 using test::vivarium_config;
+using test::without_colour;
 
 TEST_CASE("L1: the game host starts once - the whole set from the bundle, four patches by place, the game clock") {
     AdapterEnvironment& env = environment();
@@ -88,30 +89,26 @@ TEST_CASE("L1: the game host starts once - the whole set from the bundle, four p
     // and only then FloraHubSoilSyncSystem lays the soil row the soil port carries - one Dissemination run
     // per link, once in four frames. The case waits for the soil record of every patch, bounded - and for
     // the capacity of its soil class: the lay capacity test::kPatchCapacityMm is a number too, and it stands
-    // on the port until HydroSoilCapCalcSystem replaced it with the class value, some Dissemination runs on
-    // (measured 2026-11-23 in build 7: the module set 48 mm while the view still showed 100 mm).
+    // on the port until HydroSoilCapCalcSystem replaced it with the class value of the patch's own cell, some
+    // Dissemination runs on (measured 2026-11-23 11:21 after this wait: the class of each place, 96 mm on place 0
+    // against the 48 mm the case expected then, data/probes/runs/adp_three_tests_1123.txt).
     constexpr uint32_t kSoilBoundFrames = 32u;
-    for (uint32_t frame = 0u; frame < kSoilBoundFrames; ++frame) {
-        bool all = resources.patch_count() == 4u;
-        for (uint32_t place = 0u; all && place < 4u; ++place) {
-            const VivariumPatchView* waiting = resources.get_patch_at(place);
-            all = waiting != nullptr && !std::isnan(waiting->capacity_mm) &&
-                  waiting->capacity_mm != test::kPatchCapacityMm;
-        }
-        if (all) {
-            break;
-        }
-        advance_frames(resources, 1u);
-    }
+    CHECK(test::await_soil_class(resources, kSoilBoundFrames));
     for (uint32_t place = 0u; place < 4u; ++place) {
         const VivariumPatchView& patch = patch_at(resources, place);
         CHECK(patch.place == place);
         CHECK(resources.get_patch(patch.object_id) == resources.get_patch_at(place));
-        // THE CAPACITY IS THE ONE OF THE SOIL CLASS, never the one of the lay request (HydroSoilCapCalcSystem,
-        // PLAN_ASE_VIVARIUM_PHASE_10_HYDRO H.1): the root depth HYD_SOIL_ROOT_DEPTH_MM (400 mm) times the nFK of
-        // the KA5 class the seed draws for the chunk of the four patches, 12 Vol.-% (PED_*_NFK_PCT), is 48 mm.
-        // The 100 mm of the lay request stand only until the class reaches the cell.
-        CHECK(patch.capacity_mm == doctest::Approx(48.0));
+        // THE CAPACITY IS THE ONE OF THE SOIL CLASS OF ITS OWN METRE, never the one of the lay request
+        // (HydroSoilCapCalcSystem, PLAN_ASE_VIVARIUM_PHASE_10_HYDRO H.1): the root depth times the nFK of the
+        // KA5 class ase-pedosphere draws for the cell under the patch, from rock and landform. WHICH class a
+        // place gets is a draw of the owner and moves with every change of that draw, and the adapter sees no
+        // module header (ARCH_ASE_KERNEL_EMBEDDED, Layers and Boundaries), so this case asserts no class number
+        // of its own: the rule "root depth times the nFK of the class" is proven where it is computed,
+        // test_hydro_soil_cap.cpp "Each class holds the root depth times its usable field capacity". Here the
+        // port carries it: a finite, positive capacity that is no longer the 100 mm of the lay request.
+        CHECK_FALSE(std::isnan(patch.capacity_mm));
+        CHECK(patch.capacity_mm > 0.0);
+        CHECK(patch.capacity_mm != doctest::Approx(test::kPatchCapacityMm));
         CHECK(patch.soil_mm <= 20.0);
         CHECK(patch.seed);  // the stage of a fresh patch equals stage_seed of flora.stage.v1 (usecase:101635)
         CHECK(patch.stage < GODOT_STAGE_COUNT);
@@ -243,7 +240,7 @@ TEST_CASE("the poured seed sprouts, and its shoot and root reach the organ ports
     const uint32_t cared = patch_at(resources, 0u).object_id;
     const uint64_t generation = resources.organ_generation();
 
-    // The pour of L3 lets the seed on place 0 sprout; its first internode and its proximal roots are
+    // The pours of L3 and of this case let the seed on place 0 sprout; its first internode and its proximal roots are
     // published in the run it sprouted (ase-phytomer, ase-radix: an unshown organ publishes at once),
     // read into the plugin's inputs and laid on the ports in the frame after. The bound is a few
     // Dissemination runs.
@@ -258,6 +255,23 @@ TEST_CASE("the poured seed sprouts, and its shoot and root reach the organ ports
     advance_frames(resources, kRunFrames);
     for (uint32_t frame = 0u; frame < kBoundFrames && resources.get_organs(GODOT_ORGAN_SEGMENT).empty(); ++frame) {
         advance_frames(resources, 1u);
+    }
+    // THE SEED SPROUTS WHEN ITS SOIL HOLDS THE SHARE ITS SPECIES NEEDS, never at a number of pours: the
+    // germination bound of the species (PlantStgeGrmnSystem) is a share of the capacity of the cell's soil class,
+    // and a class of nFK 24 Vol.-% holds 96 mm, so one pour of Regar may not reach it. The case pours again as a
+    // player would, Regar's amount each time, until the shoot stands; the pours that fill the capacity once are
+    // the bound, read from the patch the port carries.
+    // The bound stands only once the class reached the port; a case run on its own reads NaN before it.
+    REQUIRE(test::await_soil_class(resources, kBoundFrames));
+    const double amount_mm = vivarium_config(env.bundle).irrigate_amount_mm;
+    const double capacity_mm = patch_at(resources, 0u).capacity_mm;
+    for (double poured_mm = amount_mm;
+         poured_mm < capacity_mm + amount_mm && resources.get_organs(GODOT_ORGAN_SEGMENT).empty();
+         poured_mm += amount_mm) {
+        REQUIRE(resources.irrigate(cared, amount_mm) == ase::kernel::HostStatusOk);
+        for (uint32_t frame = 0u; frame < kBoundFrames && resources.get_organs(GODOT_ORGAN_SEGMENT).empty(); ++frame) {
+            advance_frames(resources, 1u);
+        }
     }
     REQUIRE(!resources.get_organs(GODOT_ORGAN_SEGMENT).empty());
     CHECK(!resources.get_organs(GODOT_ORGAN_ROOT).empty());
@@ -376,88 +390,43 @@ TEST_CASE("03.6: the cycle line counts the organs on the ports and the time the 
     CHECK(line.find("refused=time:ase-not-in-the-bundle@") != std::string::npos);
 }
 
-TEST_CASE("L5 without a window: a long frame is one tick and one filed real position, laid by ase-time in one write") {
+TEST_CASE("H.9 I-4: the salt port reaches the view, both halves and the sum, chunk for chunk") {
     AdapterEnvironment& env = environment();
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
     GodotHostResourceManager& resources = env.resources;
-    advance_frames(resources, 4u);
-    const double game_before = resources.get_clock().elapsed_s;
-    const uint64_t ticks_before = resources.tick_count();
-    const double simulated_before = resources.simulation_seconds();
-
-    // Ten seconds in the background come back as one frame: one tick, and the real position moves by the
-    // whole span on flora.real.v1. Nothing is replayed; the seconds wait as the backlog until the clock
-    // record shows the position laid (real_laid_s), which ase-time does at its Dissemination run of 1 Hz.
-    REQUIRE(resources.advance(10.0) == ase::kernel::HostStatusOk);
-    CHECK(resources.last_steps() == 1u);
-    CHECK(resources.backlog_seconds() > 0.0);
-    // Every frame names the real position the clock record shows laid (real_laid_s, TIM_REAL_LAID_S through
-    // ase-pl-flora's clock record) and the backlog after it: a backlog left standing prints the frame at which
-    // ase-time laid the position and the frame the record carried it, the measured chain of the return.
-    // THE BOUND IS THE CHAIN, NEVER A NUMBER OF FRAMES. ase-pl-flora takes the filed position in Reception
-    // (FloraHostRealSystem), ase-time lays it at its next Dissemination run (1 Hz) unless its own Reception read
-    // (TimeHubPaceSyncSystem) came first in that tick, then at the run after. ase-pl-flora takes TIM_REAL_LAID_S at
-    // its Modulation run (2 Hz, FloraHubTimSyncSystem), files the clock record in the Production of the tick after,
-    // and the port publishes it with its next set: the hops lie within one more Dissemination interval. So the
-    // frames run until three Dissemination runs passed since the long frame: a late lay at the second, the hops
-    // up to the third.
-    uint64_t runs_before = 0u;
-    REQUIRE(resources.schedule_runs("Dissemination", &runs_before) == ase::kernel::HostStatusOk);
-    uint64_t runs = runs_before;
-    std::string laid_by_frame = "laid before=" + std::to_string(resources.get_clock().real_laid_s);
-    uint32_t frames = 0u;
-    for (; runs - runs_before < 3u && resources.backlog_seconds() > 0.0; ++frames) {
-        REQUIRE(resources.advance(0.25) == ase::kernel::HostStatusOk);
-        CHECK(resources.last_steps() == 1u);
-        REQUIRE(resources.schedule_runs("Dissemination", &runs) == ase::kernel::HostStatusOk);
-        laid_by_frame += " f" + std::to_string(frames) + "=" + std::to_string(resources.get_clock().real_laid_s) +
-                         "/" + std::to_string(resources.backlog_seconds()) + "@" + std::to_string(runs - runs_before);
+    // The salt record of a chunk stands on hydrogeology.salt.v1 only once ase-gis answered the water half
+    // (ase-hydro), the soil half (ase-pedosphere) and their sum; bounded wait, one quarter second per frame.
+    constexpr uint32_t SALT_BOUND_FRAMES = 120u;  // 30 s of world time, the salt chain closes long before
+    for (uint32_t frame = 0u; frame < SALT_BOUND_FRAMES && resources.get_salt().empty(); ++frame) {
+        advance_frames(resources, 1u);
     }
-    INFO(laid_by_frame);
-    CHECK(resources.backlog_seconds() == 0.0);
-    CHECK(resources.tick_count() - ticks_before == 1u + frames);  // one tick per frame, the long one too
-    CHECK(resources.simulation_seconds() - simulated_before == doctest::Approx(10.0 + 0.25 * frames));
-    CHECK(resources.get_clock().elapsed_s > game_before);
-
-    // A broken frame is refused by the host, the host keeps running and nothing is counted.
-    const uint64_t ticks = resources.tick_count();
-    CHECK(resources.advance(std::numeric_limits<double>::quiet_NaN()) == ase::kernel::HostStatusInvalidArgument);
-    CHECK(resources.advance(std::numeric_limits<double>::infinity()) == ase::kernel::HostStatusInvalidArgument);
-    CHECK(resources.advance(-0.25) == ase::kernel::HostStatusInvalidArgument);
-    CHECK(resources.tick_count() == ticks);
-    CHECK(resources.running());
-    CHECK(std::string(resources.failure_step()).empty());
-}
-
-TEST_CASE("L5 without a window: the time lapse is a pace of ase-time's clock, one tick per frame, faster than real time") {
-    AdapterEnvironment& env = environment();
-    REQUIRE(env.booted == ase::kernel::HostStatusOk);
-    GodotHostResourceManager& resources = env.resources;
-    advance_frames(resources, 4u);
-
-    // The game seconds of eight frames at the default pace.
-    const double base_from = resources.get_clock().elapsed_s;
-    advance_frames(resources, 8u);
-    const double base_span = resources.get_clock().elapsed_s - base_from;
-    CHECK(base_span > 0.0);
-
-    // The lapse is a factor on the pace port: ase-pl-flora multiplies it with ase-time's base pace and
-    // ase-time runs this host's clock at the product. Every frame stays one tick; no tick is added.
-    REQUIRE(resources.pace(10.0) == ase::kernel::HostStatusOk);
-    advance_frames(resources, 8u);
-    const uint64_t ticks_before = resources.tick_count();
-    const double fast_from = resources.get_clock().elapsed_s;
-    advance_frames(resources, 8u);
-    CHECK(resources.tick_count() - ticks_before == 8u);
-    CHECK(resources.last_steps() == 1u);
-    CHECK(resources.backlog_seconds() == 0.0);
-    CHECK(resources.get_clock().elapsed_s - fast_from > base_span * 2.0);
-
-    // The default pace back.
-    REQUIRE(resources.pace(GODOT_PACE_NONE) == ase::kernel::HostStatusOk);
-    advance_frames(resources, 4u);
-    CHECK(resources.running());
-    CHECK(std::string(resources.failure_step()).empty());
+    const std::vector<VivariumSaltView>& salt = resources.get_salt();
+    REQUIRE(!salt.empty());
+    CHECK(resources.salt_generation() > 0u);
+    for (std::size_t i = 0u; i < salt.size(); ++i) {
+        const VivariumSaltView& chunk = salt[i];
+        CAPTURE(chunk.object_id);
+        CHECK(chunk.hyd_kg >= 0.0);
+        CHECK(chunk.soil_kg >= 0.0);
+        // the sum is the one ase-gis added (GisQrySlntCalcSystem), the view adds nothing: it matches both halves
+        CHECK(chunk.sum_kg == doctest::Approx(chunk.hyd_kg + chunk.soil_kg).epsilon(1e-5));
+        for (std::size_t j = i + 1u; j < salt.size(); ++j) {
+            CHECK(salt[j].object_id != chunk.object_id);  // one record per chunk
+        }
+    }
+    // The measuring point of the I-4 balance: every changed read writes its line, so the LAST salt line of the log
+    // carries the chunk count of the view held now. It is read from the log file, never from the queue: the first
+    // salt read lands in the first frames, and the log case before this one drains the queue with it; a salt that
+    // does not move after that writes no second line (usecase:100364, the log of the one game host). ase-log
+    // colours words of the line by their shape (colorize_log_line), so the whole log is read without its colour
+    // before the line is searched: the search and the count then see the text the host printed.
+    const std::string log_text = without_colour(ase::fileio::read_text(ASE_ADP_GODOT_TEST_LOG));
+    const std::string::size_type last = log_text.rfind("salt chunks ");
+    REQUIRE(last != std::string::npos);
+    const std::string salt_line = log_text.substr(last, log_text.find('\n', last) - last);
+    const std::string expected = "salt chunks " + std::to_string(salt.size()) + " hyd_kg=";
+    CAPTURE(salt_line);
+    CHECK(salt_line.compare(0u, expected.size(), expected) == 0);
 }
 
 TEST_CASE("beside the game host the self-test refuses and leaves the game host untouched") {
@@ -479,6 +448,7 @@ TEST_CASE("clear_all ends the game host once, is idempotent and leaves no host b
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
     GodotHostResourceManager& resources = env.resources;
     const uint64_t templates = resources.template_generation();
+    const uint64_t salt = resources.salt_generation();
     resources.clear_all();
     resources.clear_all();
     CHECK(!resources.has_host());
@@ -491,6 +461,9 @@ TEST_CASE("clear_all ends the game host once, is idempotent and leaves no host b
     CHECK(resources.get_template_corners().empty());
     CHECK(resources.get_template_triangles().empty());
     CHECK(resources.template_generation() > templates);
+    // the salt of the old host goes with it, and the view sees a new generation (H.9, I-4)
+    CHECK(resources.get_salt().empty());
+    CHECK(resources.salt_generation() > salt);
     CHECK(resources.advance(0.25) == ase::kernel::HostStatusInvalidState);
     CHECK(resources.note("after the host") == ase::kernel::HostStatusInvalidState);
 }

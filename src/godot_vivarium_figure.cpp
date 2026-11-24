@@ -260,6 +260,21 @@ void VivariumView::follow_figure(double elapsed_s) {
              ::godot::String::num_int64(drawn_level));
     }
 
+    // the pose the figure led is drawn in and whether its body stands in the frame, at its first frame and then per
+    // change (B0783, T.11): the camp pictures of the acceptance hold a seated or sleeping figure in the frame from this
+    // line, beside the codes of FIGURE_POSE_*, so a picture without the figure fails and none is guessed from pixels
+    uint8_t drawn_pose = FIGURE_POSE_STAND;
+    bool framed = false;
+    if (led != nullptr && take_figure_pose(scene_, led->object_id, drawn_pose, framed)) {
+        note(::godot::String("figure pose figure=") + ::godot::String::num_uint64(led->object_id) + " value " +
+             ::godot::String::num_int64(drawn_pose) + " framed " + (framed ? "1" : "0") + " stand " +
+             ::godot::String::num_int64(FIGURE_POSE_STAND) + " sit_ground " +
+             ::godot::String::num_int64(FIGURE_POSE_SIT_GROUND) + " sit_stone " +
+             ::godot::String::num_int64(FIGURE_POSE_SIT_STONE) + " sleep_back " +
+             ::godot::String::num_int64(FIGURE_POSE_SLEEP) + " sleep_side " +
+             ::godot::String::num_int64(FIGURE_POSE_SLEEP_SIDE));
+    }
+
     // the water the figure led carries, at the first sight of its vessel and then per change (07.14): ase-equipment
     // fills the can at the brook and empties it at the birch, so a rise is the fill and a fall the pour - under SS/PC
     // by the player's tap and under AI/PC by the acts of the BDI alike; the acceptance reads both from this line

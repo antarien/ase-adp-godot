@@ -44,7 +44,7 @@
 
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
 #include <ase/adp/godot/godot_hud_ui_ground.hpp>
-#include <ase/adp/godot/godot_hud_ui_pen.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
 #include <cstdint>

@@ -7,7 +7,7 @@
  * @brief       The node of the water in the care view's 3D scene and its fill
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.11 step 3, B0281: the water stands where ase-hydro puts it.
  *              build_water_table (godot_plant_water.hpp) lays the plane in the bed of every brook at its bed
- *              plus the depth ase-hydro gives it; the stream port (FloraHostStrmExptSystem) carries depth,
+ *              plus the depth ase-hydro gives it; the stream port (WaterHostStrmExptSystem) carries depth,
  *              velocity and course. In every pit it lays the open water hydrogeology.pit.v1 carries over the
  *              floor of its cell (D2506). This file hangs it into the scene
  *              in a ShaderMaterial of GODOT_WATER_SHADER_FILE. Nothing of the water is computed here.
@@ -32,6 +32,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
+#include <ase/adp/godot/godot_host_current_view.hpp>
 #include <ase/adp/godot/godot_host_pit_view.hpp>
 #include <ase/adp/godot/godot_host_stream_view.hpp>
 #include <ase/adp/godot/godot_plant_geometry.hpp>
@@ -54,6 +55,9 @@ constexpr float GODOT_WATER_SHALLOW_B = 0.24f;                // shallow brook w
 constexpr float GODOT_WATER_DEEP_R = 0.08f;                   // deep brook water, red
 constexpr float GODOT_WATER_DEEP_G = 0.26f;                   // deep brook water, green
 constexpr float GODOT_WATER_DEEP_B = 0.16f;                   // deep brook water, blue
+constexpr float GODOT_WATER_HUE_TURN_DEG = 360.0f;            // one turn of the colour circle: the hue of a cell over it is the share UV2.x carries to the shader
+constexpr float GODOT_WATER_HUE_ANSWERED = 1.0f;              // UV2.y of a vertex whose nearest current cell answered a hue
+constexpr float GODOT_WATER_HUE_UNANSWERED = 0.0f;            // UV2.y of a vertex no current cell answered a hue for: the shader keeps its own colour
 
 // The groundwater standing in a pit (D2508): its own node and shader, still water without current or strokes.
 // The node name and the colours stand here and not in scene/types.hpp, which nearly every unit of the adapter
@@ -79,11 +83,16 @@ void build_plant_water(::godot::Node3D* scene);
  * Replaces the water with build_water_table over the stream records, the pit records and the ground mesh `ground` as
  * fill_plant_ground left it (PlantGroundSurface::arrays, a dig already written into it): the cells of a bed into
  * GODOT_PLANT_WATER, the cells only a pit floods into GODOT_PLANT_PIT_WATER (D2508); each node keeps its material.
- * A scene without the nodes draws no water, an empty ground no water either.
+ * Every vertex of the brook water carries in its second UV the hue of the nearest current cell whose quality record
+ * answered one (`currents`, curr_hue_deg of water.quality.v1, the look ase-signature files per cell): x the hue over
+ * GODOT_WATER_HUE_TURN_DEG, y 1 where a cell answered and 0 where none did, so the shader keeps its own colour there.
+ * Nearest and never blended, as ase-gis answers the layer the hue comes from. A scene without the nodes draws no
+ * water, an empty ground no water either.
  *
  * @return the ground cells under water
  */
 uint32_t fill_plant_water(::godot::Node3D* scene, const std::vector<VivariumStreamView>& streams,
-                          const std::vector<VivariumPitView>& pits, const PlantMeshArrays& ground);
+                          const std::vector<VivariumPitView>& pits, const std::vector<VivariumCurrentView>& currents,
+                          const PlantMeshArrays& ground);
 
 }  // namespace ase::adp::godot

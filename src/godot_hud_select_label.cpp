@@ -22,6 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_select_label.hpp>
+#include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
