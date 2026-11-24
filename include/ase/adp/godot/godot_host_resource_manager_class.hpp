@@ -470,6 +470,12 @@ public:
      * every snapshot; a patch without a record of the level port has no entry and draws its body whole.
      */
     [[nodiscard]] const std::unordered_map<uint32_t, VivariumLodView>& get_lods() const;
+    /**
+     * The canopy of the raster cell under every patch whose cell reports one, keyed by the patch's object id
+     * (flora.cnpy.v1, GIS_CANOPY_LAI, GIS_CANOPY_HEIGHT and PLT_CONST_CNPY_LIGHT_EXT, LOD 5, usecase:100387 view the
+     * plant). Read with every snapshot; a patch without a record draws no canopy dome.
+     */
+    [[nodiscard]] const std::unordered_map<uint32_t, VivariumCnpyView>& get_cnpys() const;
     [[nodiscard]] uint32_t patch_count() const;
     [[nodiscard]] const VivariumClockView& get_clock() const;
     /**
@@ -816,6 +822,7 @@ private:
     std::unordered_map<uint32_t, uint32_t>           places_;      // place → object id of the last snapshot
     std::unordered_map<uint32_t, double>             caps_;        // patch object id → cap radius in metres of the cap port, last read (usecase:101362 scale the organ templates)
     std::unordered_map<uint32_t, VivariumLodView>    lods_;        // patch object id → graded level of its plant body of the level port, last read (usecase:101657 grade plants by picture height)
+    std::unordered_map<uint32_t, VivariumCnpyView>   cnpys_;       // patch object id → canopy of its raster cell of the canopy port, last read (usecase:100387 view the plant)
     VivariumClockView                                clock_;
     VivariumWeatherView                              weather_;     // the weather of the sky, last read (N0449)
     VivariumSapView                                  sap_;         // the birch's tap and bark vessel, last read (N0457)

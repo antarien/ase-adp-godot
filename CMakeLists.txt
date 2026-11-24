@@ -190,6 +190,7 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/lod/types.hpp       # the level port keys, the code step and the drawn parts of a plant (usecase:101657 grade plants by picture height, B0897)
     include/ase/adp/godot/lod/godot_host_lod_view.hpp  # VivariumLodView and level_share without a Godot type (usecase:101657 grade plants by picture height, B0897)
     include/ase/adp/godot/lod/godot_plant_level_scene.hpp  # show_plant_levels and show_plant_share, body or card by the level (usecase:101657 grade plants by picture height, B0897)
+    include/ase/adp/godot/lod/godot_plant_atlas.hpp  # drawn_parts, atlas_of and wait_for_view_tile, shared by the impostor and the atlas file (usecase:100969 instance the plant organs, T.10)
     include/ase/adp/godot/godot_plant_ground.hpp
     include/ase/adp/godot/godot_plant_water.hpp
     include/ase/adp/godot/godot_scene_exposure.hpp
@@ -400,7 +401,8 @@ add_library(ase-adp-godot SHARED
     src/godot_plant_scene.cpp    # the 3D scene of the care view: camera, sun, sky, ground, bark, instances (03.1)
     src/godot_plant_scene_patch.cpp # the bodies on the patch beside the plants: seeds and caps (usecase:101362)
     src/godot_plant_scene_mesh.cpp # the meshes of that scene: one surface, the instance buffers, the bark tube of a body (usecase:101613, B0295)
-    src/godot_plant_scene_impostor.cpp # the card of a far plant and the viewport that draws it once (usecase:101613, B0295 point 4)
+    src/godot_plant_scene_impostor.cpp # the card, billboard and canopy dome of a far plant and the share each shows (usecase:100969, B0295 point 4)
+    src/godot_plant_scene_atlas.cpp # the shared view and billboard pages, the slot of each plant and the tiles drawn per frame (usecase:100969, T.10)
     src/godot_plant_environment.cpp  # sky colour as a Sky shader, ambient light, fog and exposure of that scene (B0184)
     src/godot_plant_sky.cpp      # the moon light and the discs of sun and moon in that scene (usecase:101384 place sun and moon spatially, 03.11)
     src/godot_plant_sky_disc.cpp # the middle of the sky dome and the discs of the sky on it (usecase:101384, B0262)

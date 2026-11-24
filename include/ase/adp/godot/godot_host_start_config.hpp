@@ -143,6 +143,7 @@ struct VivariumStartConfig {
     std::string autumn_port;         // host port of the autumn colours, one record per patch whose colour stands (ase-pl-flora: flora.autumn.v1, usecase:101646 colour the leaves in autumn)
     std::string cap_port;            // host port of the cap radii, one record per patch whose fruit body has a cap (ase-pl-flora: flora.cap.v1, usecase:101362 scale the organ templates)
     std::string lod_port;            // host port of the graded levels, one record per patch whose plant body is graded (ase-pl-flora: flora.lod.v1, usecase:101657 grade plants by picture height)
+    std::string cnpy_port;           // host port of the canopy of the whole, one record per patch whose raster cell reports a canopy (ase-pl-flora: flora.cnpy.v1, LOD 5, usecase:100387 view the plant)
     std::string clock_port;          // host port of the game clock (ase-pl-flora: flora.clock.v1)
     std::string scene_port;          // host port the patches are laid through (ase-pl-flora: flora.scene.v1)
     std::string organ_ports[GODOT_ORGAN_COUNT];  // one host port per organ class, index = GODOT_ORGAN_*

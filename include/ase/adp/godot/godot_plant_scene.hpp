@@ -145,17 +145,17 @@ void fill_tube(::godot::MeshInstance3D* node, const PlantBodyTube& tube, const s
                const ::godot::Ref<::godot::Material>& material, uint32_t shown_orders, bool coarse);
 
 /**
- * Puts the impostor nodes under `plant` (register B0295 point 4, usecase:101613): the card GODOT_PLANT_IMPOSTOR,
- * hidden, and the viewport GODOT_PLANT_IMPOSTOR_VIEW of its own world with an orthographic camera and one drawing
- * node per drawing node of the plant, drawing nothing yet. No plant, nothing.
+ * Puts the impostor nodes under `plant` (register B0295 point 4, usecase:100969): the view card GODOT_PLANT_IMPOSTOR
+ * and the billboard GODOT_PLANT_BILLBOARD, hidden until their tiles are drawn on the shared atlas pages, and the
+ * canopy dome GODOT_PLANT_CANOPY, hidden. No plant, nothing.
  */
 void make_impostor(::godot::Node3D* plant);
 
 /**
- * Stands the card in for `plant` from `frame.reach` on: the drawing nodes of the plant end their visibility range
- * there, the drawing nodes of the viewport take the resources the plant nodes were just filled with, the viewport
- * draws the texture once at the pixels of the frame, and the card begins at the reach in the size of the body. A
- * frame with reach 0 hides the card and lets the plant draw at every distance. No plant, nothing.
+ * Lets `plant` stand in as a card: the box of `frame` is kept on the plant and its view tile waits to be drawn on a
+ * shared view page (draw_view_tiles sets the card, the billboard and the dome on its regions). A frame without a
+ * reach, a height or texture pixels gives the slot back and hides card, billboard and dome. WHEN the card shows is
+ * the level of ase-render-data (show_plant_share), never the reach. No plant, nothing.
  */
 void fill_impostor(::godot::Node3D* plant, const PlantImpostorFrame& frame);
 

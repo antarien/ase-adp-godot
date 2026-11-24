@@ -37,6 +37,7 @@
 #include <unordered_map>
 
 namespace godot {
+class Node;
 class Node3D;
 }  // namespace godot
 
@@ -44,11 +45,42 @@ namespace ase::adp::godot {
 
 /**
  * Hand every plant body below the plant root of `scene` its share of body and card by its level in `lods` (keyed by
- * the patch's object id). A body without a record is not graded and draws whole.
+ * the patch's object id), and its canopy dome the share handed to the canopy by the cover of its raster cell in
+ * `cnpys` (flora.cnpy.v1, same key). A body without a level record is not graded and draws whole; a patch without a
+ * canopy record draws no dome.
  */
-void show_plant_levels(::godot::Node3D* scene, const std::unordered_map<uint32_t, VivariumLodView>& lods);
+void show_plant_levels(::godot::Node3D* scene, const std::unordered_map<uint32_t, VivariumLodView>& lods,
+                       const std::unordered_map<uint32_t, VivariumCnpyView>& cnpys);
 
 /** Set the drawing nodes and the view card of one plant node by `share`. */
 void show_plant_share(::godot::Node3D* plant, const PlantLevelShare& share);
+
+/**
+ * Set the canopy dome of one plant node (LOD 5): shown by `canopy` (share.canopy of level_share) times the cover of
+ * `cnpy` (canopy_cover), its top at the crown height of the raster cell. No record (nullptr) hides it.
+ */
+void show_plant_canopy(::godot::Node3D* plant, float canopy, const VivariumCnpyView* cnpy);
+
+/**
+ * Give the atlas slot of `plant` back to `atlas` (GODOT_PLANT_BILLBOARD_ATLAS, LOD 3 and 4): its view tile and its
+ * billboard tile are emptied, their pages draw the empty place and the next plant takes the slot before a new one. A
+ * plant without a slot gives nothing back. Called when the card of the plant loses its body and before the plant
+ * leaves the scene.
+ */
+void drop_impostor(::godot::Node* plant, ::godot::Node* atlas);
+
+/**
+ * Draw every billboard page of `atlas` once whose tile changed in an earlier frame: a page never draws in the frame
+ * its view tile was drawn, so it always reads the picture that view page drew. Runs every frame with show_plant_levels.
+ */
+void draw_billboard_pages(::godot::Node* atlas);
+
+/**
+ * Draw the view card tiles (LOD 3) of the plants below the plant root of `scene` that wait for it: a plant waits when
+ * its body was filled anew (fill_impostor) or the step of its bearing to the camera of the scene changed (view_step).
+ * At most GODOT_PLANT_VIEW_TILE_BUDGET tiles are drawn per frame, oldest first; the rest wait for the next frame.
+ * Runs every frame with show_plant_levels, before draw_billboard_pages.
+ */
+void draw_view_tiles(::godot::Node3D* scene);
 
 }  // namespace ase::adp::godot

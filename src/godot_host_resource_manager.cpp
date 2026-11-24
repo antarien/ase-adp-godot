@@ -1528,6 +1528,7 @@ bool ports_named(const VivariumStartConfig& config) {
                  !config.autumn_port.empty() &&
                  !config.cap_port.empty() &&
                  !config.lod_port.empty() &&
+                 !config.cnpy_port.empty() &&
                  !config.clock_port.empty() &&
                  !config.date_port.empty() &&
                  !config.scene_port.empty() &&
@@ -2516,6 +2517,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
                    host_->has_port(config_.autumn_port.c_str()) &&
                    host_->has_port(config_.cap_port.c_str()) &&
                    host_->has_port(config_.lod_port.c_str()) &&
+                   host_->has_port(config_.cnpy_port.c_str()) &&
                    host_->has_port(config_.clock_port.c_str()) &&
                    host_->has_port(config_.date_port.c_str()) &&
                    host_->has_port(config_.scene_port.c_str()) && host_->has_port(config_.ground_port.c_str()) &&
@@ -2629,6 +2631,7 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     places_.clear();
     caps_.clear();
     lods_.clear();
+    cnpys_.clear();
     clock_ = VivariumClockView{};
     weather_ = VivariumWeatherView{};
     sap_ = VivariumSapView{};
@@ -3210,6 +3213,49 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         lod.tile = tile;
         lod.cnpy = cnpy;
         lods_[record.object_id] = lod;
+    }
+
+    // THE CANOPY OF THE WHOLE COMES FROM THE RASTERS (FLORA_HOST_PORT_CNPY, LOD 5, usecase:100387 view the plant,
+    // PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10): ase-pl-flora files one record per patch whose raster cell reports a
+    // canopy, its object id the patch, the leaf area (GIS_CANOPY_LAI), the crown height (GIS_CANOPY_HEIGHT) and the
+    // extinction coefficient (PLT_CONST_CNPY_LIGHT_EXT). A patch without such a record draws no canopy dome; a record
+    // that names no patch of the patch port, or carries a value that is not finite, is a broken port. Kept beside
+    // the patch (cnpys_) like the level, for the same reach of the patch view header.
+    cnpys_.clear();
+    status = snapshot_all(*host_, config_.cnpy_port, records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        patches_.clear();
+        places_.clear();
+        caps_.clear();
+        lods_.clear();
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = records_[i];
+        if (patches_.find(record.object_id) == patches_.end()) {
+            patches_.clear();
+            places_.clear();
+            caps_.clear();
+            lods_.clear();
+            cnpys_.clear();
+            return refuse_record(*host_, config_.cnpy_port, record.object_id, "canopy of no patch");
+        }
+        const double lai = record_value(record, GODOT_KEY_CNPY_LAI);
+        const double height = record_value(record, GODOT_KEY_CNPY_HEIGHT);
+        const double ext = record_value(record, GODOT_KEY_CNPY_EXT);
+        if (!std::isfinite(lai) || !std::isfinite(height) || !std::isfinite(ext)) {
+            patches_.clear();
+            places_.clear();
+            caps_.clear();
+            lods_.clear();
+            cnpys_.clear();
+            return refuse_record(*host_, config_.cnpy_port, record.object_id, "canopy without its three values");
+        }
+        VivariumCnpyView cnpy;
+        cnpy.lai = lai;
+        cnpy.height = height;
+        cnpy.ext = ext;
+        cnpys_[record.object_id] = cnpy;
     }
 
     std::vector<KernelHostRecord> clock_records(1u);
@@ -5547,6 +5593,10 @@ const std::unordered_map<uint32_t, VivariumLodView>& GodotHostResourceManager::g
     return lods_;
 }
 
+const std::unordered_map<uint32_t, VivariumCnpyView>& GodotHostResourceManager::get_cnpys() const {
+    return cnpys_;
+}
+
 const std::unordered_map<uint32_t, double>& GodotHostResourceManager::get_caps() const {
     return caps_;
 }
@@ -5986,6 +6036,7 @@ void GodotHostResourceManager::clear_all() {
     places_.clear();
     caps_.clear();
     lods_.clear();
+    cnpys_.clear();
     clock_ = VivariumClockView{};
     weather_ = VivariumWeatherView{};
     records_.clear();

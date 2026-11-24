@@ -98,6 +98,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.lod");
     }
     start_.lod_port = utf8_of(text);
+    // The canopy of the whole (LOD 5, usecase:100387 view the plant, T.10): one record per patch whose raster cell
+    // reports a canopy, its values the leaf area, the crown height and the extinction coefficient of the cover.
+    if (!read_text(ports, "cnpy", text)) {
+        return fail_config("ports.cnpy");
+    }
+    start_.cnpy_port = utf8_of(text);
     if (!read_text(ports, "clock", text)) {
         return fail_config("ports.clock");
     }

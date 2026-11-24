@@ -52,6 +52,7 @@
 #include <ase/adp/godot/cap/types.hpp>
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/adp/godot/lod/godot_plant_level_scene.hpp>
+#include <ase/adp/godot/lod/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 #include <ase/adp/godot/template/types.hpp>
@@ -65,6 +66,7 @@
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/multi_mesh.hpp>
 #include <godot_cpp/classes/multi_mesh_instance3d.hpp>
+#include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/core/memory.hpp>
@@ -150,6 +152,8 @@ void hand_on(::godot::GeometryInstance3D* node, const char* name, bool known, fl
     (void)add_part<::godot::MeshInstance3D>(scene, GODOT_PLANT_GROUND);
     build_plant_water(scene);
     (void)add_part<::godot::Node3D>(scene, GODOT_PLANT_BODIES);
+    // the shared billboard pages of all plants (LOD 4): its pages come with the first slot they hold
+    (void)add_part<::godot::Node>(scene, GODOT_PLANT_BILLBOARD_ATLAS);
     (void)add_part<::godot::MultiMeshInstance3D>(scene, GODOT_PLANT_SEEDS);
     (void)add_part<::godot::Node3D>(scene, GODOT_PLANT_CAPS);
     build_plant_sky(scene);
@@ -203,7 +207,8 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
     if (bodies == nullptr) {
         return;
     }
-    // a plant whose body has no origin any more leaves the scene
+    // a plant whose body has no origin any more leaves the scene and gives its billboard slot back
+    ::godot::Node* atlas = part_of<::godot::Node>(scene, GODOT_PLANT_BILLBOARD_ATLAS);
     const ::godot::TypedArray<::godot::Node> standing = bodies->get_children();
     for (int64_t i = 0; i < standing.size(); ++i) {
         ::godot::Node* plant = ::godot::Object::cast_to<::godot::Node>(standing[i]);
@@ -215,6 +220,7 @@ void fill_plant_organs(::godot::Node3D* scene, const GodotHostResourceManager& r
             kept = kept || plant->get_name() == ::godot::StringName(body_name(origin.first));
         }
         if (!kept) {
+            drop_impostor(plant, atlas);
             bodies->remove_child(plant);
             plant->queue_free();
         }
@@ -347,7 +353,8 @@ void mark_plant_stands(::godot::Node3D* scene, const std::unordered_map<uint32_t
     }
 }
 
-void show_plant_levels(::godot::Node3D* scene, const std::unordered_map<uint32_t, VivariumLodView>& lods) {
+void show_plant_levels(::godot::Node3D* scene, const std::unordered_map<uint32_t, VivariumLodView>& lods,
+                       const std::unordered_map<uint32_t, VivariumCnpyView>& cnpys) {
     ::godot::Node3D* bodies = part_of<::godot::Node3D>(scene, GODOT_PLANT_BODIES);
     if (bodies == nullptr) {
         return;
@@ -366,8 +373,16 @@ void show_plant_levels(::godot::Node3D* scene, const std::unordered_map<uint32_t
         }
         const uint32_t body = static_cast<uint32_t>(name.substr(prefix).to_int());
         const auto found = lods.find(body);
-        show_plant_share(plant, level_share(found == lods.end() ? nullptr : &found->second));
+        const PlantLevelShare share = level_share(found == lods.end() ? nullptr : &found->second);
+        show_plant_share(plant, share);
+        // LOD 5: beyond the picture size of a tree the canopy of the whole stands in, from the rasters of the cell
+        const auto cell = cnpys.find(body);
+        show_plant_canopy(plant, share.canopy, cell == cnpys.end() ? nullptr : &cell->second);
     }
+    // LOD 3: the view tiles that wait are drawn on their view pages, at most the budget of one frame, oldest first
+    draw_view_tiles(scene);
+    // LOD 4: the billboard pages whose tiles changed in an earlier frame draw now, once
+    draw_billboard_pages(part_of<::godot::Node>(scene, GODOT_PLANT_BILLBOARD_ATLAS));
 }
 
 void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky, const SkyOvercastShade& overcast,

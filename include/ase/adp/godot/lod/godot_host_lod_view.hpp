@@ -36,6 +36,8 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
+#include <cstdint>
+
 namespace ase::adp::godot {
 
 /** The level record of one patch - a copy, never a reference into the App. Every value as the record carried it. */
@@ -56,6 +58,22 @@ struct PlantLevelShare {
 };
 
 /**
+ * The canopy record of one patch (flora.cnpy.v1, LOD 5 "Kronendach des Ganzen") - a copy, never a reference into the
+ * App. The rasters of the whole under the patch as ase-gis sampled them, with the coefficient of ase-plant.
+ */
+struct VivariumCnpyView {
+    double lai = 0.0;     // GIS_CANOPY_LAI of the raster cell under the patch, m2 of leaf over m2 of ground
+    double height = 0.0;  // GIS_CANOPY_HEIGHT of that cell, crown height of its tallest stand in metres
+    double ext = 0.0;     // PLT_CONST_CNPY_LIGHT_EXT, the extinction coefficient of the cover
+};
+
+/**
+ * The share of the ground the canopy of `cnpy` covers, 1 - exp(-ext * lai) (Beer-Lambert, the cover ase-plant reads
+ * its light through). No record (nullptr): no canopy reported, nothing is covered.
+ */
+float canopy_cover(const VivariumCnpyView* cnpy);
+
+/**
  * The share of the four forms for the level `lod` of a plant. No record (nullptr): the body is not graded and is
  * drawn whole. Below the view level the body is drawn; at the view level the card stands in, at the tile level the
  * billboard, from the canopy level on the individual is part of the canopy. A level whose next coarser level draws
@@ -63,5 +81,29 @@ struct PlantLevelShare {
  * the shares always add up to one.
  */
 PlantLevelShare level_share(const VivariumLodView* lod);
+
+/**
+ * The place of one tile on the shared atlas pages (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN Detailstufen: "Atlas-Seiten
+ * 2048 x 2048"): the view card tiles of LOD 3 (32 x 64) and the billboard tiles of LOD 4 (16 x 32). A plant holds one
+ * slot number for both; the slots fill a page row by row before the next page begins.
+ */
+struct AtlasSlot {
+    uint32_t page = 0;    // the atlas page the tile stands on, 0 for the first
+    uint32_t column = 0;  // the column of the tile on its page, 0 at the left edge
+    uint32_t row = 0;     // the row of the tile on its page, 0 at the top edge
+};
+
+/** The billboard page, column and row of the slot numbered `index` (GODOT_PLANT_BILLBOARD_COLUMNS x ROWS a page). */
+AtlasSlot billboard_slot(uint32_t index);
+
+/** The view card page, column and row of the slot numbered `index` (GODOT_PLANT_VIEW_COLUMNS x ROWS a page). */
+AtlasSlot view_slot(uint32_t index);
+
+/**
+ * The step of the bearing from a plant to the observer standing `dx`, `dz` metres from it on the ground: the angle
+ * from +z towards +x counted in GODOT_PLANT_VIEW_ANGLE_STEP, rounded down. Its view tile is drawn again when the step
+ * changes (PLAN Detailstufen: "der Blickwinkel sich um mehr als einen Schritt gedreht hat").
+ */
+int32_t view_step(float dx, float dz);
 
 }  // namespace ase::adp::godot

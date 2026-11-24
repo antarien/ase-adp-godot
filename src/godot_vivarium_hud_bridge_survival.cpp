@@ -198,15 +198,28 @@ void VivariumView::bridge_fire(SurvivalFireFrame& fire) {
     // THE EDGE OF THE BRIDGE FOR B0657: ingle.fire.v1 of ase-pl-ingle (IngleHostFireExptSystem, Production) lays one
     // record per fire cell of ase-fire, its object the entity of the HUB_FIRE_CELL row, its keys the marks FLAM, CHAR,
     // EMBR and ASH, the fuel left and laid, the heat, the fuel body and the air of ase-atmosphere with its grade
-    // ATM_GAS_BTH_STATE (GodotHostResourceManager::read_survival_fires). The card shows the cell laid with the most
-    // fuel, the log of the camp; its marks name the stage and its fuel the share LENHA. Without the port or a cell
-    // the card stands on the mockup's camp fire (hud_bridge_survival_fire_*, load_hud_bridge_survival) and the gap
-    // stays logged, its line naming every key of the record in the record's order.
+    // ATM_GAS_BTH_STATE (GodotHostResourceManager::read_survival_fires). The card shows the fire of the camp: the
+    // cell that burns (a flame, a bed of charcoal or an ember, not yet ash) laid with the most fuel, and only while no
+    // cell burns the cell laid with the most fuel, the log of the camp. A camp is kindled at one of its sticks
+    // (FireHubActSyncSystem lays the spark on the one fuel body the keeper acts on), so the log with the most fuel is
+    // a resting one while its neighbour flames, and a card that read it showed a camp unlit beside its own flame
+    // (run camp_figure_1124t: FireCmbsSystem ignited 1 cell at 13:12:25 while the card stood on burning=0). Its
+    // marks name the stage and its fuel the share LENHA. Without the port or a cell the card stands on the mockup's
+    // camp fire (hud_bridge_survival_fire_*, load_hud_bridge_survival) and the gap stays logged, its line naming
+    // every key of the record in the record's order.
     const char* act =
         "ingle.fire.v1(flame,charcoal,ember,ash,fuel,fuel_laid,heat,body,oxygen,toxicity,breath_state)";
+    // A mark the record lacks is a mark not set.
+    const auto mark = [](double value) { return !std::isnan(value) && value != 0.0; };
+    const auto lit = [&mark](const VivariumSurvivalFireView& view) {
+        return !mark(view.ash) && (mark(view.flame) || mark(view.charcoal) || mark(view.ember));
+    };
     const VivariumSurvivalFireView* cell = nullptr;
     for (const VivariumSurvivalFireView& candidate : resources_.get_survival_fires()) {
-        if (cell == nullptr || candidate.fuel_laid > cell->fuel_laid) {
+        const bool first = cell == nullptr;
+        const bool kindled_over_resting = !first && lit(candidate) && !lit(*cell);
+        const bool heavier_alike = !first && lit(candidate) == lit(*cell) && candidate.fuel_laid > cell->fuel_laid;
+        if (first || kindled_over_resting || heavier_alike) {
             cell = &candidate;
         }
     }
@@ -216,9 +229,7 @@ void VivariumView::bridge_fire(SurvivalFireFrame& fire) {
         return;
     }
     close_gap(SurvivalFireFrame::GAP_FIRE, act);
-    // A mark the record lacks is a mark not set. ase-fire keeps a cell in one stage at a time; the latest mark the
-    // cell carries names it.
-    const auto mark = [](double value) { return !std::isnan(value) && value != 0.0; };
+    // ase-fire keeps a cell in one stage at a time; the latest mark the cell carries names it.
     fire.shown = true;
     fire.stage = mark(cell->ash)        ? SurvivalFireFrame::STAGE_LAST
                  : mark(cell->ember)    ? SurvivalFireFrame::STAGE_EMBER

@@ -65,6 +65,8 @@ constexpr const char* HUD_TOAST_NEW_STAGE = "toast.new_stage";
 constexpr const char* HUD_WORD_STAGE = "stages.";
 // B0783: the share of fuel the line `hud survival` names in whole tenths, so the line moves on a tenth, never per tick
 constexpr double HUD_FUEL_TENTHS = 10.0;
+// the thirst field of `hud survival` while MTB_THIRST does not count for the figure: below every level the owner writes
+constexpr int32_t HUD_THIRST_UNCOUNTED = -1;
 
 /**
  * The states the survival layer of `frame` draws by, as the line `hud survival ...` (U0245): the rest card (U05),
@@ -74,7 +76,10 @@ constexpr double HUD_FUEL_TENTHS = 10.0;
  * of the card FOGO (U04, B0783): whether a fire stands by the figure, its stage (0 ignite to 4 ash) and whether it
  * burns at a rate, and the share of fuel left in whole tenths (HUB_FIRE_CELL_FUEL over HUB_FIRE_CELL_FUEL_LAID of
  * ingle.fire.v1, rounded down). Every field is a flag, a stage or a tenth, so the line changes only on an edge, never
- * per tick: the fuel falls every tick, its tenth about ten times over a whole burn.
+ * per tick: the fuel falls every tick, its tenth about ten times over a whole burn. Last the thirst of the rail CORPO
+ * (U01) in whole units of MTB_THIRST as survival.body.v1 carries it, rounded down, -1 while the quantity does not
+ * count for the figure: the drink of ase-bdi (BdiActDrnkSystem) reaches the window as a fall of it, the E2E leg
+ * water-drink of vivarium_figure_acceptance.py reads it, and it moves once per unit, never per tick.
  */
 std::string survival_line(const VivariumHudFrame& frame) {
     const auto bit = [](bool on) { return on ? "1" : "0"; };
@@ -89,7 +94,10 @@ std::string survival_line(const VivariumHudFrame& frame) {
            // the share lies in 0 to 1, so the cast toward zero is the rounding down
            std::to_string(frame.fire.shown
                               ? static_cast<int32_t>(ase::math::clamp(frame.fire.fuel, 0.0, 1.0) * HUD_FUEL_TENTHS)
-                              : 0);
+                              : 0) +
+           // the owner's level is not negative, so the cast toward zero is the rounding down
+           " thirst=" + std::to_string(body.thirst.counts ? static_cast<int32_t>(ase::math::max(body.thirst.value, 0.0))
+                                                           : HUD_THIRST_UNCOUNTED);
 }
 }  // namespace
 

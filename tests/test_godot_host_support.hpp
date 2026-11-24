@@ -113,6 +113,9 @@ inline VivariumStartConfig vivarium_config(std::string& bundle) {
     // The graded levels of the plant bodies (usecase:101657 grade plants by picture height): read_snapshot keeps them
     // per patch object id, so boot() asks the set for this port as well.
     config.lod_port = "flora.lod.v1";
+    // The canopy of the raster cell under a patch (LOD 5, usecase:100387 view the plant): read_snapshot keeps it per
+    // patch object id beside the level, so boot() asks the set for this port as well.
+    config.cnpy_port = "flora.cnpy.v1";
     config.clock_port = "flora.clock.v1";
     // The SURA date record (FloraHostClkExptSystem): snapshot() reads it beside the clock, so boot()
     // asks the set for this port as well.

@@ -45,7 +45,6 @@
 namespace ase::adp::godot {
 
 constexpr const char* GODOT_PLANT_IMPOSTOR = "PlantImpostor";            // the card that stands for a far plant (B0295 point 4)
-constexpr const char* GODOT_PLANT_IMPOSTOR_VIEW = "PlantImpostorView";  // the viewport that draws the card texture of a plant once
 
 /**
  * The impostor of one body. A reach of 0 means the body has no ring to measure: it gets no card and its nodes no

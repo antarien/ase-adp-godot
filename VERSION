@@ -43,7 +43,7 @@
 #   stable = Production ready (set manually)
 #
 # ==============================================================================
-ASE_ADP_GODOT=00.00.34.00034
+ASE_ADP_GODOT=00.00.35.00035
 ASE_ADP_GODOT_NAME=ASE Adp Godot
 ASE_ADP_GODOT_DESC=Godot 4.5 GDExtension adapter that draws and drives one embedded ASE host (AseVivariumView)
 ASE_ADP_GODOT_LAYER=5

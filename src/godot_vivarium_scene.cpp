@@ -24,8 +24,8 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @register    N0487 (the stem base as a body its owner reports through its port), carrier N0448
  * @created     2026-10-18
- * @modified    2026-11-15
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-24
+ * @version     00.00.35.00035 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -139,10 +139,23 @@ void VivariumView::follow_scene(double elapsed_s) {
         const uint32_t wet = fill_plant_water(scene_, resources_.get_streams(), resources_.get_pits(),
                                               resources_.get_currents(), ground_surface_.arrays);
         const uint64_t water_usec = ticks->get_ticks_usec() - water_start_usec;
+        // THE MEASURING POINT OF H.3 (the 3 m pit beside the brook stands just below the brook stage): every pit
+        // with the place, the open water and the ice its record carries, every brook with its depth and the table
+        // beside its bed, so a picture of the pit is read against the numbers the view drew it from
+        ::godot::String waters;
+        for (const VivariumPitView& pit : resources_.get_pits()) {
+            waters += " pit x=" + ::godot::String::num(pit.x, 2) + " z=" + ::godot::String::num(pit.z, 2) +
+                      " depth_m=" + ::godot::String::num(pit.depth_m, 3) + " ice_m=" +
+                      ::godot::String::num(pit.ice_m, 3);
+        }
+        for (const VivariumStreamView& stream : resources_.get_streams()) {
+            waters += " brook depth_m=" + ::godot::String::num(stream.depth_m, 3) + " table_m=" +
+                      ::godot::String::num(stream.groundwater_level_m, 3);
+        }
         note("scene water cells " + ::godot::String::num_int64(static_cast<int64_t>(wet)) + " brooks " +
              ::godot::String::num_int64(static_cast<int64_t>(resources_.get_streams().size())) + " pits " +
              ::godot::String::num_int64(static_cast<int64_t>(resources_.get_pits().size())) +
-             " fill_usec=" + ::godot::String::num_uint64(water_usec));
+             " fill_usec=" + ::godot::String::num_uint64(water_usec) + waters);
     }
     // the standing and frozen waters of H.13 (usecase:100327 lay the water request): the lake and pond bodies
     // ase-terrain files at the top face of their box, the sea at NN0 over every salt chunk, the ice over the ground
@@ -277,7 +290,7 @@ void VivariumView::follow_scene(double elapsed_s) {
     mark_plant_stands(scene_, stands, ground == stands.end() ? PlantStand{} : ground->second);
     // body or view card by the level ase-render-data graded each plant to, every frame (flora.lod.v1,
     // PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10, usecase:101657 grade plants by picture height)
-    show_plant_levels(scene_, resources_.get_lods());
+    show_plant_levels(scene_, resources_.get_lods(), resources_.get_cnpys());
     // an overcast sky turns the sky grey and dims the light (PLAN_ASE_VIVARIUM_PHASE_06_HUD row N01): SkyOvercast
     // derives the shade from the sky frame's kind of weather and the sun's height. The frame carries a kind only
     // while the sky port's colours carry no tint of it (the bridge's weather, N0449); the weather of

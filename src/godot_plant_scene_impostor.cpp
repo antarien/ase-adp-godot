@@ -2,25 +2,30 @@
  * ASE GODOT ADAPTER - IMPOSTOR NODES OF THE PLANTS
  *
  * @file        godot_plant_scene_impostor.cpp
- * @brief       The card that stands for a far plant and the viewport that draws its texture once
+ * @brief       The card, the billboard and the canopy dome that stand for a far plant, and the share each of them shows
  * @description Register B0295 point 4: far bodies become an impostor. Every plant node carries a card
- *              (GODOT_PLANT_IMPOSTOR, a Sprite3D turning about y to the camera) and a viewport of its own world
- *              (GODOT_PLANT_IMPOSTOR_VIEW) with an orthographic camera and seven drawing nodes of its own, one per
- *              drawing node of the plant - the fine and the coarse bark tube under a bark node of its own
- *              (register B0317) and the five instance nodes, the fine and the coarse leaf card among them
- *              (PLAN_ASE_VIVARIUM_TREEGEN T.6: a leaf of a body in the far band is drawn as the coarse 1 x 1 card,
- *              GODOT_PLANT_LEAVES_CORS). Each of them reads the very mesh, instance buffer and material resource
- *              the plant node was just filled with - no value is taken over, the resource is the same object - so
- *              the viewport draws the body exactly as the scene does, the closing of thin rings included. It draws
- *              once each time the plant is filled, which is when a body ticked or the shown orders moved. WHEN the
- *              card takes over is the graded level of ase-render-data (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10,
- *              usecase:101657 grade plants by picture height, flora.lod.v1): show_plant_share sets the drawing
- *              nodes and the card by the share level_share gives, every frame, so the body and the card cross over
- *              in the dither band of ase-render-data and are never both whole and never both gone. The reach of
- *              impostor_of (godot_plant_impostor.hpp) only sizes the texture.
+ *              (GODOT_PLANT_IMPOSTOR, a Sprite3D turning about y to the camera), a billboard (GODOT_PLANT_BILLBOARD,
+ *              LOD 4) and a canopy dome (GODOT_PLANT_CANOPY, LOD 5). None of them draws a picture of its own: the
+ *              body is drawn once into its tile on a shared view page and shown from there
+ *              (godot_plant_scene_atlas.cpp, PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10 Detailstufen, "Atlas-Seiten
+ *              2048 x 2048"), so 10 000 birches need a handful of render targets, not 10 000.
  *
- *              The viewport draws without light (DEBUG_DRAW_UNSHADED, the albedo of the materials) and with a clear
- *              background; the card is shaded, so the sun and the sky of the scene light it like the plant beside it.
+ *              fill_impostor runs whenever a body is filled, which is when a body ticked or the shown orders moved. It
+ *              keeps the box of the body on the plant node (GODOT_KEY_VIEW_FRAME) and lets its view tile wait to be
+ *              drawn (wait_for_view_tile); draw_view_tiles draws the waiting tiles within the budget of a frame and
+ *              sets the card, the billboard and the dome on their regions. A body without a ring to measure or
+ *              without a size gives its slot back (drop_impostor), and its card, billboard and dome lose their
+ *              texture and hide.
+ *
+ *              WHEN each form takes over is the graded level of ase-render-data (usecase:101657 grade plants by
+ *              picture height, flora.lod.v1): show_plant_share sets the drawing nodes, the card and the billboard by
+ *              the share level_share gives, every frame, so two forms cross over in the dither band of ase-render-data
+ *              and are never both whole and never both gone; show_plant_canopy sets the dome by the share handed on to
+ *              the canopy, thinned by the cover of its raster cell (flora.cnpy.v1). The reach of impostor_of
+ *              (godot_plant_impostor.hpp) only decides that the body can stand in.
+ *
+ *              The card and the billboard are shaded, so the sun and the sky of the scene light them like the plant
+ *              beside them; the view pages they show draw the albedo of the materials.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -30,7 +35,7 @@
  * @actor       Scene Graph Culler (SCENGRACUL)
  * @created     2026-11-13
  * @modified    2026-11-24
- * @version     00.00.22.00022 [init]
+ * @version     00.00.25.00025 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -39,50 +44,58 @@
 
 #include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_plant_impostor.hpp>
+#include <ase/adp/godot/lod/godot_host_lod_view.hpp>
+#include <ase/adp/godot/lod/godot_plant_atlas.hpp>
 #include <ase/adp/godot/lod/godot_plant_level_scene.hpp>
 #include <ase/adp/godot/lod/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
-#include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/base_material3d.hpp>
-#include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
-#include <godot_cpp/classes/multi_mesh.hpp>
-#include <godot_cpp/classes/multi_mesh_instance3d.hpp>
+#include <godot_cpp/classes/node.hpp>
+#include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/sphere_mesh.hpp>
 #include <godot_cpp/classes/sprite3d.hpp>
 #include <godot_cpp/classes/sprite_base3d.hpp>
-#include <godot_cpp/classes/sub_viewport.hpp>
+#include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
-#include <godot_cpp/classes/viewport.hpp>
-#include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/core/memory.hpp>
+#include <godot_cpp/core/object.hpp>
 #include <godot_cpp/variant/node_path.hpp>
-#include <godot_cpp/variant/string.hpp>
-#include <godot_cpp/variant/vector2i.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-
-#include <cstdint>
 
 namespace ase::adp::godot {
 
 namespace {
 
-// the seven drawing nodes of a plant; the bark draws through the two tubes below its node (register B0317), so
-// their paths run through it
-void drawn_parts(::godot::NodePath (&parts)[GODOT_PLANT_DRAWN_PARTS]) {
-    const ::godot::String bark = ::godot::String(GODOT_PLANT_BARK) + ::godot::String("/");
-    const char* const instanced[] = {
-        GODOT_PLANT_LEAVES, GODOT_PLANT_LEAVES_CORS, GODOT_PLANT_MALE, GODOT_PLANT_FEMALE, GODOT_PLANT_FRUIT};
-    uint32_t at = 0u;
-    for (const char* tube : {GODOT_PLANT_TUBES, GODOT_PLANT_TWIGS}) {
-        parts[at] = ::godot::NodePath(bark + ::godot::String(tube));
-        ++at;
+template <typename T>
+T* child_of(::godot::Node* node, const char* name) {
+    return ::godot::Object::cast_to<T>(node->get_node_or_null(::godot::NodePath(name)));
+}
+
+// a sprite of the plant that turns about y to the camera, shaded, cut at its alpha and hidden until it has a region
+::godot::Sprite3D* make_sprite(::godot::Node3D* plant, const char* name) {
+    ::godot::Sprite3D* sprite = memnew(::godot::Sprite3D);
+    sprite->set_name(name);
+    sprite->set_billboard_mode(::godot::BaseMaterial3D::BILLBOARD_FIXED_Y);
+    sprite->set_draw_flag(::godot::SpriteBase3D::FLAG_SHADED, true);
+    sprite->set_alpha_cut_mode(::godot::SpriteBase3D::ALPHA_CUT_DISCARD);
+    sprite->set_visible(false);
+    plant->add_child(sprite);
+    return sprite;
+}
+
+// a sprite loses its picture and hides
+void empty_sprite(::godot::Sprite3D* sprite) {
+    if (sprite == nullptr) {
+        return;
     }
-    for (const char* part : instanced) {
-        parts[at] = ::godot::NodePath(part);
-        ++at;
-    }
+    sprite->set_texture(::godot::Ref<::godot::Texture2D>());
+    sprite->set_region_enabled(false);
+    sprite->set_visible(false);
 }
 
 }  // namespace
@@ -91,102 +104,62 @@ void make_impostor(::godot::Node3D* plant) {
     if (plant == nullptr) {
         return;
     }
-    ::godot::Sprite3D* card = memnew(::godot::Sprite3D);
-    card->set_name(GODOT_PLANT_IMPOSTOR);
-    card->set_billboard_mode(::godot::BaseMaterial3D::BILLBOARD_FIXED_Y);
-    card->set_draw_flag(::godot::SpriteBase3D::FLAG_SHADED, true);
-    card->set_alpha_cut_mode(::godot::SpriteBase3D::ALPHA_CUT_DISCARD);
-    card->set_visible(false);
-    plant->add_child(card);
+    // the view card of LOD 3 and the billboard of LOD 4: each shows the region of the plant's slot on a shared page,
+    // set by draw_view_tiles
+    make_sprite(plant, GODOT_PLANT_IMPOSTOR);
+    make_sprite(plant, GODOT_PLANT_BILLBOARD);
 
-    ::godot::SubViewport* view = memnew(::godot::SubViewport);
-    view->set_name(GODOT_PLANT_IMPOSTOR_VIEW);
-    view->set_use_own_world_3d(true);
-    view->set_transparent_background(true);
-    view->set_debug_draw(::godot::Viewport::DEBUG_DRAW_UNSHADED);
-    view->set_update_mode(::godot::SubViewport::UPDATE_DISABLED);
-    plant->add_child(view);
-
-    ::godot::Camera3D* eye = memnew(::godot::Camera3D);
-    eye->set_name(GODOT_PLANT_CAMERA);
-    view->add_child(eye);
-    eye->set_current(true);
-    ::godot::Node3D* bark = memnew(::godot::Node3D);
-    bark->set_name(GODOT_PLANT_BARK);
-    view->add_child(bark);
-    for (const char* tube : {GODOT_PLANT_TUBES, GODOT_PLANT_TWIGS}) {
-        ::godot::MeshInstance3D* drawer = memnew(::godot::MeshInstance3D);
-        drawer->set_name(tube);
-        bark->add_child(drawer);
-    }
-    for (const char* part :
-         {GODOT_PLANT_LEAVES, GODOT_PLANT_LEAVES_CORS, GODOT_PLANT_MALE, GODOT_PLANT_FEMALE, GODOT_PLANT_FRUIT}) {
-        ::godot::MultiMeshInstance3D* drawer = memnew(::godot::MultiMeshInstance3D);
-        drawer->set_name(part);
-        view->add_child(drawer);
-    }
+    // the canopy dome of LOD 5: a flattened sphere wearing the view tile, so the canopy of the whole carries the
+    // colours of the individuals of its cell; its size and its skin come with draw_view_tiles, its height and cover
+    // with show_plant_canopy
+    ::godot::MeshInstance3D* dome = memnew(::godot::MeshInstance3D);
+    dome->set_name(GODOT_PLANT_CANOPY);
+    ::godot::Ref<::godot::SphereMesh> shape;
+    shape.instantiate();
+    dome->set_mesh(shape);
+    ::godot::Ref<::godot::StandardMaterial3D> skin;
+    skin.instantiate();
+    skin->set_transparency(::godot::BaseMaterial3D::TRANSPARENCY_ALPHA);
+    dome->set_material_override(skin);
+    dome->set_visible(false);
+    plant->add_child(dome);
 }
 
 void fill_impostor(::godot::Node3D* plant, const PlantImpostorFrame& frame) {
     if (plant == nullptr) {
         return;
     }
-    // the card gets a texture when the body has a ring to measure (a reach) and a size; WHEN it stands in is the
-    // level of ase-render-data (show_plant_share), never the reach - the reach only sizes the texture
+    // the body can stand in when it has a ring to measure (a reach) and a size; WHEN it stands in is the level of
+    // ase-render-data (show_plant_share), never the reach
     const bool stood_in = frame.reach > 0.0f && frame.height > 0.0f && frame.texture_height > 0u;
-    ::godot::NodePath parts[GODOT_PLANT_DRAWN_PARTS];
-    drawn_parts(parts);
-    ::godot::Sprite3D* card =
-        ::godot::Object::cast_to<::godot::Sprite3D>(plant->get_node_or_null(::godot::NodePath(GODOT_PLANT_IMPOSTOR)));
-    ::godot::SubViewport* view = ::godot::Object::cast_to<::godot::SubViewport>(
-        plant->get_node_or_null(::godot::NodePath(GODOT_PLANT_IMPOSTOR_VIEW)));
-    if (card == nullptr || view == nullptr) {
-        return;
-    }
+    ::godot::Node* atlas = atlas_of(plant);
     if (!stood_in) {
-        card->set_texture(::godot::Ref<::godot::Texture2D>());
-        card->set_visible(false);
-        view->set_update_mode(::godot::SubViewport::UPDATE_DISABLED);
+        empty_sprite(child_of<::godot::Sprite3D>(plant, GODOT_PLANT_IMPOSTOR));
+        empty_sprite(child_of<::godot::Sprite3D>(plant, GODOT_PLANT_BILLBOARD));
+        ::godot::MeshInstance3D* dome = child_of<::godot::MeshInstance3D>(plant, GODOT_PLANT_CANOPY);
+        ::godot::Ref<::godot::StandardMaterial3D> skin;
+        if (dome != nullptr) {
+            skin = dome->get_material_override();
+        }
+        if (skin.is_valid()) {
+            skin->set_texture(::godot::BaseMaterial3D::TEXTURE_ALBEDO, ::godot::Ref<::godot::Texture2D>());
+            dome->set_visible(false);
+        }
+        drop_impostor(plant, atlas);
         return;
     }
 
-    // the drawing nodes of the viewport take the resources the plant nodes were just filled with
-    for (const ::godot::NodePath& part : parts) {
-        ::godot::Node* plant_part = plant->get_node_or_null(part);
-        ::godot::Node* view_part = view->get_node_or_null(part);
-        ::godot::MeshInstance3D* plant_mesh = ::godot::Object::cast_to<::godot::MeshInstance3D>(plant_part);
-        ::godot::MeshInstance3D* view_mesh = ::godot::Object::cast_to<::godot::MeshInstance3D>(view_part);
-        if (plant_mesh != nullptr && view_mesh != nullptr) {
-            view_mesh->set_mesh(plant_mesh->get_mesh());
-            view_mesh->set_material_override(plant_mesh->get_material_override());
-        }
-        ::godot::MultiMeshInstance3D* plant_multi = ::godot::Object::cast_to<::godot::MultiMeshInstance3D>(plant_part);
-        ::godot::MultiMeshInstance3D* view_multi = ::godot::Object::cast_to<::godot::MultiMeshInstance3D>(view_part);
-        if (plant_multi != nullptr && view_multi != nullptr) {
-            view_multi->set_multimesh(plant_multi->get_multimesh());
-            view_multi->set_material_override(plant_multi->get_material_override());
-        }
-    }
-
-    // the camera looks along -z at the box of the body and stands one body depth in front of it, never closer
-    // than twice its own near plane, so no part of the body lies outside its depth range
-    ::godot::Camera3D* eye =
-        ::godot::Object::cast_to<::godot::Camera3D>(view->get_node_or_null(::godot::NodePath(GODOT_PLANT_CAMERA)));
-    if (eye != nullptr) {
-        const float near = eye->get_near();
-        const float gap = ase::math::max(frame.depth, 2.0f * near);
-        eye->set_orthogonal(frame.height, near, gap + frame.depth + gap);
-        eye->set_position(
-            ::godot::Vector3(frame.centre_x, frame.centre_y, frame.centre_z + 0.5f * frame.depth + gap));
-    }
-    view->set_size(::godot::Vector2i(static_cast<int32_t>(frame.texture_width),
-                                     static_cast<int32_t>(frame.texture_height)));
-    view->set_update_mode(::godot::SubViewport::UPDATE_ONCE);
-
-    // the card shows the texture at the size the body has: its height over the pixels of that height
-    card->set_texture(view->get_texture());
-    card->set_pixel_size(frame.height / static_cast<float>(frame.texture_height));
-    card->set_position(::godot::Vector3(frame.centre_x, frame.centre_y, frame.centre_z));
+    // the box of the body is kept on the plant, so its tile can be drawn again when the observer walks past a step;
+    // the tile waits behind the plants already waiting
+    ::godot::PackedFloat32Array box;
+    box.push_back(frame.width);
+    box.push_back(frame.height);
+    box.push_back(frame.depth);
+    box.push_back(frame.centre_x);
+    box.push_back(frame.centre_y);
+    box.push_back(frame.centre_z);
+    plant->set_meta(::godot::StringName(GODOT_KEY_VIEW_FRAME), box);
+    wait_for_view_tile(atlas, plant);
 }
 
 void show_plant_share(::godot::Node3D* plant, const PlantLevelShare& share) {
@@ -204,15 +177,45 @@ void show_plant_share(::godot::Node3D* plant, const PlantLevelShare& share) {
             drawn->set_transparency(1.0f - share.body);
         }
     }
-    // the card shows by the share handed to it, and only with a texture fill_impostor prepared
-    ::godot::Sprite3D* card =
-        ::godot::Object::cast_to<::godot::Sprite3D>(plant->get_node_or_null(::godot::NodePath(GODOT_PLANT_IMPOSTOR)));
-    if (card == nullptr) {
+    // the card shows by the share handed to it, and only once its tile was drawn
+    ::godot::Sprite3D* card = child_of<::godot::Sprite3D>(plant, GODOT_PLANT_IMPOSTOR);
+    if (card != nullptr) {
+        card->set_visible(card->get_texture().is_valid() && share.card > 0.0f);
+        card->set_transparency(1.0f - share.card);
+    }
+    // the billboard shows by the share handed to it from the card, with its region on the billboard page; the share
+    // handed on to the canopy leaves the individual undrawn
+    ::godot::Sprite3D* billboard = child_of<::godot::Sprite3D>(plant, GODOT_PLANT_BILLBOARD);
+    if (billboard != nullptr) {
+        billboard->set_visible(billboard->get_texture().is_valid() && share.tile > 0.0f);
+        billboard->set_transparency(1.0f - share.tile);
+    }
+}
+
+void show_plant_canopy(::godot::Node3D* plant, float canopy, const VivariumCnpyView* cnpy) {
+    if (plant == nullptr) {
         return;
     }
-    const bool textured = card->get_texture().is_valid();
-    card->set_visible(textured && share.card > 0.0f);
-    card->set_transparency(1.0f - share.card);
+    ::godot::MeshInstance3D* dome = child_of<::godot::MeshInstance3D>(plant, GODOT_PLANT_CANOPY);
+    if (dome == nullptr) {
+        return;
+    }
+    const ::godot::Ref<::godot::SphereMesh> shape = dome->get_mesh();
+    const ::godot::Ref<::godot::StandardMaterial3D> skin = dome->get_material_override();
+    // the dome shows by the share the billboard handed on to the canopy, thinned by the cover of its raster cell;
+    // a cell without a canopy record or a dome without the view tile as skin draws nothing
+    const float shown = canopy * canopy_cover(cnpy);
+    const bool drawn = cnpy != nullptr && shape.is_valid() && skin.is_valid() &&
+                       skin->get_texture(::godot::BaseMaterial3D::TEXTURE_ALBEDO).is_valid() && shown > 0.0f;
+    dome->set_visible(drawn);
+    if (!drawn) {
+        return;
+    }
+    dome->set_transparency(1.0f - shown);
+    // its top stands at the crown height of the tallest stand of the cell (GIS_CANOPY_HEIGHT)
+    ::godot::Vector3 at = dome->get_position();
+    at.y = static_cast<float>(cnpy->height) - 0.5f * shape->get_height();
+    dome->set_position(at);
 }
 
 }  // namespace ase::adp::godot

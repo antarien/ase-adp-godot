@@ -31,6 +31,7 @@
 
 #include <ase/adp/godot/lod/godot_host_lod_view.hpp>
 #include <ase/adp/godot/lod/types.hpp>
+#include <ase/math/math.hpp>
 
 namespace ase::adp::godot {
 
@@ -70,6 +71,41 @@ PlantLevelShare level_share(const VivariumLodView* lod) {
         *own = *own - handed;
     }
     return share;
+}
+
+float canopy_cover(const VivariumCnpyView* cnpy) {
+    if (cnpy == nullptr) {
+        return 0.0f;
+    }
+    // the reader refused every record without a finite lai, height and ext; a negative product would cover less
+    // than nothing, so the exponent never falls below zero
+    const float depth = ase::math::max(0.0f, static_cast<float>(cnpy->ext * cnpy->lai));
+    return 1.0f - ase::math::exp(-depth);
+}
+
+AtlasSlot billboard_slot(uint32_t index) {
+    constexpr uint32_t per_page = GODOT_PLANT_BILLBOARD_COLUMNS * GODOT_PLANT_BILLBOARD_ROWS;
+    AtlasSlot slot;
+    slot.page = index / per_page;
+    const uint32_t on_page = index % per_page;
+    slot.row = on_page / GODOT_PLANT_BILLBOARD_COLUMNS;
+    slot.column = on_page % GODOT_PLANT_BILLBOARD_COLUMNS;
+    return slot;
+}
+
+AtlasSlot view_slot(uint32_t index) {
+    constexpr uint32_t per_page = GODOT_PLANT_VIEW_COLUMNS * GODOT_PLANT_VIEW_ROWS;
+    AtlasSlot slot;
+    slot.page = index / per_page;
+    const uint32_t on_page = index % per_page;
+    slot.row = on_page / GODOT_PLANT_VIEW_COLUMNS;
+    slot.column = on_page % GODOT_PLANT_VIEW_COLUMNS;
+    return slot;
+}
+
+int32_t view_step(float dx, float dz) {
+    // atan2 gives -PI..PI from +z towards +x; floor keeps the steps on both sides of zero the same width
+    return static_cast<int32_t>(ase::math::floor(ase::math::atan2(dx, dz) / GODOT_PLANT_VIEW_ANGLE_STEP));
 }
 
 }  // namespace ase::adp::godot
