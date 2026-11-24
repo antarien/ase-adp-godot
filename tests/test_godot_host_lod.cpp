@@ -7,7 +7,8 @@
  * @description PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10, Detailstufen (usecase:101657 grade plants by picture height):
  *              ase-render-data grades every plant body by the height of its picture (RND_LOD_LEVEL, RND_LOD_FADE),
  *              ase-pl-flora files one record per graded patch on flora.lod.v1, and GodotHostResourceManager keeps it
- *              per patch (get_lods). The case boots the shared start configuration and waits until the port carries
+ *              per patch (get_lods). The case boots the shared start configuration, sets the camera before the first
+ *              start patch (the grading asks around the active camera only) and waits until the port carries
  *              a record: every record names a patch of the patch port, its level is one of the six codes, its fade
  *              lies between none and full, and its view, tile and canopy codes are 3, 4 and 5.
  *
@@ -20,7 +21,7 @@
  * @actor       Picture Height Grader (PICTHGTGRA)
  * @created     2026-11-24
  * @modified    2026-11-24
- * @version     00.00.01.00001 [init]
+ * @version     00.00.35.00035 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -40,6 +41,7 @@ namespace ase::adp::godot {
 using test::AdapterEnvironment;
 using test::advance_frames;
 using test::environment;
+using test::patch_at;
 
 namespace {
 
@@ -60,6 +62,14 @@ TEST_CASE("usecase:101657: the level port carries the graded level of the plant 
     GodotHostResourceManager& resources = env.resources;
 
     advance_frames(resources, 8u);
+    // The camera stands before the first start patch. view() files the place on the view port, FloraHostViewSystem
+    // makes it HUB_CAM_VIEW_REQ and CameraHubViewSynSystem the active camera (CAUSA_ASE_CAMERA, fixed view).
+    // RenderDataHubLodAskSystem asks ase-spatial for the bodies around the active camera (CAM_ACT_OWNER) and returns
+    // without a word while none stands, so without view() no body gets a distance, no level is graded and the port
+    // stays empty (measured 2026-11-24 13:58: no line of the grading chain in ase-adp-godot-lod-test.log beside the
+    // start and stop lines, REQUIRE_FALSE(lods.empty()) failed after 264 frames).
+    const VivariumPatchView& seen = patch_at(resources, 0u);
+    REQUIRE(resources.view(seen.x, seen.y + 3.0, seen.z + 6.0, seen.x, seen.y, seen.z) == ase::kernel::HostStatusOk);
     for (uint32_t frame = 0u; frame < kBoundFrames && resources.get_lods().empty(); ++frame) {
         advance_frames(resources, 1u);
     }
