@@ -146,25 +146,54 @@ TEST_CASE("hud context resolver: debug draws over every mode, the open drawer hi
     HudGameState state = state_in("rest");
     state.marks = {"debug_on"};
     REQUIRE(resolver.resolve(state, shown, failed));
-    CHECK(shown.layers == Names{"band", "rail", "markers", "inventory", "debug"});
+    CHECK(shown.layers == Names{"ground_rows", "band", "rail", "body", "markers", "inventory", "debug"});
 
     state.marks = {"debug_on", "drawer_open"};
     REQUIRE(resolver.resolve(state, shown, failed));
-    CHECK(shown.layers == Names{"band", "rail", "markers", "debug"});
+    CHECK(shown.layers == Names{"ground_rows", "band", "rail", "body", "markers", "debug"});
 
     state.marks = {"drawer_open"};
     REQUIRE(resolver.resolve(state, shown, failed));
-    CHECK(shown.layers == Names{"band", "rail", "markers", "inventory"});
+    CHECK(shown.layers == Names{"ground_rows", "band", "rail", "body", "markers", "inventory"});
 
     state.mode = "rack";
     state.marks = {"debug_on", "drawer_open", "dragging"};
     REQUIRE(resolver.resolve(state, shown, failed));
-    CHECK(shown.layers == Names{"band", "rack", "debug", "drag"});
+    CHECK(shown.layers == Names{"ground_rows", "band", "rack", "debug", "drag"});
 
     state.mode = "sky";
     state.marks = {"dragging"};
     REQUIRE(resolver.resolve(state, shown, failed));
-    CHECK(shown.layers == Names{"band", "sky", "drag"});
+    CHECK(shown.layers == Names{"ground_rows", "band", "sky", "drag"});
+}
+
+// B0937: the values of the plant card end at the x of the body rail (350), and the focus ring stands in the fire card
+// the layer body carries; the mockup's render lays the card without the rail. Both directions: the rail stands in rest.
+TEST_CASE("hud context resolver: the plant card never draws together with the body rail") {
+    const ContextResolver resolver = ready_resolver();
+    const auto draws = [](const HudShown& shown, const char* name) {
+        for (const std::string& layer : shown.layers) {
+            if (layer == name) {
+                return true;
+            }
+        }
+        return false;
+    };
+    uint32_t rails = 0u;
+    uint32_t cards = 0u;
+    for (const HudModeSpec& mode : resolver.spec().modes) {
+        CAPTURE(mode.name);
+        HudGameState state = state_in(mode.name.c_str());
+        state.possessed = every_item();
+        HudShown shown;
+        std::string failed;
+        REQUIRE(resolver.resolve(state, shown, failed));
+        rails += draws(shown, "body") ? 1u : 0u;
+        cards += draws(shown, "focus") ? 1u : 0u;
+        CHECK_FALSE((draws(shown, "body") && draws(shown, "focus")));
+    }
+    CHECK(rails == 2u);  // rest and sign
+    CHECK(cards == 1u);  // focus
 }
 
 TEST_CASE("hud context resolver: the open sign is marked, a lost one falls back to rest") {
@@ -184,7 +213,7 @@ TEST_CASE("hud context resolver: the open sign is marked, a lost one falls back 
     REQUIRE(resolver.resolve(state, shown, failed));
     CHECK(resolver.spec().modes[shown.mode].name == "rest");
     CHECK(shown.open_sign == UINT32_MAX);
-    CHECK(shown.layers == Names{"band", "rail", "markers", "inventory"});
+    CHECK(shown.layers == Names{"ground_rows", "band", "rail", "body", "markers", "inventory"});
 }
 
 TEST_CASE("hud context resolver: a tool runs only while its item is in possession, a lost one falls back to focus") {
@@ -201,7 +230,7 @@ TEST_CASE("hud context resolver: a tool runs only while its item is in possessio
         state.possessed.clear();
         REQUIRE(resolver.resolve(state, shown, failed));
         CHECK(resolver.spec().modes[shown.mode].name == "focus");
-        CHECK(shown.layers == Names{"band", "rail", "focus", "inventory"});
+        CHECK(shown.layers == Names{"ground_rows", "band", "rail", "focus", "inventory"});
     }
     // a mode of no tool, or of a tool that needs no item, keeps its name without any possession
     for (const char* mode : {"terrain", "hold", "rack", "sky"}) {

@@ -67,6 +67,9 @@ void VivariumView::notification(int32_t what) {
     }
     // THE HUD OPENS ON THE TRAIL (usecase:100390): fill_hud sees the new mode and forces the render, draw_hud writes
     // the edge "hud mode=arrive" once its frame stands; this line names the cause of that edge.
+    if (came_back) {
+        frame_rate_.restart();  // the span the app was away is no frame of the count
+    }
     if (came_back && hud_live()) {
         hud_.return_to_garden();
         note("garden return mode=" + ::godot::String(hud_.mode().c_str()) + " " + measure(GODOT_NO_PLACE));

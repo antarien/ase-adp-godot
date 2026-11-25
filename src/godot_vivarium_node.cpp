@@ -196,10 +196,10 @@ void VivariumView::boot_host(bool new_seeds) {
     // and every Reiniciar, whose new seed starts as a seed again; a jump runs only when its debug button asks.
     debug_.jump = VivariumJump{};
     hour_length_ = VivariumHourLength{};
-    init_pipelines_ = 0u;
-    init_hold_ = ::godot::String();  // the first frame of the new boot names its hold again (B0357)
-    init_hold_word_ = ::godot::String();
-    init_hold_since_ms_ = 0u;
+    start_hold_.pipelines = 0u;
+    start_hold_.hold = ::godot::String();  // the first frame of the new boot names its hold again (B0357)
+    start_hold_.hold_word = ::godot::String();
+    start_hold_.hold_since_ms = 0u;
     garden_return_ = GardenReturn{};
     // sow a new seed (03.1 point 2, V7): the first boot sows the seeds of the start configuration, every
     // Reiniciar a new seed per patch (godot_new_seed.hpp) - a new birch of the same species in another shape.
@@ -246,7 +246,7 @@ void VivariumView::boot_host(bool new_seeds) {
     patches_announced_ = false;
     // Every boot, a Reiniciar too, initialises the world anew under the start screen.
     initialised_ = false;
-    init_render_frames_ = 0u;
+    start_hold_.render_frames = 0u;
     note(boot_line());
     // V7: every patch names the seed it was sown with, so a Reiniciar shows its new seed in the log.
     for (const VivariumPatchSpec& patch : sown.patches) {
@@ -347,6 +347,7 @@ void VivariumView::process(double delta) {
     }
     if (!resources_.running() || !failure_text_.is_empty()) {
         last_frame_ns_ = 0;
+        frame_rate_.rest();  // no running picture to count: the number is hidden and counts anew with the next host
         return;
     }
     ::godot::Time* clock = ::godot::Time::get_singleton();
@@ -360,6 +361,7 @@ void VivariumView::process(double delta) {
     const double elapsed_s =
         static_cast<double>(frame_ns - last_frame_ns_) / static_cast<double>(ase::utils::NANOS_PER_SECOND);
     last_frame_ns_ = frame_ns;
+    follow_frame_rate(elapsed_s);  // before the host advances: the frames the player saw, the start screen's among them
     watch_ground_frame(frame_start_usec);  // the frames after a ground act, measured in every mode (P0690)
     // The host gets the real time the frame took and nothing beyond it: a jump is one write into ase-time's
     // clock (CAUSA_ASE_TIME, "The Seek Contract"), and every module computes its state at the new time in its

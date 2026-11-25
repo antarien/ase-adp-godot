@@ -11,7 +11,8 @@
  *              (07.5), C is cam.mode, Q and E turn the figure itself on the spot (fig.turn, 07.7). Once per figure
  *              node the rig the scene measured (eye height and height, godot_figure_rig.hpp) goes to the rig port
  *              (07.6). A thumb on the phone's stick (godot_vivarium_figure_controls.cpp, 07.9) leads over the keys:
- *              its deflection is sent through the same stick port in their place, running from run_share on.
+ *              its deflection is sent through the same stick port in their place: a dead zone and a response curve
+ *              shape the walk, and past walk_share the sprint rises as a level to the full run at run_share (B0943).
  *              Nothing about the figure is computed here; ase-player moves it, ase-camera places its camera.
  *              The scene gets the rest port and the places of the ring stones as ase-physics holds them, so a
  *              resting figure sits on a stone or the ground and a sleeping one lies (PLAN_ASE_VIVARIUM_PHASE_08_FIRECAMP
@@ -30,8 +31,8 @@
  * @usecase     usecase:101554 - receive player input
  * @actor       Player Input Warden (PLAYINPWAR)
  * @created     2026-11-13
- * @modified    2026-11-20
- * @version     00.00.26.00026 [refine]
+ * @modified    2026-11-25
+ * @version     00.00.27.00027 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -64,6 +65,8 @@ namespace {
  */
 constexpr double kFigureAxisFull = 1.0;          // a pressed key moves its stick axis to the end of its range
 constexpr double kFigureLevelOn = 1.0;           // sprint and jump: the level of a pressed key
+constexpr double kFigureStickDeadZone = 0.15;    // reach of the thumb (share of the full walk) below which it asks no walk
+constexpr double kFigureStickCurve = 2.0;        // exponent of the response curve over the live reach of the thumb
 constexpr double kFigurePlaceStepM = 0.25;       // metres the led figure moves before its place line is written again
 constexpr const char* kFigureCampStoneRole = "camp.stone";  // the role of the ring stones in camp.parts (T.3, T.11)
 
@@ -354,14 +357,25 @@ void VivariumView::follow_figure(double elapsed_s) {
     double sprint = input->is_key_pressed(::godot::KEY_SHIFT) ? kFigureLevelOn : 0.0;
     const double jump = input->is_key_pressed(::godot::KEY_SPACE) ? kFigureLevelOn : 0.0;
     if (controls.stick_finger != VivariumFigureControls::NO_FINGER) {
-        // the thumb leads over the keys (07.9): full walking pace at walk_share of the radius, running from
-        // run_share on; up on the screen is forward
+        // the thumb leads over the keys (07.9); up on the screen is forward. Its reach counts in units of the
+        // full walk (walk_share of the radius). Below kFigureStickDeadZone it asks no walk; above it the live
+        // rest is stretched back to 0..1 and raised to kFigureStickCurve, so a small deflection asks a slow
+        // walk and the direction of the thumb stands (B0943). Past walk_share the sprint rises without a step
+        // to the full run at run_share: every pace between walk and run (PlayerCtrlMovSystem STEP 5)
         const ::godot::Vector2 off = controls.stick_at - controls.stick_origin;
-        const double share = static_cast<double>(off.length()) / controls.stick_radius;
-        const double gain = share > 0.0 ? ase::math::min(kFigureAxisFull, share / controls.walk_share) / share : 0.0;
-        forward = -static_cast<double>(off.y) / controls.stick_radius * gain;
-        strafe = static_cast<double>(off.x) / controls.stick_radius * gain;
-        sprint = share >= controls.run_share ? kFigureLevelOn : 0.0;
+        const double length = static_cast<double>(off.length());
+        const double share = length / controls.stick_radius;
+        const double reach = ase::math::min(kFigureAxisFull, share / controls.walk_share);
+        const double live = ase::math::max(0.0, (reach - kFigureStickDeadZone) / (kFigureAxisFull - kFigureStickDeadZone));
+        const double shaped = static_cast<double>(
+            ase::math::pow(static_cast<float>(live), static_cast<float>(kFigureStickCurve)));
+        const double gain = length > 0.0 ? shaped / length : 0.0;
+        forward = -static_cast<double>(off.y) * gain;
+        strafe = static_cast<double>(off.x) * gain;
+        const double run_span = controls.run_share - controls.walk_share;
+        sprint = run_span > 0.0
+                     ? ase::math::clamp((share - controls.walk_share) / run_span, 0.0, kFigureLevelOn)
+                     : (share >= controls.run_share ? kFigureLevelOn : 0.0);
     }
     // only a figure its player leads takes the stick; under AI/PC the AI steers it (07.11)
     const bool steering = controls.led_self && (forward != 0.0 || strafe != 0.0 || jump != 0.0);

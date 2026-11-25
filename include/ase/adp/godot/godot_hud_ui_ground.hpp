@@ -33,7 +33,9 @@
  *              above it. The camera looks flat over the bank of a carved bed (B0285, run 20261113-1951-m05-rain):
  *              the lip hides the near water, and a mark laid on that hidden water lands on the brown bank under
  *              the strip the eye sees. Where the lip hides all of it, the strip the eye sees is the carved bed
- *              itself, and the mark follows that (build_bed_line).
+ *              itself, and the mark follows that (build_bed_line). The walk passes over a tile of the square whose
+ *              highest sample stays under the line without asking a height in it (GroundTops, laid by follow with
+ *              the index), and names the place the walk of every step names (P0733).
  *
  *              A PLACE BY ITS SHARE. across names the world place a share of the square's edge east and a
  *              share north of its south-west corner, at the height height gives there. The lines of the
@@ -51,8 +53,8 @@
  * @usecase     usecase:100389 - level the ground
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-24
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -62,6 +64,7 @@
 #include <ase/adp/godot/godot_host_start_config.hpp>
 #include <ase/adp/godot/godot_host_terrain_view.hpp>
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
+#include <ase/adp/godot/ground/godot_ground_tops.hpp>
 
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/vector2.hpp>
@@ -110,8 +113,12 @@ private:
     /** The lattice coordinate of `world` along an axis starting at `origin`. */
     [[nodiscard]] int64_t lattice(double world, double origin) const;
 
+    /** The ground height at `fx`, `fz` in lattice steps from the south-west corner; false as height answers. */
+    bool lattice_height(double fx, double fz, double& out) const;
+
     const std::vector<VivariumTerrainView>* samples_ = nullptr;  // the samples indexed last
     std::vector<int64_t> index_;  // per lattice point (row * side + column) the sample, GODOT_HUD_GROUND_NO_SAMPLE
+    GroundTops tops_;             // the highest sample of every tile, laid with the index
     double origin_x_ = 0.0;       // the west edge of the square, world metres east
     double origin_z_ = 0.0;       // the south edge of the square, world metres north
     double step_ = 0.0;           // the distance of two samples, metres

@@ -87,7 +87,7 @@ void VivariumView::raise_jump_screen() {
     // following the ports, and the rate measurement starts anew from the lift - two readings across the jump
     // would measure the jump, never the clock. ase-time's constants stay; the step of the date entry needs them.
     initialised_ = false;
-    init_render_frames_ = 0u;
+    start_hold_.render_frames = 0u;
     hour_length_.last_elapsed_s = -1.0;
     hour_length_.last_day = -1.0;
     hour_length_.last_hour = -1.0;

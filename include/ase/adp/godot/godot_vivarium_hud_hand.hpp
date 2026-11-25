@@ -79,6 +79,9 @@
 #include <ase/adp/godot/godot_hud_root_cut.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 
+#include <godot_cpp/variant/transform3d.hpp>
+#include <godot_cpp/variant/vector2.hpp>
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -111,6 +114,13 @@ public:
      * at its own tap (VivariumView::send_hud_verb), as the mockup's applyTerr asks inRoot where the finger set down.
      */
     void ground(HandSlotFrame& hand, const GroundReticleFrame& reticle) const;
+
+    /**
+     * ONE FINGER POINT, ONE GROUND (toUZ, m.html 383): a lower or raise (`lifts`) tapped at the canvas point `at`
+     * under the camera `eye` acts on the ground the last one acted on when both are the same; otherwise on `x`, `z`,
+     * which it then holds. A tap of another verb keeps nothing and changes nothing.
+     */
+    void stab(bool lifts, const ::godot::Vector2& at, const ::godot::Transform3D& eye, float& x, float& z);
 
     /**
      * Writes the side shoots of the plant on patch object `body` that may be cut into `cuttable` and their
@@ -155,6 +165,11 @@ private:
     double zone_m_ = 0.0;        // the root zone of the patch in the last frame: its record's root_m, 0 without one
     double slope_step_m_ = 0.0;  // hud_bridge_hand_slope_step_m: slopeAt's e of the mockup's field
     bool pouring_ = false;       // a held can pours since its press
+    bool stabbed_ = false;       // a lower or raise was tapped, and stab_at_, stab_eye_, stab_x_ and stab_z_ name it
+    ::godot::Vector2 stab_at_;      // the canvas point the last lower or raise was tapped at
+    ::godot::Transform3D stab_eye_; // the camera it was tapped under
+    float stab_x_ = 0.0f;        // the ground it acted on, world metres east
+    float stab_z_ = 0.0f;        // the ground it acted on, world metres north
     uint32_t measures_ = 0;      // the measures the held can asked since its press
     double soil_start_ = 0.0;    // the soil water at the press, 0..1
     uint32_t cut_skip_ = 0;      // hud_bridge_hand_cut_skip: TREE.cand's k >= 2

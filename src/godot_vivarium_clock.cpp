@@ -138,7 +138,7 @@ double VivariumView::initialisation_progress() const {
                               : static_cast<double>(resources_.get_streams().size()) /
                                     static_cast<double>(start_.brooks.size());
     const double parts = static_cast<double>(scene_parts_built()) / static_cast<double>(GODOT_INIT_SCENE_PARTS);
-    const double frames = static_cast<double>(init_render_frames_) / static_cast<double>(GODOT_INIT_RENDER_FRAMES);
+    const double frames = static_cast<double>(start_hold_.render_frames) / static_cast<double>(GODOT_INIT_RENDER_FRAMES);
     const VivariumJump& jump = debug_.jump;
     const double last = jump.running ? jump_share(jump, resources_.get_clock(), resources_.stage_seconds(),
                                                   debug_.settle_s)
@@ -170,8 +170,8 @@ void VivariumView::follow_initialisation() {
                   server->get_rendering_info(::godot::RenderingServer::RENDERING_INFO_PIPELINE_COMPILATIONS_DRAW) +
                   server->get_rendering_info(
                       ::godot::RenderingServer::RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION);
-    const bool compiled = pipelines != init_pipelines_;
-    init_pipelines_ = pipelines;
+    const bool compiled = pipelines != start_hold_.pipelines;
+    start_hold_.pipelines = pipelines;
     const bool brooks_carried = resources_.get_streams().size() >= start_.brooks.size();
     const bool scene_built = scene_parts_built() == GODOT_INIT_SCENE_PARTS;
     // The sky and the clock belong to the complete picture: the sky port carried its records (sun, light,
@@ -204,20 +204,20 @@ void VivariumView::follow_initialisation() {
     const ::godot::String* const words[GODOT_HOLD_STEPS] = {
         &texts_.hold_patches, &texts_.hold_brooks, &texts_.hold_scene, &texts_.hold_sky_clock,
         &texts_.hold_figure,  &texts_.hold_jump,   &texts_.hold_render};
-    init_hold_word_ = *words[step];
+    start_hold_.hold_word = *words[step];
     // THE LINE CARRIES THE DURATION OF THE STEP BEFORE (B0357): prev= names the step that held until this
     // frame and held_ms= its wall-clock time since it began, so a run compares figure against the other steps
     // from the log alone; the first line of a boot has no step before it and names none
     const ::godot::Time* wall = ::godot::Time::get_singleton();
     const uint64_t now_ms = wall == nullptr ? 0u : wall->get_ticks_msec();
-    if (init_hold_ != ::godot::String(hold)) {
+    if (start_hold_.hold != ::godot::String(hold)) {
         const ::godot::String before =
-            init_hold_.is_empty() ? ::godot::String()
-                                  : " prev=" + init_hold_ + " held_ms=" +
-                                        ::godot::String::num_uint64(now_ms - init_hold_since_ms_);
-        init_hold_ = ::godot::String(hold);
-        init_hold_since_ms_ = now_ms;
-        note("start_screen held_by=" + init_hold_ + before + " brooks=" +
+            start_hold_.hold.is_empty() ? ::godot::String()
+                                        : " prev=" + start_hold_.hold + " held_ms=" +
+                                              ::godot::String::num_uint64(now_ms - start_hold_.hold_since_ms);
+        start_hold_.hold = ::godot::String(hold);
+        start_hold_.hold_since_ms = now_ms;
+        note("start_screen held_by=" + start_hold_.hold + before + " brooks=" +
              ::godot::String::num_uint64(resources_.get_streams().size()) + "/" +
              ::godot::String::num_uint64(start_.brooks.size()) + " parts=" +
              ::godot::String::num_uint64(scene_parts_built()) + "/" +
@@ -225,20 +225,20 @@ void VivariumView::follow_initialisation() {
              ::godot::String::num(figure_load_share(figure_look_.load), 2) + " " + measure(GODOT_NO_PLACE));
     }
     if (step != GODOT_HOLD_RENDER || compiled) {
-        init_render_frames_ = 0u;
+        start_hold_.render_frames = 0u;
         return;
     }
-    ++init_render_frames_;
-    if (init_render_frames_ < GODOT_INIT_RENDER_FRAMES) {
+    ++start_hold_.render_frames;
+    if (start_hold_.render_frames < GODOT_INIT_RENDER_FRAMES) {
         return;
     }
     initialised_ = true;
     // the figure file compiled its pipelines behind the screen (warm_figure); its warming instance leaves now
     end_figure_warmth(scene_);
-    note("start_screen lifted prev=" + init_hold_ + " held_ms=" +
-         ::godot::String::num_uint64(now_ms - init_hold_since_ms_) +
+    note("start_screen lifted prev=" + start_hold_.hold + " held_ms=" +
+         ::godot::String::num_uint64(now_ms - start_hold_.hold_since_ms) +
          " brooks=" + ::godot::String::num_uint64(resources_.get_streams().size()) +
-         " frames=" + ::godot::String::num_uint64(init_render_frames_) +
+         " frames=" + ::godot::String::num_uint64(start_hold_.render_frames) +
          " pipelines=" + ::godot::String::num_uint64(pipelines) + " " + measure(selected_place_));
     node_->queue_redraw();
 }

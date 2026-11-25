@@ -68,6 +68,11 @@ bool VivariumView::load_hud(const ::godot::Dictionary& root) {
     if (!hud_refresh_.bind(hud_.theme(), failed)) {
         return fail_config(("hud " + failed).c_str());
     }
+    // the frames per second in the status line's gap against the floor of view.frame_budget_ms, read by load_view
+    // before load_hud (operator order 2026-11-24: never under 30 frames per second)
+    if (!frame_rate_.bind(hud_.theme(), order_budget_.frame_budget_ms, failed)) {
+        return fail_config(("hud " + failed).c_str());
+    }
     // The mockup's units onto the logical surface: hud_frame_width of them span its width.
     double frame_w = 0.0;
     if (!hud_.theme().measure("hud_frame_width", frame_w) || !(frame_w > 0.0) || !(layout_.size.x > 0.0f)) {

@@ -83,6 +83,7 @@ add_library(ase-adp-godot-host STATIC
     src/godot_plant_level.cpp        # the share of body and view card by the graded level of ase-render-data (usecase:101657 grade plants by picture height, B0897)
     src/godot_plant_templates.cpp    # the organ templates from the template ports (usecase:101342 hand organ shapes to app, 03.11)
     src/godot_cap_scale.cpp          # the scale of a fruit body to its cap radius and the cap role and node of a species (usecase:101362 scale the organ templates, B0605)
+    src/ground/godot_ground_tops.cpp  # the highest sample per tile of the ground and the sight line over it (usecase:101650 show the river water, P0733)
     src/godot_plant_ground.cpp       # the ground mesh and the marks of its shader (usecase:101339 show the ground around plant, 03.8)
     src/godot_plant_water.cpp        # the water in every bed and its line for the brook's sign (usecase:100399 carry brook water, 03.11, B0285)
     src/godot_plant_water_ribbon.cpp # the ribbon of water along a course, build_water (usecase:100399 carry brook water, B0285)
@@ -101,8 +102,10 @@ add_library(ase-adp-godot-host STATIC
     src/godot_asset_binding.cpp
     src/godot_asset_showcase.cpp     # the plan of the asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7)
     src/godot_hud_context_resolver.cpp  # the brain of the HUD: mode, layers, fan, signs, offers, level (usecase:101440 grow the interface with skills, 06.2)
+    src/godot_hud_frame_rate.cpp        # HudFrameRate: the frames per second of a window and their verdict against the floor (usecase:101440 grow the interface with skills)
     src/godot_hud_context.cpp           # the rules of the chip spine the six buttons still run on, until ContextResolver carries them (usecase:101440, 06.11)
     src/godot_figure_pose.cpp           # the pose of a figure at the camp fire from its rest record (usecase:2157 go to Sleep, FIRECAMP T.11)
+    src/godot_figure_step.cpp           # the way a figure is drawn on between two fixed steps, its turn free of the frame rate (usecase:101588 move player figure over ground, B0943)
     src/stroke/godot_stroke_mesh.cpp    # the round-joined mesh of ui_stroke as plain numbers, held against its bound by a host test (usecase:101440, P0692, T0357)
 
     #[[
@@ -187,6 +190,8 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/cap/types.hpp       # the cap port key, the cap role and the cap node of a fruit body (usecase:101362 scale the organ templates, B0605)
     include/ase/adp/godot/cap/godot_plant_cap.hpp  # the cap template bound, scaled to the cap radius and drawn at the stem base (usecase:101362 scale the organ templates, B0605)
     include/ase/adp/godot/cap/godot_cap_scale.hpp  # cap_scale, cap_role_of, cap_species_of, cap_node_of without a Godot type (usecase:101362 scale the organ templates, B0605)
+    include/ase/adp/godot/ground/types.hpp    # the tile edge and the no-place mark of the sight line over the ground (usecase:101650 show the river water, P0733)
+    include/ase/adp/godot/ground/godot_ground_tops.hpp  # GroundTops and GroundSightLine without a Godot type (usecase:101650 show the river water, P0733)
     include/ase/adp/godot/lod/types.hpp       # the level port keys, the code step and the drawn parts of a plant (usecase:101657 grade plants by picture height, B0897)
     include/ase/adp/godot/lod/godot_host_lod_view.hpp  # VivariumLodView and level_share without a Godot type (usecase:101657 grade plants by picture height, B0897)
     include/ase/adp/godot/lod/godot_plant_level_scene.hpp  # show_plant_levels and show_plant_share, body or card by the level (usecase:101657 grade plants by picture height, B0897)
@@ -202,8 +207,11 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/godot_client_window.hpp
     include/ase/adp/godot/godot_start_hold.hpp
     include/ase/adp/godot/godot_hud_context_resolver.hpp
+    include/ase/adp/godot/godot_hud_frame_rate.hpp    # HudFrameRate without a Godot type, callable by the host tests (usecase:101440 grow the interface with skills)
+    include/ase/adp/godot/godot_hud_ui_frame_rate.hpp # UiFrameRate: the small number of the frames per second beside the battery (usecase:101440 grow the interface with skills)
     include/ase/adp/godot/godot_hud_context.hpp
     include/ase/adp/godot/godot_figure_pose.hpp
+    include/ase/adp/godot/godot_figure_step.hpp   # FigureStepWay, figure_step_take, figure_turn_closed without a Godot type (usecase:101588 move player figure over ground)
     include/ase/adp/godot/godot_asset_binding.hpp
     include/ase/adp/godot/godot_asset_showcase.hpp
     include/ase/adp/godot/types.hpp
@@ -291,6 +299,7 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_hud_input.cpp   # VivariumView: the touches through the HUD, its clock and its requests over the ports (usecase:101440, 06.5)
     src/godot_vivarium_hud_place.cpp    # VivariumView: the places a tap reaches the HUD through, logged on change (usecase:101440, 06.5/06.11)
     src/godot_vivarium_return.cpp       # VivariumView: background, foreground and the return to the garden, the HUD opens on the trail (usecase:100390, 03.6/06.4 A08)
+    src/godot_vivarium_frame_rate.cpp   # VivariumView: the frames per second of every frame and the line of an edge (usecase:101440 grow the interface with skills)
     src/godot_config_read.cpp           # readers of one key of the start configuration
     src/godot_view_support.cpp          # text conversion, font and editor check of the view
     src/godot_hud_theme.cpp             # the section hud: colours, strokes, sizes and chips of the HUD (usecase:101440, 06.1)
@@ -323,6 +332,7 @@ add_library(ase-adp-godot SHARED
     src/godot_hud_ui_anchor.cpp         # UiAnchor: a thing, crown, trunk or brook point through the scene camera onto the HUD surface (usecase:101440, 06.3)
     src/godot_hud_ui_motion.cpp         # UiMotion: duration and CSS easing of a hud_anim_* token, the one curve of fade, draw and pulse (usecase:101440, 06.3)
     src/godot_hud_ui_refresh.cpp        # UiRefresh: hud_refresh_ms and hud_frame_dt_max, when the HUD samples the simulation again and the longest step of its clock (usecase:101440, 06.3, T10)
+    src/godot_hud_ui_frame_rate.cpp     # UiFrameRate: the small number of the frames per second right of the battery, alert under the floor (usecase:101440 grow the interface with skills)
     src/godot_hud_ui_pen.cpp            # UiPen: every HUD shape laid in mockup units, rendered anew at the screen's pixels (usecase:101440, 06.3)
     src/godot_hud_ui_pen_cover.cpp      # pen_core, pen_feather: the core and feather by which every HUD stroke covers its width (usecase:101440, B0678)
     src/godot_hud_ui_stroke.cpp         # ui_stroke: a polyline with round joins and caps as one antialiased mesh in screen pixels (usecase:101440, B0678)
@@ -420,6 +430,7 @@ add_library(ase-adp-godot SHARED
     src/godot_plant_look.cpp    # the materials and organ template files of that scene, bound once (03.2)
     src/godot_figure_scene.cpp  # the figures of the body port in that scene and the player camera at its eye (usecase:101611 animate character motion, 07.9)
     src/godot_figure_query.cpp  # height, rig, place and face read back from a figure's node for the view (usecase:101611 animate character motion, 07.3)
+    src/godot_figure_way.cpp    # the way of a figure kept on its node, the place a frame draws it at (usecase:101588 move player figure over ground, B0943)
     src/godot_figure_load.cpp   # the figure file parsed and packed by a task of the WorkerThreadPool (usecase:101611 animate character motion, 07.9)
     src/godot_camp_load.cpp     # the camp exports parsed by a task of the WorkerThreadPool into makes, hulls and meshes (usecase:5436 kindle fire, T.1)
     src/godot_figure_rig.cpp    # the clip mix of the figure file and the eye height of its skeleton (usecase:101611 animate character motion, 07.6)

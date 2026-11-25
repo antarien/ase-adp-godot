@@ -41,6 +41,7 @@ target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_vivarium_scene_counts.hpp  # scene_counts, the scene's count line (usecase:100387 view the plant)
     include/ase/adp/godot/godot_vivarium_start_choice.hpp  # VivariumStartChoice: online/offline and new world/last state on the start screen (usecase:100387 view the plant)
     include/ase/adp/godot/godot_vivarium_start_mode.hpp    # GODOT_START_MODE_*, the four values of VivariumView::start_mode_ (usecase:100387 view the plant)
+    include/ase/adp/godot/godot_vivarium_start_hold.hpp    # VivariumStartHold: quiet frames, pipelines and the hold of the start screen (usecase:100387 view the plant)
     include/ase/adp/godot/godot_asset_loader.hpp
     include/ase/adp/godot/godot_asset_showcase_scene.hpp
     include/ase/adp/godot/godot_plant_scene.hpp
@@ -69,6 +70,7 @@ target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_figure_hand.hpp   # hand_kind, carry_tool (usecase:101625 carry a tool in hand)
     include/ase/adp/godot/godot_figure_glass.hpp  # FigureSceneGlass, bind_figure_glass, flash_figure_edges (usecase:101612 keep figure in loaded area)
     include/ase/adp/godot/godot_figure_node.hpp   # holder, name prefix and metas of a figure's node, shared by figure scene and figure queries (usecase:101611 animate character motion)
+    include/ase/adp/godot/godot_figure_way.hpp    # figure_way_place: the way of a figure kept on its node (usecase:101588 move player figure over ground)
     include/ase/adp/godot/godot_plant_shader.hpp
     include/ase/adp/godot/godot_config_read.hpp
     include/ase/adp/godot/godot_view_support.hpp

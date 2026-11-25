@@ -353,8 +353,8 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
         // the percent line names the step that holds the screen behind the separator (B0357), the word
         // follow_initialisation chose in the same frame; before its first frame the line stands alone
         ::godot::String percent = ::godot::String::num(progress * GODOT_PERCENT, 0) + " %";
-        if (!init_hold_word_.is_empty()) {
-            percent += texts_.separator + init_hold_word_;
+        if (!start_hold_.hold_word.is_empty()) {
+            percent += texts_.separator + start_hold_.hold_word;
         }
         // the percent line: its top GODOT_PROGRESS_GAP under the bar, so its baseline one ascent lower
         const float percent_y = track.get_end().y + GODOT_PROGRESS_GAP + font->get_ascent(GODOT_FONT_BODY);

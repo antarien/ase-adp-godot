@@ -28,8 +28,8 @@
  * @usecase     usecase:101611 - animate character motion
  * @actor       SS/PC
  * @created     2026-11-13
- * @modified    2026-11-22
- * @version     00.00.26.00026 [refine]
+ * @modified    2026-11-25
+ * @version     00.00.27.00027 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -42,6 +42,8 @@
 #include <ase/adp/godot/godot_figure_hand.hpp>
 #include <ase/adp/godot/godot_figure_node.hpp>
 #include <ase/adp/godot/godot_figure_rig.hpp>
+#include <ase/adp/godot/godot_figure_step.hpp>
+#include <ase/adp/godot/godot_figure_way.hpp>
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
@@ -404,12 +406,14 @@ void fill_figures(::godot::Node3D* scene, const std::vector<VivariumFigureView>&
         }
         const ::godot::Vector3 place(static_cast<float>(figure.x), static_cast<float>(figure.y),
                                      static_cast<float>(figure.z));
-        body->set_position(place);
+        // drawn on the way between two fixed steps of the port, so it walks smooth above the step rate (godot_figure_step.hpp)
+        body->set_position(figure_way_place(body, place, dt, fresh));
 
-        // the body turns toward the course of the port by SHA's rate; a new figure stands at it at once
+        // the body turns toward the course of the port by SHA's rate, by a share free of the frame rate; a new figure
+        // stands at it at once
         const double held = fresh ? figure.course : static_cast<double>(body->get_rotation().y);
         const double gap = course_gap(held, figure.course);
-        const double turned = held + gap * ase::math::min(1.0, dt * look.motion.turn_rate);
+        const double turned = held + gap * figure_turn_closed(dt, look.motion.turn_rate);
         body->set_rotation(::godot::Vector3(0.0f, static_cast<float>(turned), 0.0f));
 
         // the clips: idle, walk and run by the gait, the turn clip while it turns on the spot (the mockup's weights);

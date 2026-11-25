@@ -89,8 +89,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
- * @modified    2026-11-22
- * @version     00.00.23.00023 [init]
+ * @modified    2026-11-25
+ * @version     00.00.27.00027 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -109,6 +109,7 @@
 #include <ase/adp/godot/godot_hud_leaf_season.hpp>
 #include <ase/adp/godot/godot_hud_ui_anchor.hpp>
 #include <ase/adp/godot/godot_hud_ui_ground.hpp>
+#include <ase/adp/godot/godot_hud_ui_frame_rate.hpp>
 #include <ase/adp/godot/godot_hud_ui_refresh.hpp>
 #include <ase/adp/godot/godot_vivarium_figure_controls.hpp>
 #include <ase/adp/godot/godot_order_budget.hpp>
@@ -122,6 +123,7 @@
 #include <ase/adp/godot/godot_vivarium_hud_sign_rules.hpp>
 #include <ase/adp/godot/godot_vivarium_hud_trail.hpp>
 #include <ase/adp/godot/godot_vivarium_start_choice.hpp>
+#include <ase/adp/godot/godot_vivarium_start_hold.hpp>
 #include <ase/adp/godot/godot_vivarium_start_mode.hpp>
 #include <ase/adp/godot/godot_vivarium_view_config.hpp>
 #include <ase/adp/godot/godot_vivarium_camp.hpp>
@@ -272,6 +274,7 @@ private:
     [[nodiscard]] bool figure_input(const ::godot::Ref<::godot::InputEvent>& local);  // the stick, the orbit drag and cam.mode; true: taken
     void draw_figure_hud(UiPen& pen);      // the stick and cam.mode over the HUD (07.9)
     void follow_catch_up(double elapsed_s, double now_s);  // the return to the garden (godot_garden_return.hpp)
+    void follow_frame_rate(double elapsed_s);  // the frames per second in the status line's gap, a line on every edge of the floor (godot_vivarium_frame_rate.cpp)
     void drain_log();
     void note(const ::godot::String& line);
 
@@ -427,11 +430,7 @@ private:
     std::vector<double>      conditions_;      // last logged raw condition code of ase-plant per place, NaN while none came
     bool                     patches_announced_ = false;  // every place's record stood once and got its line
     bool                     initialised_ = false;        // the world stands complete and rendered: the start screen lifted
-    uint32_t                 init_render_frames_ = 0;     // frames rendered in a row under the start screen with the world complete and no new pipeline
-    uint64_t                 init_pipelines_ = 0;         // pipeline compilations of the rendering server counted in the previous frame
-    ::godot::String          init_hold_;                  // the step that held the start screen in the previous frame, empty before the first (B0357)
-    ::godot::String          init_hold_word_;             // its word from texts.hold_*, drawn after the percent line of the bar
-    uint64_t                 init_hold_since_ms_ = 0;     // wall-clock milliseconds (Time::get_ticks_msec) at which that step began to hold
+    VivariumStartHold        start_hold_;                 // quiet frames, pipelines and the step that holds the start screen (godot_vivarium_start_hold.hpp)
     uint32_t                 selected_place_ = GODOT_NO_PLACE;
     VivariumWaterPending     water_pending_;                         // the pour whose arrival is not yet seen (godot_vivarium_water_pending.hpp)
     VivariumCampState        camp_;                                  // the camp fire laid through ase-pl-ingle and its bodies (T.3, T.7)
@@ -462,6 +461,7 @@ private:
     double                   hud_clock_ = 0.0;  // seconds the HUD's clock has run: the real time of the frames
     double                   hud_dt_ = 0.0;     // seconds of the last frame, at most hud_frame_dt_max (UiRefresh::step)
     UiRefresh                hud_refresh_;      // hud_refresh_ms: when the HUD samples the simulation again (T10, m.html 1037)
+    UiFrameRate              frame_rate_;       // the frames per second of every frame against the floor of view.frame_budget_ms
     VivariumHudSample        hud_shown_;        // what the HUD read at its last sample (godot_vivarium_hud_sample.hpp)
     bool                     hud_still_ = false;        // every HUD motion held (read_hud_still)
     bool                     hud_still_read_ = false;   // the platform was asked once

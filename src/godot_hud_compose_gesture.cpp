@@ -31,8 +31,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-24
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -87,7 +87,6 @@ bool VivariumHud::press(const ::godot::Vector2& point, const VivariumHudFrame& n
             return toast_.post(TOAST_POT_EMPTY, {}, COLOUR_WATER, wall_, failed);
         }
         press_.pouring = true;
-        press_.poured_at = clock;
         return true;
     }
     if (same(act, ACT_SYSTEM_HOLD)) {
@@ -240,22 +239,24 @@ bool VivariumHud::tick(double clock, double real, VivariumHudFrame& now, std::ve
         set_mode(rail ? MODE_SYS : MODE_RACK);
         press_.long_fired = true;
     }
-    if (press_.pouring && clock - press_.poured_at >= pour_step_s_) {
-        press_.poured_at = clock;
+    // THE CAN AND THE RING COUNT REAL SECONDS TOO: the ring's sentence promises SEGURE 1,5 S and the can a measure each
+    // 0.8 s (m.html 1035), and at two frames a second a hold of 9 s reached 0.9 s on the clock capped at
+    // hud_frame_dt_max: the ring never reset (run 1124-ui-hud-n, 18 frames in the hold) and the can let 1 L go after
+    // 1.6 s, too little for a seed (run camp_hud_1124xb). The first frame after the press began before it: only the
+    // frames after it lie wholly inside the hold, so a hold shorter than the token neither resets nor adds a measure.
+    if (press_.pouring || press_.system) {
+        const double inside = press_.ticked ? ase::math::max(real, 0.0) : 0.0;
+        press_.poured_held += press_.pouring ? inside : 0.0;
+        press_.system_held += press_.system ? inside : 0.0;
+        press_.ticked = true;
+    }
+    // A frame longer than a step holds several measures; what is left of it counts for the next.
+    while (press_.pouring && pour_step_s_ > 0.0 && press_.poured_held - press_.poured_at >= pour_step_s_) {
+        press_.poured_at += pour_step_s_;
         VivariumHudRequest pour;
         pour.kind = VivariumHudRequest::ASK_POUR;
         pour.point = press_.at;
         out.push_back(pour);
-    }
-    // THE RING COUNTS REAL SECONDS TOO: its sentence promises SEGURE 1,5 S, and at two frames a second a hold of 9 s
-    // reached 0.9 s on the clock capped at hud_frame_dt_max and never reset (run 1124-ui-hud-n, 18 frames in the hold).
-    // The first frame after the press began before it: only the frames after it lie wholly inside the hold, so a hold
-    // shorter than the token never resets.
-    if (press_.system) {
-        if (press_.system_ticked) {
-            press_.system_held += ase::math::max(real, 0.0);
-        }
-        press_.system_ticked = true;
     }
     if (press_.system && system_.full(press_.system_held)) {
         press_ = HudPress{};

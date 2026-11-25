@@ -55,7 +55,13 @@ The same form as plugins/ase-pl-vegetation/tests.
   ase-adp-godot-templates-test build_template from the template ports (03.11). Pure computation.
   ase-adp-godot-capscale-test cap_scale and the cap role and node of a species (usecase:101362 scale the
                               organ templates, B0605). Pure computation.
-  ase-adp-godot-stand-test    Soil water and condition of a patch for its materials (03.2). Pure.
+  ase-adp-godot-groundtops-test GroundTops against the march of every step over a carved bed: the same first
+                              place and ground on every line, fewer heights asked (usecase:101650 show the river
+                              water, P0733). Pure computation.
+  ase-adp-godot-framerate-test HudFrameRate: the frames per second of a window, the floor of the frame budget,
+                              one edge each way, the time away no frame (usecase:101440 grow the interface with
+                              skills). Pure computation.
+  ase-adp-godot-stand-test   Soil water and condition of a patch for its materials (03.2). Pure.
   ase-adp-godot-binding-test  bind_assets against a test manifest, stand-in colours (03.2). Pure.
   ase-adp-godot-ground-test   build_ground, mark_ground (levelled disc, brook bed) and the uniforms of
                               the ground shader (03.8, 03.11). Pure computation.
@@ -139,7 +145,7 @@ foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap l
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor level templates capscale stand binding ground figlayout hold water waterpit waterband waterkinds keeper focus seed exposure window context signs chips pose showcase)
+foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor level templates capscale groundtops framerate stand binding ground figlayout hold water waterpit waterband waterkinds keeper focus seed exposure window context signs chips pose step showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
@@ -166,6 +172,10 @@ foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke 
         set(_adp_godot_pure_source test_godot_plant_templates.cpp)
     elseif(_adp_godot_pure_test STREQUAL "capscale")
         set(_adp_godot_pure_source test_godot_cap_scale.cpp)  # usecase:101362 scale the organ templates
+    elseif(_adp_godot_pure_test STREQUAL "groundtops")
+        set(_adp_godot_pure_source test_godot_ground_tops.cpp)  # usecase:101650 show the river water, P0733
+    elseif(_adp_godot_pure_test STREQUAL "framerate")
+        set(_adp_godot_pure_source test_godot_hud_frame_rate.cpp)  # usecase:101440 grow the interface with skills
     elseif(_adp_godot_pure_test STREQUAL "stand")
         set(_adp_godot_pure_source test_godot_plant_stand.cpp)
     elseif(_adp_godot_pure_test STREQUAL "binding")
@@ -202,6 +212,8 @@ foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke 
         set(_adp_godot_pure_source test_godot_hud_context.cpp)  # usecase:101440 grow the interface with skills
     elseif(_adp_godot_pure_test STREQUAL "pose")
         set(_adp_godot_pure_source test_godot_figure_pose.cpp)  # usecase:2157 go to Sleep, FIRECAMP T.11: no figure sleeps standing
+    elseif(_adp_godot_pure_test STREQUAL "step")
+        set(_adp_godot_pure_source test_godot_figure_step.cpp)  # usecase:101588 move player figure over ground, B0943: smooth between steps, turn free of the frame rate
     else()
         set(_adp_godot_pure_source test_godot_asset_showcase.cpp)
     endif()

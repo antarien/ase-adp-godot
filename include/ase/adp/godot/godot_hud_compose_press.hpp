@@ -21,8 +21,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-12
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-24
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -46,9 +46,10 @@ struct HudPress {
     bool thing = false;                // it came down on a thing: a drag may start
     bool window = false;               // it came down on a window's grip
     bool pouring = false;              // it holds the can (S.holding)
-    double poured_at = 0.0;            // the clock of the last measure
+    double poured_held = 0.0;          // the real seconds the can has been held, frames wholly inside the hold only
+    double poured_at = 0.0;            // when the last measure fell, in the seconds of poured_held
     bool system = false;               // it holds the system ring (S.sysHold)
-    bool system_ticked = false;        // a frame ended since the ring was taken: from here its seconds count
+    bool ticked = false;               // a frame ended since the can or the ring was taken: from here seconds count
     double system_held = 0.0;          // the real seconds the ring has been held, frames wholly inside the hold only
 };
 

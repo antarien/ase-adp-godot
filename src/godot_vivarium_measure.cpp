@@ -17,8 +17,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-11-12
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.27.00027 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -183,6 +183,14 @@ void VivariumView::report_measurement() {
     }
     const double recorded_seconds = static_cast<double>(recorded_usec) / GODOT_USEC_PER_SECOND;
     const double fps = recorded_seconds > 0.0 ? static_cast<double>(measurement.frame_usec.size()) / recorded_seconds : 0.0;
+    // THE RECORDING CLOSES THE CYCLE IT STANDS IN (B0944): measure_cycle writes a line only on a day turn, and a
+    // recording shorter than a game day had none. The acceptance run sums the units' time of every cycle line between
+    // measure begin and measure end and names the unit that took the frame when the rate falls under the floor.
+    if (measurement.cycles_ready) {
+        std::string line;
+        resources_.measure_cycle(measurement.cycles, line);
+        note("measure " + text_of(line));
+    }
     // ONE BLOCK, written when the recording is complete: nothing was logged per frame.
     note("measure host_usec frames=" + ::godot::String::num_uint64(measurement.host_usec.size()) + " " +
          series(measurement.host_usec));

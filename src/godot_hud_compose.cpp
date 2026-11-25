@@ -17,8 +17,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-12
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-24
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -41,6 +41,21 @@ bool measure(const UiTheme& theme, const char* token, double& out, std::string& 
         failed = token;
         return false;
     }
+    return true;
+}
+
+/** The time of a gesture in seconds, or its token in `failed`: one that is not above zero lets the gesture never act. */
+bool gesture_time(const UiTheme& theme, const char* token, double& out_s, std::string& failed) {
+    const double ms_per_s = 1000.0;
+    double ms = 0.0;
+    if (!measure(theme, token, ms, failed)) {
+        return false;
+    }
+    if (!(ms > 0.0)) {
+        failed = std::string(token) + ": not above zero";
+        return false;
+    }
+    out_s = ms / ms_per_s;
     return true;
 }
 
@@ -96,14 +111,10 @@ bool VivariumHud::load(const ::godot::Dictionary& root, std::string& failed) {
     }
 
     // The gestures: the times in milliseconds turned into seconds, the slops and lines in mockup units.
-    double double_tap_ms = 0.0;
-    double rail_press_ms = 0.0;
-    double ground_press_ms = 0.0;
-    double pour_step_ms = 0.0;
-    if (!measure(theme_, "hud_gesture_double_tap_ms", double_tap_ms, failed) ||
-        !measure(theme_, "hud_gesture_rail_press_ms", rail_press_ms, failed) ||
-        !measure(theme_, "hud_gesture_ground_press_ms", ground_press_ms, failed) ||
-        !measure(theme_, "hud_gesture_pour_step_ms", pour_step_ms, failed) ||
+    if (!gesture_time(theme_, "hud_gesture_double_tap_ms", double_tap_s_, failed) ||
+        !gesture_time(theme_, "hud_gesture_rail_press_ms", rail_press_s_, failed) ||
+        !gesture_time(theme_, "hud_gesture_ground_press_ms", ground_press_s_, failed) ||
+        !gesture_time(theme_, "hud_gesture_pour_step_ms", pour_step_s_, failed) ||
         !measure(theme_, "hud_gesture_press_slop", press_slop_, failed) ||
         !measure(theme_, "hud_gesture_put_away_swipe", put_away_swipe_, failed) ||
         !measure(theme_, "hud_gesture_put_away_zone", put_away_zone_, failed) ||
@@ -111,11 +122,6 @@ bool VivariumHud::load(const ::godot::Dictionary& root, std::string& failed) {
         !measure(theme_, "hud_gesture_brush_max_y", brush_max_y_, failed)) {
         return false;
     }
-    const double ms_per_s = 1000.0;
-    double_tap_s_ = double_tap_ms / ms_per_s;
-    rail_press_s_ = rail_press_ms / ms_per_s;
-    ground_press_s_ = ground_press_ms / ms_per_s;
-    pour_step_s_ = pour_step_ms / ms_per_s;
 
     // The ground of the world as a touch target (the mockup's bg), lower in the mode terrain.
     if (!measure(theme_, "hud_world_hit_x", ground_x_, failed) ||

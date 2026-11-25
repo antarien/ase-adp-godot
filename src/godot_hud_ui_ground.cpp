@@ -12,8 +12,8 @@
  * @usecase     usecase:100389 - level the ground
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-24
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -21,6 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_ground.hpp>
+#include <ase/adp/godot/ground/types.hpp>
 #include <ase/adp/godot/hud/types.hpp>
 
 #include <ase/math/math.hpp>
@@ -43,6 +44,7 @@ void UiGround::follow(const std::vector<VivariumTerrainView>& samples, const Viv
     origin_z_ = square.z - square.half_m;
     side_ = step_ > 0.0 ? static_cast<int64_t>(::godot::Math::round((square.half_m + square.half_m) / step_)) + 1 : 0;
     index_.assign(static_cast<size_t>(side_ * side_), GODOT_HUD_GROUND_NO_SAMPLE);
+    tops_.lay(side_);
     for (size_t sample = 0; sample < samples.size(); ++sample) {
         const int64_t column = lattice(samples[sample].x, origin_x_);
         const int64_t row = lattice(samples[sample].z, origin_z_);
@@ -50,6 +52,7 @@ void UiGround::follow(const std::vector<VivariumTerrainView>& samples, const Viv
             continue;
         }
         index_[static_cast<size_t>(row * side_ + column)] = static_cast<int64_t>(sample);
+        tops_.add(column, row, samples[sample].height);
     }
 }
 
@@ -76,8 +79,10 @@ bool UiGround::height(double x, double z, double& out) const {
     if (side_ < 2) {
         return false;
     }
-    const double fx = (x - origin_x_) / step_;
-    const double fz = (z - origin_z_) / step_;
+    return lattice_height((x - origin_x_) / step_, (z - origin_z_) / step_, out);
+}
+
+bool UiGround::lattice_height(double fx, double fz, double& out) const {
     const auto last = static_cast<double>(side_ - 1);
     if (fx < 0.0 || fz < 0.0 || fx > last || fz > last) {
         return false;
@@ -110,19 +115,27 @@ bool UiGround::sees(const ::godot::Vector3& eye, const ::godot::Vector3& point, 
     }
     // Half a lattice step between two places asked: the drawn mesh bends at no finer distance.
     const double run = ::godot::Vector2(point.x - eye.x, point.z - eye.z).length();
-    const auto places = static_cast<int64_t>(::godot::Math::ceil(run / (step_ * GODOT_HALF)));
-    for (int64_t place = 1; place < places; ++place) {
-        const double share = static_cast<double>(place) / static_cast<double>(places);
-        const double x = eye.x + (point.x - eye.x) * share;
-        const double z = eye.z + (point.z - eye.z) * share;
-        const double line = eye.y + (point.y - eye.y) * share;
-        double ground = 0.0;
-        if (height(x, z, ground) && ground > line) {
-            over = ::godot::Vector3(static_cast<float>(x), static_cast<float>(ground), static_cast<float>(z));
-            return false;
-        }
+    const GroundSightLine line{(eye.x - origin_x_) / step_,
+                               (eye.z - origin_z_) / step_,
+                               eye.y,
+                               (point.x - origin_x_) / step_,
+                               (point.z - origin_z_) / step_,
+                               point.y,
+                               static_cast<int64_t>(::godot::Math::ceil(run / (step_ * GODOT_HALF)))};
+    double ground = 0.0;
+    const int64_t place = tops_.first_over(
+        line,
+        [](const void* land, double column, double row, double& out) {
+            return static_cast<const UiGround*>(land)->lattice_height(column, row, out);
+        },
+        this, ground);
+    if (place == GODOT_GROUND_NO_PLACE) {
+        return true;
     }
-    return true;
+    const double share = static_cast<double>(place) / static_cast<double>(line.places);
+    over = ::godot::Vector3(static_cast<float>(eye.x + (point.x - eye.x) * share), static_cast<float>(ground),
+                            static_cast<float>(eye.z + (point.z - eye.z) * share));
+    return false;
 }
 
 bool UiGround::across(double share_x, double share_z, ::godot::Vector3& out) const {

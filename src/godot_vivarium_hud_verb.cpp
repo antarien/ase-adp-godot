@@ -38,6 +38,8 @@
 #include <ase/adp/godot/hud/types.hpp>
 #include <ase/math/math.hpp>
 
+#include <godot_cpp/classes/camera3d.hpp>
+#include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
@@ -68,6 +70,13 @@ void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
     float tap_z = 0.0f;
     float nearest_px = -1.0f;
     reticle.brush_on = pick_ground(at, tap_x, tap_z, nearest_px);
+    // ONE FINGER POINT, ONE GROUND: the same canvas point under the same camera names the ground the last lower or
+    // raise acted on (VivariumHandBridge::stab, toUZ of m.html 383).
+    const ::godot::Camera3D* eye = node_->get_viewport()->get_camera_3d();
+    if (reticle.brush_on && eye != nullptr) {
+        hud_hand_.stab(op == VivariumHud::OP_LOWER || op == VivariumHud::OP_RAISE, at, eye->get_global_transform(),
+                       tap_x, tap_z);
+    }
     reticle.brush_x = static_cast<double>(tap_x);
     reticle.brush_z = static_cast<double>(tap_z);
     hud_hand_.ground(hand, reticle);

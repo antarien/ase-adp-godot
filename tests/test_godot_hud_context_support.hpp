@@ -46,20 +46,21 @@ using Names = std::vector<std::string>;
 inline HudContextSpec vivarium_spec() {
     HudContextSpec spec;
     spec.modes = {
-        {"arrive", {}, {"band", "arrive"}},
-        {"rest", {"world", "tree", "ground"}, {"band", "rail", "markers", "inventory"}},
-        {"sign", {"world", "tree", "ground"}, {"band", "rail", "markers", "sign_open", "inventory"}},
-        {"focus", {"world", "tree", "ground"}, {"band", "rail", "focus", "inventory"}},
-        {"water", {"world", "ground"}, {"band", "inventory"}},
-        {"prune", {"world", "ground"}, {"band", "prune_marks", "inventory"}},
-        {"sow", {"world", "ground"}, {"band", "inventory"}},
-        {"terrain", {"world", "ground"}, {"band", "reticle", "inventory"}},
-        {"sap", {"world", "trunk", "ground"}, {"band", "inventory"}},
-        {"plug", {"world", "trunk", "ground"}, {"band", "inventory"}},
-        {"hold", {"world", "tree", "ground"}, {"band", "inventory"}},
-        {"rack", {}, {"band", "rack", "inventory"}},
-        {"sky", {}, {"band", "sky"}},
-        {"sys", {}, {"band", "system"}},
+        {"arrive", {}, {"ground_rows", "band", "arrive"}},
+        {"rest", {"world", "tree", "ground"}, {"ground_rows", "band", "rail", "body", "markers", "inventory"}},
+        {"sign", {"world", "tree", "ground"},
+         {"ground_rows", "band", "rail", "body", "markers", "sign_open", "inventory"}},
+        {"focus", {"world", "tree", "ground"}, {"ground_rows", "band", "rail", "focus", "inventory"}},
+        {"water", {"world", "ground"}, {"ground_rows", "root_cut", "band", "inventory"}},
+        {"prune", {"world", "ground"}, {"ground_rows", "band", "prune_marks", "inventory"}},
+        {"sow", {"world", "ground"}, {"ground_rows", "band", "inventory"}},
+        {"terrain", {"world", "ground"}, {"ground_terrain", "band", "reticle", "inventory"}},
+        {"sap", {"world", "trunk", "ground"}, {"tap_pulse", "ground_rows", "band", "inventory"}},
+        {"plug", {"world", "trunk", "ground"}, {"tap_pulse", "ground_rows", "band", "inventory"}},
+        {"hold", {"world", "tree", "ground"}, {"ground_rows", "band", "inventory"}},
+        {"rack", {}, {"ground_rows", "band", "rack", "inventory"}},
+        {"sky", {}, {"ground_rows", "band", "sky"}},
+        {"sys", {}, {"ground_rows", "band", "system"}},
     };
     spec.over = {{"debug", {"debug_on"}}, {"drag", {"dragging"}}};
     spec.hides = {{"inventory", {"debug_on", "drawer_open"}}};

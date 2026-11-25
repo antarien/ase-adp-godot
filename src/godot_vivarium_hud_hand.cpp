@@ -177,6 +177,26 @@ void VivariumHandBridge::frame(HandSlotFrame& hand, const VivariumPatchView* pat
     hand.tap_l = sap_l;
 }
 
+void VivariumHandBridge::stab(bool lifts, const ::godot::Vector2& at, const ::godot::Transform3D& eye, float& x,
+                              float& z) {
+    // THE HOLE STAYS UNDER THE FINGER. toUZ maps a tap onto the ground without its height, so a second stab at the
+    // same point digs the same hole deeper. The terrain pick takes the sample projected nearest, with the height
+    // after the last stab: under the camera's low look the lowered samples slide down the screen and another one is
+    // nearest (run 20261124-163113-h3-pit: ten taps at 359,700 lowered z 20.38, 16.0, 20.12 and 18.62).
+    if (!lifts) {
+        return;
+    }
+    if (stabbed_ && at.is_equal_approx(stab_at_) && eye.is_equal_approx(stab_eye_)) {
+        x = stab_x_;
+        z = stab_z_;
+    }
+    stabbed_ = true;
+    stab_at_ = at;
+    stab_eye_ = eye;
+    stab_x_ = x;
+    stab_z_ = z;
+}
+
 void VivariumHandBridge::ground(HandSlotFrame& hand, const GroundReticleFrame& reticle) const {
     // THE GROUND under the brush: the terrain port's height, the slope across slopeAt's step, the patch's root zone.
     hand.brush_on = reticle.brush_on;

@@ -47,6 +47,7 @@
 #include <godot_cpp/classes/gpu_particles3d.hpp>
 #include <godot_cpp/classes/gradient.hpp>
 #include <godot_cpp/classes/gradient_texture1_d.hpp>
+#include <godot_cpp/classes/gradient_texture2d.hpp>
 #include <godot_cpp/classes/light3d.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/omni_light3d.hpp>
@@ -122,6 +123,9 @@ constexpr float kSparkQuadM = 1.0f;       // edge of the quad a spark is drawn o
 constexpr float kBedRadiusM = 0.35f;      // ash bed of the largest cell, metres
 constexpr float kBedThickM = 0.02f;       // thickness of the bed
 constexpr float kParticleBoxM = 3.0f;     // edge of the box the particles of a cell are culled by
+constexpr float kParticleCoreShare = 0.35f;  // the share of a spot's radius that stays dense before it fades out
+constexpr float kParticleCoreAlpha = 0.7f;   // the alpha at the edge of that dense core
+constexpr int32_t kParticleSpotPx = 64;      // edge of the texture a round spot is drawn from, pixels
 
 /** The stage of a fire cell from its marks: ase-fire keeps a cell in one stage, the latest mark names it. */
 uint32_t stage_of(const VivariumSurvivalFireView& cell) {
@@ -138,14 +142,42 @@ float measured(double value) {
     return std::isnan(value) ? 0.0f : static_cast<float>(value);
 }
 
-/** A material for particles drawn as quads toward the eye, coloured by the ramp of their process material. */
+/**
+ * A material for particles drawn as round, soft spots toward the eye, coloured by the ramp of their process material.
+ * Godot's particle billboard builds its turn from normalised axes and drops the scale of every particle unless
+ * FLAG_BILLBOARD_KEEP_SCALE stands: without it a spark of kSparkScaleLow to kSparkScaleHigh is drawn at the full edge
+ * of its quad. The radial texture fades each quad from its centre to its rim, so a puff is a disc and a spark a dot,
+ * never a square.
+ */
 ::godot::Ref<::godot::StandardMaterial3D> particle_material() {
+    ::godot::Ref<::godot::Gradient> falloff;
+    falloff.instantiate();
+    ::godot::PackedFloat32Array offsets;
+    offsets.push_back(0.0f);
+    offsets.push_back(kParticleCoreShare);
+    offsets.push_back(1.0f);
+    ::godot::PackedColorArray colors;
+    colors.push_back(::godot::Color(1.0f, 1.0f, 1.0f, 1.0f));
+    colors.push_back(::godot::Color(1.0f, 1.0f, 1.0f, kParticleCoreAlpha));
+    colors.push_back(::godot::Color(1.0f, 1.0f, 1.0f, 0.0f));
+    falloff->set_offsets(offsets);
+    falloff->set_colors(colors);
+    ::godot::Ref<::godot::GradientTexture2D> spot;
+    spot.instantiate();
+    spot->set_gradient(falloff);
+    spot->set_fill(::godot::GradientTexture2D::FILL_RADIAL);
+    spot->set_fill_from(::godot::Vector2(0.5f, 0.5f));
+    spot->set_fill_to(::godot::Vector2(0.5f, 0.0f));  // the rim of the disc touches the edge of the quad
+    spot->set_width(kParticleSpotPx);
+    spot->set_height(kParticleSpotPx);
     ::godot::Ref<::godot::StandardMaterial3D> material;
     material.instantiate();
     material->set_billboard_mode(::godot::BaseMaterial3D::BILLBOARD_PARTICLES);
+    material->set_flag(::godot::BaseMaterial3D::FLAG_BILLBOARD_KEEP_SCALE, true);
     material->set_transparency(::godot::BaseMaterial3D::TRANSPARENCY_ALPHA);
     material->set_shading_mode(::godot::BaseMaterial3D::SHADING_MODE_UNSHADED);
     material->set_flag(::godot::BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+    material->set_texture(::godot::BaseMaterial3D::TEXTURE_ALBEDO, spot);
     return material;
 }
 
