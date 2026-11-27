@@ -31,8 +31,8 @@
  * @usecase     usecase:101625 - carry a tool in hand
  * @actor       SS/PC
  * @created     2026-11-14
- * @modified    2026-11-18
- * @version     00.00.22.00022 [init]
+ * @modified    2026-11-27
+ * @version     00.00.23.00023 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -341,15 +341,22 @@ TEST_CASE("usecase:100411 learn skills by experience: the led figure cuts a bran
     REQUIRE(first != nullptr);
     const uint32_t figure = first->object_id;
 
-    // The seed of place 0 grows before the camera, as the tree case lets it (test_godot_host_tree.cpp, B0295 point 4)
+    // THE CASE NEEDS A FOUNDER THAT BEARS LATERAL BUDS (register B1012). The founder operator of ase-genetics shifts
+    // every gene by its mutation strength (GeneticsIniPlntIndvSystem, PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.2); on
+    // PLT_SPEC_LAT_BUT_COUNT (0..100, arosaruebe 3) that is up to 10 buds either way, and the founder of place 0
+    // (seed 1) lands on 0: its shoot never branches. Measured 2026-11-27 (data/probes/runs/founder_lat_buds_1127.txt,
+    // the same formula holds the line of PhytomerSideIniSystem for seed 1): place 2 (seed 3) bears 3.9 buds per node
+    // of its stem, the nearest to the catalog value of the four places.
+    constexpr uint32_t kBranchingPlace = 2u;
+    // Its seed grows before the camera, as the tree case lets it (test_godot_host_tree.cpp, B0295 point 4)
     advance_frames(resources, 8u);
-    const VivariumPatchView& seen = test::patch_at(resources, 0u);
+    const VivariumPatchView& seen = test::patch_at(resources, kBranchingPlace);
     const uint32_t cared = seen.object_id;
     REQUIRE(resources.view(seen.x, seen.y + 3.0, seen.z + 6.0, seen.x, seen.y, seen.z) == ase::kernel::HostStatusOk);
     constexpr uint32_t kSoilBoundFrames = 32u;
     REQUIRE(test::await_soil_class(resources, kSoilBoundFrames));
     const double amount_mm = test::vivarium_config(env.bundle).irrigate_amount_mm;
-    const double capacity_mm = test::patch_at(resources, 0u).capacity_mm;
+    const double capacity_mm = test::patch_at(resources, kBranchingPlace).capacity_mm;
     constexpr uint32_t kBoundFrames = 256u;
     for (double poured_mm = amount_mm;
          poured_mm < capacity_mm + amount_mm && resources.get_organs(GODOT_ORGAN_SEGMENT).empty();
@@ -362,10 +369,11 @@ TEST_CASE("usecase:100411 learn skills by experience: the led figure cuts a bran
     REQUIRE(!resources.get_organs(GODOT_ORGAN_SEGMENT).empty());
 
     // The jump to the hour of MADURA: a grown shoot carries branches (order 1 and above) beside its stem (order 0)
-    for (uint32_t frame = 0u; frame < kBoundFrames && !(test::patch_at(resources, 0u).mtur_at_h > 0.0); ++frame) {
+    for (uint32_t frame = 0u; frame < kBoundFrames && !(test::patch_at(resources, kBranchingPlace).mtur_at_h > 0.0);
+         ++frame) {
         advance_frames(resources, 1u);
     }
-    const double mature_h = test::patch_at(resources, 0u).mtur_at_h;
+    const double mature_h = test::patch_at(resources, kBranchingPlace).mtur_at_h;
     REQUIRE(mature_h > 0.0);
     REQUIRE(resources.seek(1.0, mature_h, GODOT_SEEK_FORM_NONE, GODOT_SEEK_FORM_NONE) == ase::kernel::HostStatusOk);
     // The clock reaches the hour of the jump first, as in the tree case (test_godot_host_tree.cpp, B0295 point 4),
