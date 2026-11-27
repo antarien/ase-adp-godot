@@ -198,6 +198,7 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/godot_plant_templates.hpp
     include/ase/adp/godot/godot_plant_template_mesh.hpp  # template_mesh_of: an organ template with its tangents on ARRAY_TANGENT (PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.6)
     include/ase/adp/godot/template/types.hpp  # the record keys and template codes of the organ template ports, corner, triangle and tangent (usecase:101342, usecase:101011, T.6)
+    include/ase/adp/godot/forecast/types.hpp  # the forecast key of an unreachable growing stage (usecase:100387 view the plant, D2676)
     include/ase/adp/godot/cap/types.hpp       # the cap port key, the cap role and the cap node of a fruit body (usecase:101362 scale the organ templates, B0605)
     include/ase/adp/godot/cap/godot_plant_cap.hpp  # the cap template bound, scaled to the cap radius and drawn at the stem base (usecase:101362 scale the organ templates, B0605)
     include/ase/adp/godot/cap/godot_cap_scale.hpp  # cap_scale, cap_role_of, cap_species_of, cap_node_of without a Godot type (usecase:101362 scale the organ templates, B0605)
