@@ -378,13 +378,31 @@ TEST_CASE("usecase:100411 learn skills by experience: the led figure cuts a bran
     // internodes all of order 0 (data/probes/runs/figure_prune_1125.txt). Its buds burst in the cycles of the days
     // after the jump, as the birch of test_phytomer.cpp bears 10 main internodes two days past its jump (B0299,
     // data/probes/runs/phytomer_jump_branches_1125.txt); each day is a seek of one game day ahead.
+    // Those days lie in summer, as the days of B0299 do: the hour of MADURA measured 2026-11-27 (3.2485e6 h) lands on
+    // year day 3737, HALITRIX, where the leaves fall (growth_steps 1 → 0 leaves); one seek carries the clock to the
+    // first day of IGNIX first (register T0415).
+    double seq = 2.0;
+    const double summer_h = test::hours_to_summer(resources.get_clock());
+    CAPTURE(summer_h);
+    REQUIRE(summer_h >= 0.0);
+    if (summer_h > 0.0) {
+        const VivariumClockView& clock = resources.get_clock();
+        REQUIRE(clock.seconds_per_hour > 0.0);
+        const double target_h = clock.elapsed_s / clock.seconds_per_hour + summer_h;
+        REQUIRE(resources.seek(seq, GODOT_SEEK_FORM_NONE, summer_h, GODOT_SEEK_FORM_NONE) == ase::kernel::HostStatusOk);
+        seq += 1.0;
+        (void)test::await_hour(resources, target_h);
+        growth_steps += "|summer ";
+        still = test::await_still_shoot(resources, growth_steps);
+    }
     for (uint32_t day = 1u; day <= test::kDaysAfterJump; ++day) {
         const VivariumClockView& clock = resources.get_clock();
         REQUIRE(clock.seconds_per_hour > 0.0);
         REQUIRE(clock.hours_per_day > 0.0);
         const double target_h = clock.elapsed_s / clock.seconds_per_hour + clock.hours_per_day;
-        REQUIRE(resources.seek(1.0 + static_cast<double>(day), GODOT_SEEK_FORM_NONE, clock.hours_per_day,
-                               GODOT_SEEK_FORM_NONE) == ase::kernel::HostStatusOk);
+        REQUIRE(resources.seek(seq, GODOT_SEEK_FORM_NONE, clock.hours_per_day, GODOT_SEEK_FORM_NONE) ==
+                ase::kernel::HostStatusOk);
+        seq += 1.0;
         (void)test::await_hour(resources, target_h);
         growth_steps += "| ";
         still = test::await_still_shoot(resources, growth_steps);

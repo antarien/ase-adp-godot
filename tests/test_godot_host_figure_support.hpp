@@ -97,6 +97,10 @@ inline void add_figure_ports(VivariumStartConfig& config) {
     config.op_drain = "drain";
     config.op_measure = "measure";
     config.op_bind = "bind";
+    // The day and the four seasons as the start configuration names them (N0460): hours_to_summer reads the day of the
+    // year from the day record and the first LUNBREX of IGNIX from the season set (T0415).
+    config.day_port = "flora.day.v1";
+    config.season_port = "flora.season.v1";
     config.figure_seat = kFigureSeat;
     config.figure_x = kFigureSpawnX;
     config.figure_z = kFigureSpawnZ;
@@ -138,6 +142,32 @@ inline constexpr uint32_t kShootStillFrames = 16u;
  * jump (B0299). Each day is one seek of hours_per_day ahead.
  */
 inline constexpr uint32_t kDaysAfterJump = 2u;
+
+/**
+ * Game hours from now to the first day of IGNIX, the summer, as the calendar ports carry it (CAL_SEASON on the date
+ * record, the first LUNBREX of each season on flora.season.v1): 0 while the clock stands in IGNIX, a negative value
+ * while a port has not carried the calendar yet. The leaf season runs from PLT_SPEC_FLW_LEAF_FLUSH to
+ * PLT_SPEC_FLW_LEAF_FALL, and the birch of modules/ase-phytomer/tests/test_phytomer.cpp bears its main branches in
+ * summer days (B0299); a jump to MADURA that lands in autumn reaches them only after the winter (register T0415).
+ */
+inline double hours_to_summer(const VivariumClockView& clock) {
+    const auto summer = static_cast<std::size_t>(clock.season_ignix);
+    if (!clock.date_known || !clock.day_known || !clock.season_codes_known || !clock.seasons_known ||
+        clock.days_per_month <= 0.0 ||
+        clock.months_per_year <= 0.0 || clock.hours_per_day <= 0.0 || summer >= clock.season_start_lun.size()) {
+        return -1.0;
+    }
+    if (clock.season == clock.season_ignix) {
+        return 0.0;
+    }
+    const double days_per_year = clock.months_per_year * clock.days_per_month;
+    const double first_day = (clock.season_start_lun[summer] - 1.0) * clock.days_per_month + 1.0;
+    double ahead_d = first_day - clock.year_day;
+    if (ahead_d <= 0.0) {
+        ahead_d += days_per_year;
+    }
+    return ahead_d * clock.hours_per_day;
+}
 
 /** Frames until the clock of the host stands at game hour `hour` or later, a bounded number; returns the frames taken. */
 inline uint32_t await_hour(GodotHostResourceManager& resources, double hour) {

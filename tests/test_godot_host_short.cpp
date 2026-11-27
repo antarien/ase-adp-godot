@@ -12,7 +12,10 @@
  *              until its shoot stands and waits until the forecast port answers for CRESCENDO: an hour or a lack,
  *              never neither. For this birch the answer is the lack, and it carries no hour beside it.
  *
- *              ONE GAME HOST PER RUN, in its own executable beside the others of the bundle.
+ *              ONE GAME HOST PER RUN, in its own executable beside the others of the bundle. THE PATCH IS THE
+ *              CLIENT'S OWN: the shared configuration of the bundle tests lays arosaruebe on seed 1 + place
+ *              (test_godot_host_support.hpp), and a founder of another species and seed is another individual;
+ *              this target lays place 0 as config/vivarium_start.json does, betula_pendula on seed 42 (T0416).
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -47,6 +50,8 @@ using test::vivarium_config;
 namespace {
 
 constexpr uint32_t kBirchPlace = 0u;      // the place of the birch of seed 42 in the client's start configuration
+constexpr const char* kBirchSpecies = "betula_pendula";  // its species there (config/vivarium_start.json, patches[0])
+constexpr uint32_t kBirchSeed = 42u;      // its seed there
 constexpr uint32_t kSoilBoundFrames = 32u; // frames the case waits for the soil class of the cell at most
 constexpr uint32_t kBoundFrames = 256u;   // frames the case waits for a shoot or a forecast at most
 
@@ -56,10 +61,20 @@ bool answered(const GodotHostResourceManager& resources, const VivariumPatchView
     return resources.stage_due_h(patch, position) > 0.0 || std::isfinite(resources.stage_short_d(patch, position));
 }
 
+// The patch of place 0 as the client's start configuration lays it: the birch of seed 42.
+void lay_client_birch(VivariumStartConfig& config) {
+    for (VivariumPatchSpec& patch : config.patches) {
+        if (patch.place == kBirchPlace) {
+            patch.species = kBirchSpecies;
+            patch.seed = kBirchSeed;
+        }
+    }
+}
+
 }  // namespace
 
 TEST_CASE("D2676: the forecast port reports CRESCENDO unreachable for the birch of seed 42, with the growing days it lacks") {
-    AdapterEnvironment& env = environment();
+    AdapterEnvironment& env = environment(&lay_client_birch);
     REQUIRE(env.booted == ase::kernel::HostStatusOk);
     GodotHostResourceManager& resources = env.resources;
 

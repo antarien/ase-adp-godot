@@ -295,20 +295,29 @@ TEST_CASE("debug rsm: nothing of the console stands over the scene, every layer 
     CHECK(view_x + static_cast<double>(GODOT_HUD_DEBUG_VIEWS - 1u) * token(theme, "hud-debug-view-step") + tab_w <=
           fold_hit_x);
 
-    // the body of RSM and STATUS: under the view chips, inside the drawer
+    // the body of RSM and STATUS: under the view chips, inside the drawer. The grid stands as DebugRsmTable::grid draws
+    // it: the column `place` in band place / band-cols, each band GODOT_RSM_GRID_ROWS touching cells, the second band
+    // a rule gap under the first (row_y); the foot is the last cell of the last band plus the bottom margin
     const double body_y = token(theme, "hud-debug-y");
     const double row_step = token(theme, "hud-debug-rsm-row-step");
-    const double table_top = body_y + token(theme, "hud-debug-rsm-top-dy");
-    const double table_foot = body_y + static_cast<double>(GODOT_RSM_VALUE_ROWS + 1u) * row_step +
-                              token(theme, "hud-debug-rsm-rule-gap") + token(theme, "hud-debug-rsm-bottom-dy");
+    const double top_dy = token(theme, "hud-debug-rsm-top-dy");
+    const double band_cols = token(theme, "hud-debug-rsm-band-cols");
+    REQUIRE(band_cols >= 1.0);
+    const double bands = std::ceil(token(theme, "hud-debug-rsm-cols") / band_cols);
+    const double grid_rows = bands * static_cast<double>(GODOT_RSM_GRID_ROWS);
+    const double table_top = body_y + top_dy;
+    const double table_foot = body_y - row_step + grid_rows * row_step +
+                              (bands > 1.0 ? token(theme, "hud-debug-rsm-rule-gap") : 0.0) + top_dy +
+                              token(theme, "hud-debug-rsm-cell-h") + token(theme, "hud-debug-rsm-bottom-dy");
+    CAPTURE(table_foot);
     CHECK(table_top >= view_end);
     CHECK(table_foot <= drawer_end);
     CHECK(body_y + 3.0 * token(theme, "hud-debug-line-step") <= drawer_end);  // the four status lines
 
-    // the grid of ten columns ends inside the frame; the places the rings QNT and TUC keep lie inside the drawer
+    // a band of the grid ends inside the frame; the places the rings QNT and TUC keep lie inside the drawer
     const double table_right = token(theme, "hud-debug-x") +
-                               token(theme, "hud-debug-rsm-cols") *
-                                   (token(theme, "hud-debug-rsm-col-w") + token(theme, "hud-debug-rsm-col-gap"));
+                               band_cols * (token(theme, "hud-debug-rsm-col-w") + token(theme, "hud-debug-rsm-col-gap"));
+    CAPTURE(table_right);
     CHECK(table_right <= frame_w);
     const double ring_x = token(theme, "hud-debug-rsm-ring-x");
     const double ring_r = token(theme, "hud-debug-rsm-ring-r");
