@@ -40,17 +40,18 @@ struct HudPress {
     bool down = false;                 // a finger is down
     ::godot::Vector2 at;               // where it came down
     double wall = 0.0;                // when, in the real seconds the long press counts (the mockup's setTimeout)
+    double since = 0.0;               // real seconds from the start of the last frame to the press: the next frame's part before it
     VivariumHudHit hit;                // what it came down on
     double long_after = 0.0;           // the long press fires this many seconds after; 0: none
     bool long_fired = false;           // the long press fired: the release does nothing more
     bool thing = false;                // it came down on a thing: a drag may start
     bool window = false;               // it came down on a window's grip
     bool pouring = false;              // it holds the can (S.holding)
-    double poured_held = 0.0;          // the real seconds the can has been held, frames wholly inside the hold only
+    double poured_held = 0.0;          // the real seconds the can has been held, from the press on
     double poured_at = 0.0;            // when the last measure fell, in the seconds of poured_held
     bool system = false;               // it holds the system ring (S.sysHold)
-    bool ticked = false;               // a frame ended since the can or the ring was taken: from here seconds count
-    double system_held = 0.0;          // the real seconds the ring has been held, frames wholly inside the hold only
+    bool ticked = false;               // a frame ended since the can or the ring was taken: from here whole frames count
+    double system_held = 0.0;          // the real seconds the ring has been held, from the press on
 };
 
 }  // namespace ase::adp::godot

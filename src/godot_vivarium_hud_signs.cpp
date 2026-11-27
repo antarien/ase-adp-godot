@@ -34,7 +34,8 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_hud_sign_marker.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/gap/types.hpp>
+#include <ase/adp/godot/hud/weather/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -84,8 +85,8 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     const bool standing = !dead && patch != nullptr && (patch->sprout || patch->grow || patch->mature);
     // The soil of the patch record; without a record in focus the mockup's S.soil (hud_bridge_sign_soil_*), its
     // port field named.
-    double soil_mm = hud_sign_rules_.soil_mm;
-    double soil_rel = hud_sign_rules_.soil_rel;
+    double soil_mm = hud_state_.hud_sign_rules_.soil_mm;
+    double soil_rel = hud_state_.hud_sign_rules_.soil_rel;
     if (patch != nullptr) {
         soil_mm = patch->soil_mm;
         soil_rel = patch->soil_rel;
@@ -111,7 +112,7 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     // the tap or the rising sap, the brook in rain, and the three signatures of the sky.
     if (dead) {
         game.signs.emplace_back("dead");
-    } else if (standing && soil_rel < hud_sign_rules_.wilt_soil) {
+    } else if (standing && soil_rel < hud_state_.hud_sign_rules_.wilt_soil) {
         game.signs.emplace_back("wilt");
     }
     if (standing && saltatrix) {
@@ -126,18 +127,18 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     if (!dead && saltatrix && mature) {
         game.signs.emplace_back("catkin");
     }
-    if (hud_bridge_sap_running_) {
+    if (hud_state_.hud_bridge_sap_running_) {
         game.signs.emplace_back("sap");
-        if (hud_bridge_sap_l_ >= hud_bridge_sap_cap_l_) {
+        if (hud_state_.hud_bridge_sap_l_ >= hud_state_.hud_bridge_sap_cap_l_) {
             game.marks.emplace_back(GODOT_HUD_MARK_VESSEL_FULL);
         }
-    } else if (!dead && mature && hud_sign_rules_.sap_rise) {
+    } else if (!dead && mature && hud_state_.hud_sign_rules_.sap_rise) {
         game.signs.emplace_back("sap_rise");
     }
     if (weather == GODOT_HUD_WEATHER_RAIN || weather == GODOT_HUD_WEATHER_DRIZZLE) {
         game.signs.emplace_back("brook");
     }
-    if (clear && hud_sign_rules_.se02 && !band.night) {
+    if (clear && hud_state_.hud_sign_rules_.se02 && !band.night) {
         game.signs.emplace_back("se02");
     }
     if (clear && band.night) {
@@ -156,7 +157,7 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     // fills the season and logs flora.day.v1 itself.
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.soil_not_full");
     open_gap(GODOT_HUD_GAP_PRUNE, "flora.scene.v1.branch_uncut");
-    // tap_open and tap_closed stand on hud_bridge_sap_running_, which VivariumView::bridge_patch takes from
+    // tap_open and tap_closed stand on hud_state_.hud_bridge_sap_running_, which VivariumView::bridge_patch takes from
     // flora.sap.v1 each frame once its record stands (GodotHostResourceManager::read_sap, N0457); the gap closes on
     // that edge and opens again when the record falls silent.
     if (resources_.get_sap().known) {
@@ -164,15 +165,15 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     } else {
         open_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1.running");
     }
-    if (soil_rel < hud_bridge_soil_full_) {
+    if (soil_rel < hud_state_.hud_bridge_soil_full_) {
         game.marks.emplace_back("soil_not_full");
     }
     // Prune's mark branch_uncut is laid in fill_hud_world, right after VivariumHandBridge::cut counted the crown:
-    // fill_hud lays hud_now_ anew before this bridge, so hand.prune_left reads 0 here in every frame.
+    // fill_hud lays hud_state_.hud_now_ anew before this bridge, so hand.prune_left reads 0 here in every frame.
     if (saltatrix) {
         game.marks.emplace_back("season_saltatrix");
     }
-    game.marks.emplace_back(hud_bridge_sap_running_ ? "tap_open" : "tap_closed");
+    game.marks.emplace_back(hud_state_.hud_bridge_sap_running_ ? "tap_open" : "tap_closed");
 
     // The values the readings and bars name, each as the mockup prints it: f1() for millimetres and litres, a
     // rounded per cent for a share, the season's word, and the phases of rainIn() where the forecast names rain.
@@ -182,31 +183,31 @@ void VivariumView::bridge_signs(HudGameState& game, SignMarkerFrame& signs, cons
     signs.values.push_back(SignValue{"soil_rel", number_text(soil_rel * 100.0, 0), soil_rel});
     uint32_t named = season;
     std::string word;
-    if (!season_word(hud_.theme(), named, word) || named >= clock.season_light_h.size()) {
+    if (!season_word(hud_state_.hud_.theme(), named, word) || named >= clock.season_light_h.size()) {
         open_gap(GODOT_HUD_GAP_CLOCK, "flora.day.v1.season");
-        named = static_cast<uint32_t>(ase::math::floor(static_cast<float>(hud_bridge_clock_.season)));
-        season_word(hud_.theme(), named, word);
+        named = static_cast<uint32_t>(ase::math::floor(static_cast<float>(hud_state_.hud_bridge_clock_.season)));
+        season_word(hud_state_.hud_.theme(), named, word);
     } else {
         close_gap(GODOT_HUD_GAP_CLOCK, "flora.day.v1.season");
     }
     const std::vector<double>& light = named < clock.season_light_h.size() ? clock.season_light_h
-                                                                            : hud_bridge_clock_.season_light_h;
+                                                                            : hud_state_.hud_bridge_clock_.season_light_h;
     signs.values.push_back(SignValue{"season", word, 0.0});
     signs.values.push_back(SignValue{"light_h", number_text(light[named], 0), 0.0});
     signs.values.push_back(SignValue{"lun", number_text(clock.month, 0), 0.0});
-    signs.values.push_back(SignValue{"vessel_l", number_text(hud_bridge_sap_l_, 1), 0.0});
-    signs.values.push_back(SignValue{"vessel_cap_l", number_text(hud_bridge_sap_cap_l_, 1), 0.0});
-    const double vessel_rel = ase::math::min(1.0, hud_bridge_sap_l_ / hud_bridge_sap_cap_l_);
+    signs.values.push_back(SignValue{"vessel_l", number_text(hud_state_.hud_bridge_sap_l_, 1), 0.0});
+    signs.values.push_back(SignValue{"vessel_cap_l", number_text(hud_state_.hud_bridge_sap_cap_l_, 1), 0.0});
+    const double vessel_rel = ase::math::min(1.0, hud_state_.hud_bridge_sap_l_ / hud_state_.hud_bridge_sap_cap_l_);
     signs.values.push_back(SignValue{"vessel_rel", number_text(vessel_rel * 100.0, 0), vessel_rel});
     signs.values.push_back(
-        SignValue{"level_rel", number_text(hud_sign_rules_.brook_level * 100.0, 0), hud_sign_rules_.brook_level});
-    double phases = hud_sign_rules_.se02_phases;
+        SignValue{"level_rel", number_text(hud_state_.hud_sign_rules_.brook_level * 100.0, 0), hud_state_.hud_sign_rules_.brook_level});
+    double phases = hud_state_.hud_sign_rules_.se02_phases;
     if (hand.rain_coming) {
         phases = static_cast<double>(hand.rain_phases);
     } else if (fog) {
-        phases = hud_sign_rules_.se24_phases;
+        phases = hud_state_.hud_sign_rules_.se24_phases;
     } else if (band.night) {
-        phases = hud_sign_rules_.se30_phases;
+        phases = hud_state_.hud_sign_rules_.se30_phases;
     }
     signs.values.push_back(SignValue{"phases", number_text(phases, 0), 0.0});
 

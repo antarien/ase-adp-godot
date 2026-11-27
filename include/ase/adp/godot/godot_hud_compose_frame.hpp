@@ -37,8 +37,10 @@
  */
 
 #include <ase/adp/godot/godot_hud_action_fan.hpp>
+#include <ase/adp/godot/godot_hud_activity_bars_draw.hpp>
 #include <ase/adp/godot/godot_hud_bag_icon.hpp>
 #include <ase/adp/godot/godot_hud_bag_window.hpp>
+#include <ase/adp/godot/godot_hud_arc_frame.hpp>
 #include <ase/adp/godot/godot_hud_belt_holster.hpp>
 #include <ase/adp/godot/godot_hud_calendar_sheet.hpp>
 #include <ase/adp/godot/godot_hud_context_resolver.hpp>
@@ -57,6 +59,7 @@
 #include <ase/adp/godot/godot_hud_survival_rest_card.hpp>
 #include <ase/adp/godot/godot_hud_survival_air_mark.hpp>
 #include <ase/adp/godot/godot_hud_survival_spoil_ring.hpp>
+#include <ase/adp/godot/godot_hud_skill_rings_draw.hpp>
 #include <ase/adp/godot/godot_hud_tap_hole.hpp>
 #include <ase/adp/godot/godot_hud_tree_shade.hpp>
 #include <ase/adp/godot/godot_hud_terrain_kit.hpp>
@@ -102,6 +105,7 @@ struct VivariumHudFrame {
     bool still = false;                       // every motion held
     HudCover cover;                           // REQUIRED: the surface and the bands' offsets, set by the view
 
+    SkyArcFrame arc;                          // the sky arc of the top band, written by the arc bridge (N0448)
     SkyBandFrame band;
     WeatherVeilFrame veil;
     SkyOvercastFrame sky;                     // the weather whose tint the sky port does not carry; sun_y is set by the view
@@ -128,6 +132,8 @@ struct VivariumHudFrame {
     HandSlotFrame hand;                      // mode, dragged, hot and toast_posted are set by the HUD
     BeltHolsterFrame belt;                    // dragged, hot and refused are set by the HUD
     BagIconFrame bag_icon;                    // open, hot and refused are set by the HUD
+    ActivityBarsFrame bars;                   // the slices of the led figure (usecase:101305, B5); hand and held are set by the HUD
+    SkillRingsFrame skill;                    // the shares of the rings DCD and ACD of the led figure's learning entries (usecase:101305, B5)
     BagWindowFrame window;                    // selected, dragged, hot and refused are set by the HUD
     DebugLayerFrame debug;                    // open and tab are set by the HUD
     const VivariumDebug* debug_data = nullptr;// REQUIRED while the debug layer shows

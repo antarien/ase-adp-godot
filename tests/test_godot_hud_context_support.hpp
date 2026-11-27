@@ -22,8 +22,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-09
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -50,7 +50,7 @@ inline HudContextSpec vivarium_spec() {
         {"rest", {"world", "tree", "ground"}, {"ground_rows", "band", "rail", "body", "markers", "inventory"}},
         {"sign", {"world", "tree", "ground"},
          {"ground_rows", "band", "rail", "body", "markers", "sign_open", "inventory"}},
-        {"focus", {"world", "tree", "ground"}, {"ground_rows", "band", "rail", "focus", "inventory"}},
+        {"focus", {"world", "tree", "ground"}, {"ground_rows", "band", "rail", "body", "focus", "inventory"}},
         {"water", {"world", "ground"}, {"ground_rows", "root_cut", "band", "inventory"}},
         {"prune", {"world", "ground"}, {"ground_rows", "band", "prune_marks", "inventory"}},
         {"sow", {"world", "ground"}, {"ground_rows", "band", "inventory"}},

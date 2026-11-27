@@ -35,7 +35,8 @@
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
+#include <ase/adp/godot/hud/gap/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/camera3d.hpp>
@@ -49,8 +50,8 @@
 namespace ase::adp::godot {
 
 void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
-    const auto found = hud_verbs_.find(request.key);
-    if (found == hud_verbs_.end()) {
+    const auto found = hud_state_.hud_verbs_.find(request.key);
+    if (found == hud_state_.hud_verbs_.end()) {
         fail_hud("hud.verbs." + request.key);
         return;
     }
@@ -58,14 +59,14 @@ void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
     const std::string& op = verb.op;
     settle_bed_choice();  // a verb or mode chosen earlier in this frame drops an old start before this tap lays one
     // The brush lies in mockup units; the ports read the ground under it on the canvas.
-    const ::godot::Vector2 at = hud_frame_.xform(request.point);
-    // THE READINGS AT THE TAP. hud_now_ was laid in the frame before the finger set down, its brush still where the
+    const ::godot::Vector2 at = hud_state_.hud_frame_.xform(request.point);
+    // THE READINGS AT THE TAP. hud_state_.hud_now_ was laid in the frame before the finger set down, its brush still where the
     // last tap left it (run v13-enxada-014635: soltar beside the ring toasted plain while the panel named the zone,
     // amontoar at the same spot warned from the stem tap before). applyTerr asks inRoot, hAt and slopeAt where the
     // finger set down (m.html 979), so the hand's ground is read again at this tap with the verb's own brush.
-    HandSlotFrame hand = hud_now_.hand;
+    HandSlotFrame hand = hud_state_.hud_now_.hand;
     hand.brush_m = verb.brush_m;
-    GroundReticleFrame reticle = hud_now_.terrain.reticle;
+    GroundReticleFrame reticle = hud_state_.hud_now_.terrain.reticle;
     float tap_x = 0.0f;
     float tap_z = 0.0f;
     float nearest_px = -1.0f;
@@ -74,12 +75,12 @@ void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
     // raise acted on (VivariumHandBridge::stab, toUZ of m.html 383).
     const ::godot::Camera3D* eye = node_->get_viewport()->get_camera_3d();
     if (reticle.brush_on && eye != nullptr) {
-        hud_hand_.stab(op == VivariumHud::OP_LOWER || op == VivariumHud::OP_RAISE, at, eye->get_global_transform(),
+        hud_state_.hud_hand_.stab(op == VivariumHud::OP_LOWER || op == VivariumHud::OP_RAISE, at, eye->get_global_transform(),
                        tap_x, tap_z);
     }
     reticle.brush_x = static_cast<double>(tap_x);
     reticle.brush_z = static_cast<double>(tap_z);
-    hud_hand_.ground(hand, reticle);
+    hud_state_.hud_hand_.ground(hand, reticle);
     // applyTerr (m.html 979 to 991): a verb toasts only once it acted. The ports that carry an act answer whether
     // they took it (bed, flatten, level, lower, raise; the bed's first tap lays nothing); the acts no port carries yet act in the
     // bridge's frame, their gap logged once on the edge.
@@ -103,8 +104,8 @@ void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
         std::string planted;
         const ::godot::Vector3 ground(tap_x, 0.0f, tap_z);
         ::godot::Vector3 hole = ground;
-        const bool holed = lowers ? hud_carry_.dig(reticle.brush_on, ground, hole, planted)
-                                  : hud_carry_.cover(reticle.brush_on, ground, hole, planted);
+        const bool holed = lowers ? hud_state_.hud_carry_.dig(reticle.brush_on, ground, hole, planted)
+                                  : hud_state_.hud_carry_.cover(reticle.brush_on, ground, hole, planted);
         if (holed) {
             open_gap(VivariumCarryBridge::GAP_PLANT, request.kind);
         }
@@ -125,7 +126,7 @@ void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
         if (reticle.brush_on) {
             (void)loosen(static_cast<float>(reticle.brush_x), static_cast<float>(reticle.brush_z),
                          static_cast<float>(verb.brush_m), static_cast<float>(verb.depth_m));
-            hud_loose_.loosen(reticle.brush_x, reticle.brush_z, verb.brush_m);
+            hud_state_.hud_loose_.loosen(reticle.brush_x, reticle.brush_z, verb.brush_m);
         }
         acted = true;
     } else if (op == VivariumHud::OP_MEASURE) {
@@ -147,7 +148,7 @@ void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
     const bool warn = !verb.roots.empty() && hand.in_roots && (op != VivariumHud::OP_LOOSEN || !hand.dead);
     if (warn && op == VivariumHud::OP_LOOSEN) {
         // RAÍZES FERIDAS costs the bridge's growth (S.grow - 4 of 100, m.html 980), N0454 and N0456
-        hud_bridge_growth_ = ase::math::max(0.0, hud_bridge_growth_ - hud_loose_.root_cost());
+        hud_state_.hud_bridge_growth_ = ase::math::max(0.0, hud_state_.hud_bridge_growth_ - hud_state_.hud_loose_.root_cost());
     }
     const std::vector<HudPortValue> none;
     const std::string colour =
@@ -155,7 +156,7 @@ void VivariumView::send_hud_verb(const VivariumHudRequest& request) {
              : std::string("DOMAIN_") + ::godot::String(verb.tone.c_str()).to_upper().utf8().get_data();
     note(::godot::String(("hud verb " + request.key + " toast=" + (warn ? verb.roots : verb.toast)).c_str()));
     std::string failed;
-    if (!hud_.toast(warn ? verb.roots : verb.toast, warn ? none : values, colour, failed)) {
+    if (!hud_state_.hud_.toast(warn ? verb.roots : verb.toast, warn ? none : values, colour, failed)) {
         fail_hud(failed);
     }
 }

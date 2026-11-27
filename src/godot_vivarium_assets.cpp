@@ -103,7 +103,7 @@ bool VivariumView::load_assets(const ::godot::Dictionary& root) {
         ase::math::floor(static_cast<float>(stage)) != static_cast<float>(stage)) {
         return fail_config("play_stage");
     }
-    play_stage_ = static_cast<uint32_t>(stage);
+    scene_state_.play_stage_ = static_cast<uint32_t>(stage);
     const ::godot::Variant parsed =
         ::godot::JSON::parse_string(::godot::FileAccess::get_file_as_string(GODOT_ASSETS_PATH));
     if (parsed.get_type() != ::godot::Variant::DICTIONARY) {
@@ -112,7 +112,7 @@ bool VivariumView::load_assets(const ::godot::Dictionary& root) {
     const ::godot::Dictionary list = parsed;
     ::godot::String manifest_path;
     if (!read_text(list, GODOT_ASSETS_KEY_MANIFEST, manifest_path) ||
-        !read_text(list, GODOT_ASSETS_KEY_ROOT, asset_root_)) {
+        !read_text(list, GODOT_ASSETS_KEY_ROOT, scene_state_.asset_root_)) {
         return fail_config(GODOT_ASSETS_KEY_MANIFEST);
     }
     const ::godot::Variant stages = list.get(GODOT_ASSETS_KEY_STAGES, ::godot::Variant());
@@ -142,20 +142,20 @@ bool VivariumView::load_assets(const ::godot::Dictionary& root) {
     if (found != 1u) {
         return fail_config(GODOT_ASSETS_KEY_STAGE);
     }
-    asset_roles_.clear();
-    asset_names_.clear();
-    asset_materials_.clear();
+    scene_state_.asset_roles_.clear();
+    scene_state_.asset_names_.clear();
+    scene_state_.asset_materials_.clear();
     if (!load_asset_roles(chosen, GODOT_ASSETS_KEY_MATERIALS) || !load_asset_roles(chosen, GODOT_ASSETS_KEY_TEMPLATES)) {
         return false;
     }
     // Every role the view draws with stands in the list: a role without a name has nothing to bind
     // and nothing to report, so it could only be drawn with a colour of its own.
-    if (asset_roles_.count(GODOT_ROLE_GROUND_MEADOW) == 0u || asset_roles_.count(GODOT_ROLE_GROUND_FOREST) == 0u) {
+    if (scene_state_.asset_roles_.count(GODOT_ROLE_GROUND_MEADOW) == 0u || scene_state_.asset_roles_.count(GODOT_ROLE_GROUND_FOREST) == 0u) {
         return fail_config(GODOT_ASSETS_KEY_MATERIALS);
     }
     std::vector<VivariumAssetEntry> manifest;
     load_asset_manifest(manifest_path, manifest);
-    assets_ = bind_assets(asset_names_, manifest, stand_ins_of(asset_roles_), &asset_checksum, &asset_root_);
+    scene_state_.assets_ = bind_assets(scene_state_.asset_names_, manifest, stand_ins_of(scene_state_.asset_roles_), &asset_checksum, &scene_state_.asset_root_);
     return true;
 }
 
@@ -174,15 +174,15 @@ bool VivariumView::load_asset_roles(const ::godot::Dictionary& stage, const char
         }
         const ::godot::Variant value = roles.get(role, ::godot::Variant());
         if (value.get_type() != ::godot::Variant::STRING || static_cast<::godot::String>(value).is_empty() ||
-            asset_roles_.count(utf8_of(role)) != 0u) {
+            scene_state_.asset_roles_.count(utf8_of(role)) != 0u) {
             return fail_config(section);
         }
         const std::string asset = utf8_of(static_cast<::godot::String>(value));
-        asset_roles_[utf8_of(role)] = asset;
-        asset_names_.push_back(asset);
+        scene_state_.asset_roles_[utf8_of(role)] = asset;
+        scene_state_.asset_names_.push_back(asset);
         // The showcase (04.7) shows a material on a sphere and a plane, a template as its model.
         if (std::string(section) == GODOT_ASSETS_KEY_MATERIALS) {
-            asset_materials_.push_back(asset);
+            scene_state_.asset_materials_.push_back(asset);
         }
     }
     return true;
@@ -193,7 +193,7 @@ void VivariumView::load_asset_manifest(const ::godot::String& path, std::vector<
     // would have carried is then missing like every name the manifest does not carry.
     out.clear();
     if (!::godot::FileAccess::file_exists(path)) {
-        asset_manifest_ = "absent";
+        scene_state_.asset_manifest_ = "absent";
         return;
     }
     const ::godot::Variant parsed = ::godot::JSON::parse_string(::godot::FileAccess::get_file_as_string(path));
@@ -202,10 +202,10 @@ void VivariumView::load_asset_manifest(const ::godot::String& path, std::vector<
                                                                                         ::godot::Variant())
                                          : ::godot::Variant();
     if (entries.get_type() != ::godot::Variant::ARRAY) {
-        asset_manifest_ = "broken";
+        scene_state_.asset_manifest_ = "broken";
         return;
     }
-    asset_manifest_ = "read";
+    scene_state_.asset_manifest_ = "read";
     const ::godot::Array list = entries;
     for (int64_t i = 0; i < list.size(); ++i) {
         if (list[i].get_type() != ::godot::Variant::DICTIONARY) {

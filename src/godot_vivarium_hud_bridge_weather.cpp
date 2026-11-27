@@ -41,7 +41,8 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/gap/types.hpp>
+#include <ase/adp/godot/hud/weather/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 
 #include <godot_cpp/classes/os.hpp>
@@ -145,7 +146,7 @@ bool VivariumView::load_hud_bridge_weather(const UiTheme& theme) {
     if (!theme.token_text("hud_bridge_weather_kind", kind) || weather_key(kind) == nullptr) {
         return fail_config("hud_bridge_weather_kind: a GODOT_HUD_WEATHER_* key");
     }
-    hud_bridge_weather_ = weather_key(kind);
+    hud_state_.hud_bridge_weather_ = weather_key(kind);
     // THE WEATHER OF THE STAGE (modes.weather, usecase:5606 observe the sky): the mockup switches its sky from a
     // panel outside the phone; the app takes the same switch from its launch. The word after the argument stands
     // in for the artefact's kind; the argument without a known key refuses the configuration.
@@ -155,23 +156,23 @@ bool VivariumView::load_hud_bridge_weather(const UiTheme& theme) {
         if (named + 1 >= launch.size() || weather_key(launch[named + 1]) == nullptr) {
             return fail_config("modes.weather: a GODOT_HUD_WEATHER_* key after the argument");
         }
-        hud_bridge_weather_ = weather_key(launch[named + 1]);
+        hud_state_.hud_bridge_weather_ = weather_key(launch[named + 1]);
         note("stage weather " + launch[named + 1]);
     }
-    if (!theme.measure("hud_bridge_weather_temperature", hud_bridge_temperature_)) {
+    if (!theme.measure("hud_bridge_weather_temperature", hud_state_.hud_bridge_temperature_)) {
         return fail_config("hud_bridge_weather_temperature");
     }
-    if (!theme.measure("hud_bridge_weather_wind", hud_bridge_wind_) || hud_bridge_wind_ < 0.0) {
+    if (!theme.measure("hud_bridge_weather_wind", hud_state_.hud_bridge_wind_) || hud_state_.hud_bridge_wind_ < 0.0) {
         return fail_config("hud_bridge_weather_wind: from 0");
     }
     std::string failed;
-    hud_bridge_forecast_.clear();
+    hud_state_.hud_bridge_forecast_.clear();
     for (uint32_t index = 0; index < GODOT_DAY_PHASES; ++index) {
         ForecastPhase phase;
         if (!read_phase(theme, index, phase, failed)) {
             return fail_config(failed.c_str());
         }
-        hud_bridge_forecast_.push_back(phase);
+        hud_state_.hud_bridge_forecast_.push_back(phase);
     }
     return true;
 }
@@ -196,9 +197,9 @@ void VivariumView::bridge_weather(SkyBandFrame& band, ForecastStripFrame& foreca
         open_gap(GODOT_HUD_GAP_WEATHER, act);
     }
 
-    band.weather_kind = current != nullptr ? current : hud_bridge_weather_;
-    band.temperature = current != nullptr ? weather.temperature : hud_bridge_temperature_;
-    band.wind = current != nullptr ? weather.wind : hud_bridge_wind_;
+    band.weather_kind = current != nullptr ? current : hud_state_.hud_bridge_weather_;
+    band.temperature = current != nullptr ? weather.temperature : hud_state_.hud_bridge_temperature_;
+    band.wind = current != nullptr ? weather.wind : hud_state_.hud_bridge_wind_;
     veil.kind = band.weather_kind;
     veil.wind = band.wind;
     // THE SKY IS TINTED ONCE (D2280). The mockup's weather is no state of the atmosphere ase-pl-sky lights from,
@@ -206,9 +207,9 @@ void VivariumView::bridge_weather(SkyBandFrame& band, ForecastStripFrame& foreca
     // record of the weather port comes from the same atmosphere SkyAtspWthrSystem tints fog, background and sun
     // from: with it the sky frame stays without a kind, so SkyOvercast keeps the sky port's colours and light as
     // delivered.
-    sky.kind = current != nullptr ? nullptr : hud_bridge_weather_;
+    sky.kind = current != nullptr ? nullptr : hud_state_.hud_bridge_weather_;
 
-    forecast.phases = coming_known ? coming : hud_bridge_forecast_;
+    forecast.phases = coming_known ? coming : hud_state_.hud_bridge_forecast_;
     // The mockup's rainIn(): the first coming phase in which rain or drizzle falls, counted from one, and the
     // millimetres it brings; no such phase leaves the warning unset.
     hand.rain_coming = false;

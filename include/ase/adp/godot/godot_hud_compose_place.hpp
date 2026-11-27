@@ -75,10 +75,23 @@ struct VivariumHudPlaces {
      *  debug switch, the same hit() asks, while the band shows, else true in `hidden`. */
     static void band_place(const VivariumHud& hud, ::godot::Rect2& sky, bool& hidden);
 
+    /** The places of the sky arc (mockup units): the rect a tap on the arc opens the calendar sheet through (the same
+     *  hit() asks) and the needle, on the top band like the sky band's, true in `hidden` while the arc does not show. */
+    static void arc_place(const VivariumHud& hud, ::godot::Rect2& arc, ::godot::Rect2& needle, bool& hidden);
+
     /** The bottom band's places (mockup units, the same hit() asks), true in `*_hidden` where not drawn: the bag
      *  disc's square, a tap opens or closes the pack; the thing in hand, a press pours a can, and its stow. */
     static void bottom_places(const VivariumHud& hud, ::godot::Rect2& bag, bool& bag_hidden, HandThingPlace& hand,
                               bool& hand_hidden);
+
+    /** The activity bars as last drawn (mockup units, on the bottom band like the bag, the youngest first), a hold
+     *  on one lights every bar of its action and shows their sum (usecase:101305, MIG_ASE_SKILL_RSM B6); empty while
+     *  the bag layer does not show or no bar was drawn. */
+    static void bars_places(const VivariumHud& hud, std::vector<ActivityBarPlace>& out);
+
+    /** The band switch (mockup units, on the bottom band as hit() asks it) in `out`, hidden while it does not stand,
+     *  and what the band shows (GODOT_RSM_BAND_*) in `shows`: the acceptance taps it and reads the content. */
+    static void band_place(const VivariumHud& hud, ::godot::Rect2& out, bool& hidden, uint32_t& shows);
 
     /** The places a tap takes a tool or opens the tool place through (mockup units): every chip of the fan drawn
      *  last, the same hit() asks, while the focus shows; empty otherwise. mode_places: the cut marks while the

@@ -24,7 +24,8 @@
 #include <ase/adp/godot/godot_hud_belt_holster.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
+#include <ase/adp/godot/hud/touch/types.hpp>
 
 #include <ase/math/math.hpp>
 

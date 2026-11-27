@@ -70,7 +70,8 @@
 #include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_view_layout.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/log/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
 #include <ase/math/math.hpp>
@@ -176,12 +177,20 @@ bool VivariumView::load_debug(const ::godot::Dictionary& root) {
         const bool names_years = entry.has("years");
         const bool names_eclipse = entry.has("eclipse");
         const bool names_moonrise = entry.has("moonrise");
+        const bool names_event = entry.has("event");
         const uint32_t named = (names_stage ? 1u : 0u) + (names_hour ? 1u : 0u) + (names_years ? 1u : 0u) +
-                               (names_eclipse ? 1u : 0u) + (names_moonrise ? 1u : 0u);
+                               (names_eclipse ? 1u : 0u) + (names_moonrise ? 1u : 0u) + (names_event ? 1u : 0u);
         if (named != 1u) {
-            return fail_config("debug.jumps[]: stage, hour, years, eclipse or moonrise");
+            return fail_config("debug.jumps[]: stage, hour, years, eclipse, moonrise or event");
         }
-        if (names_moonrise) {
+        if (names_event) {
+            // AN EVENT JUMP names an ase-calendar event kind by its word (fullmoon, eclipse, ...), never its code:
+            // the code stands on ase-calendar's code record of that kind (flora.event_code.v1, key event_<word>),
+            // and ase-calendar finds the next occurrence and moves the clock (seek_event on flora.event.v1).
+            if (!read_text(entry, "event", jump.event) || jump.event.is_empty()) {
+                return fail_config("debug.jumps[].event");
+            }
+        } else if (names_moonrise) {
             // A MOONRISE JUMP carries no number: it lands at ase-ephemeris' forecast of the next rise of a moon.
             const ::godot::Variant moonrise_value = entry.get("moonrise", ::godot::Variant());
             if (moonrise_value.get_type() != ::godot::Variant::BOOL || !static_cast<bool>(moonrise_value)) {

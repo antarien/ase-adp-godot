@@ -25,8 +25,9 @@
  *                from levels[2] on .reading (class d, OVERLAY_INK, hud_sign_numbers_*) and .case (class d,
  *                OVERLAY_INK_FAINT, hud_sign_case_*);
  *                the offer of the sign's tool hud_sign_offer_dx along and hud_sign_offer_dy under the last line:
- *                a thing chip of hud_sign_offer_thing_radius with the drawing of the tool's item, or a glyph chip
- *                of hud_sign_offer_glyph_radius with texts.hud.fan_glyph.<tool>, in hud_fan_<tool>_tone; beside it
+ *                a thing chip with the tool's activity symbol, the symbol activity_art.json puts on the place
+ *                tool.<tool> (UiActivityArt::place, MIG_ASE_SKILL_RSM B7), of hud_sign_offer_thing_radius for a
+ *                tool with an item and of hud_sign_offer_glyph_radius for one without, in hud_fan_<tool>_tone; beside it
  *                texts.hud.take with the item's name, texts.hud.missing where the item is not in possession, or
  *                the word hud_fan_<tool>_offer of a tool without an item, in the tool's tone or
  *                OVERLAY_INK_FAINT where it is missing; from levels[2] on, for an item in possession, where it
@@ -50,8 +51,8 @@
  * @register    N0461 (the state fields of each sign case), N0451 (the place of a thing), N0457 (birch sap),
  *              N0460 (season and light), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-10
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -59,6 +60,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_context_resolver.hpp>
+#include <ase/adp/godot/godot_hud_ui_activity_art.hpp>
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
 #include <ase/adp/godot/godot_hud_ui_item_sprite.hpp>
 #include <ase/adp/godot/godot_hud_ui_leader_line.hpp>
@@ -105,6 +107,9 @@ struct SignReadingFrame {
 /** The reading of the open sign. */
 class SignReading {
 public:
+    /** The activity symbols the offer chips draw; bound before bind() (SignMarker::bind_activities). */
+    void bind_activities(const UiActivityArt& activities) { activities_ = &activities; }
+
     /** Binds measures, colours, words, tools and levels; false with the missing name in `failed`. */
     bool bind(const UiTheme& theme, std::string& failed);
 
@@ -132,11 +137,10 @@ private:
     struct Offer {
         ::godot::Color tone;                // hud_fan_<tool>_tone
         bool thing = false;                 // the tool serves through an item
-        std::string icon;                   // texts.hud.fan_glyph.<tool> of a tool without an item
         std::string has;                    // hud.tools.<tool>.has: the item of a tool with one
         std::string item;                   // texts.hud.items.<has>.name of a tool with one
         std::vector<HudRun> word;           // texts.hud.<hud_fan_<tool>_offer> of a tool without an item
-        UiItemSprite drawing;               // the item's drawing of a tool with an item
+        UiItemSprite drawing;               // the activity symbol on the place tool.<tool> (UiActivityArt::place)
     };
 
     /** The column of one reading, as draw() computes it. */
@@ -225,6 +229,7 @@ private:
     UiTextBlock where_;                 // class d
     UiHexChipPlace offer_place_;        // the offer chip drawn last, radius 0 where none
     uint32_t offer_tool_ = UINT32_MAX;  // the tool of that chip
+    const UiActivityArt* activities_ = nullptr;  // bind_activities: the symbol of every offer chip
 };
 
 }  // namespace ase::adp::godot

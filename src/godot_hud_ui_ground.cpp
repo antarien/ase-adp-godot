@@ -22,7 +22,8 @@
 
 #include <ase/adp/godot/godot_hud_ui_ground.hpp>
 #include <ase/adp/godot/ground/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/hand/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 
 #include <ase/math/math.hpp>
 

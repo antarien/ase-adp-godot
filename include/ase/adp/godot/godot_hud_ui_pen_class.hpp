@@ -105,6 +105,9 @@ public:
                           float width = -1.0f, float dash = 2.0f, bool aligned = true, bool antialiased = false);
     void draw_polyline(const ::godot::PackedVector2Array& points, const ::godot::Color& color, float width = -1.0f,
                        bool antialiased = false);
+    /** A polyline whose colour changes from point to point: one colour for each of `points` (the sky arc's faded ends). */
+    void draw_polyline_colors(const ::godot::PackedVector2Array& points, const ::godot::PackedColorArray& colors,
+                              float width = -1.0f);
     /**
      * Separate lines in one call: `pairs` holds two ends per line, each pair moved and its ends pulled in as
      * draw_line does, all handed to the canvas at once (a dashed stroke's dashes, P0692) instead of one call over

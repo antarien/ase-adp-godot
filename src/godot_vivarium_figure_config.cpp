@@ -71,6 +71,25 @@ bool VivariumView::load_figure_config(const ::godot::Dictionary& root) {
         return fail_config("ports.survival_rest");
     }
     start_.survival_rest_port = utf8_of(text);
+    // The learning entries and the time slices of each figure for the RSM table of the debug layer and the activity
+    // bars (usecase:101305, MIG_ASE_SKILL_RSM B3): both keys required, both ports optional; a host without them
+    // shows a table without a column and the view logs the gap.
+    if (!read_text(ports, "skill", text)) {
+        return fail_config("ports.skill");
+    }
+    start_.skill_port = utf8_of(text);
+    if (!read_text(ports, "skill_qnt", text)) {
+        return fail_config("ports.skill_qnt");
+    }
+    start_.skill_qnt_port = utf8_of(text);
+    if (!read_text(ports, "skill_bar", text)) {
+        return fail_config("ports.skill_bar");
+    }
+    start_.skill_bar_port = utf8_of(text);
+    if (!read_text(ports, "skill_prg", text)) {
+        return fail_config("ports.skill_prg");
+    }
+    start_.skill_prg_port = utf8_of(text);
     // Every fire cell for the card FOGUEIRA (usecase:101440, U04, B0657): the key is required, the port optional; a
     // host without it draws the SHA defaults of the bridge (VivariumView::bridge_fire).
     if (!read_text(ports, "survival_fire", text)) {

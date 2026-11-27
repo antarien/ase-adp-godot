@@ -358,4 +358,36 @@ TEST_CASE("the line of the water lays only the water the eye sees over the bank 
     CHECK(none.empty());
 }
 
+TEST_CASE("the lines of water and bed stand on the brook's course, depth and table, never on its flow (P0692)") {
+    // SignMarker::follow_brook keeps the stations between frames and reads them again only when a field they are
+    // read of changes; the flow ase-hydro moves with every sample lays none of them
+    const std::vector<VivariumGroundCellView> cells = {table_cell(0u, 1u, 4u, 3u), table_cell(1u, 2u, 5u, 4u)};
+    const PlantMeshArrays ground = table_mesh(bed_ground(), cells);
+    VivariumStreamView still = unfed_brook();
+    VivariumStreamView flowing = unfed_brook();
+    // unfed_brook carries NaN in groundwater_reach_m: the flowing record names a reach of its own, so the field
+    // differs in fact and the comparison below is no NaN against NaN
+    flowing.velocity_m_s = still.velocity_m_s + 2.5;
+    flowing.discharge_m3_s = still.discharge_m3_s + 0.75;
+    flowing.groundwater_reach_m = 3.0;
+    std::vector<float> still_water;
+    std::vector<float> flowing_water;
+    REQUIRE(build_water_line(still, ground, nullptr, nullptr, still_water) == 3u);
+    REQUIRE(build_water_line(flowing, ground, nullptr, nullptr, flowing_water) == 3u);
+    CHECK(flowing_water == still_water);
+    std::vector<float> still_bed;
+    std::vector<float> flowing_bed;
+    CHECK(build_bed_line(still, ground, nullptr, nullptr, still_bed) ==
+          build_bed_line(flowing, ground, nullptr, nullptr, flowing_bed));
+    CHECK(flowing_bed == still_bed);
+    // the groundwater table does lay the water: a table above the lower end lifts its station, so the cache key
+    // of follow_brook keeps it
+    VivariumStreamView fed = unfed_brook();
+    fed.groundwater_level_m = 0.1;
+    std::vector<float> fed_water;
+    REQUIRE(build_water_line(fed, ground, nullptr, nullptr, fed_water) == 3u);
+    CHECK(fed_water[7] == doctest::Approx(0.1f));
+    CHECK(fed_water != still_water);
+}
+
 }  // namespace ase::adp::godot

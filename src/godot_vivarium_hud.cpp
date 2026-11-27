@@ -31,8 +31,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-20
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -40,6 +40,7 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
+#include <ase/adp/godot/godot_hud_debug_rsm.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
 #include <ase/adp/godot/godot_patch_focus.hpp>
 #include <ase/adp/godot/host/types.hpp>
@@ -106,52 +107,52 @@ bool VivariumView::hud_live() const {
 }
 
 void VivariumView::place_hud() {
-    // The mockup's frame on the middle band of the placed layout: one mockup unit is hud_unit_ logical pixels.
-    const float k = static_cast<float>(static_cast<double>(placement_.scale) * hud_unit_);
-    hud_frame_ = ::godot::Transform2D(0.0f, ::godot::Vector2(k, k), 0.0f,
+    // The mockup's frame on the middle band of the placed layout: one mockup unit is hud_state_.hud_unit_ logical pixels.
+    const float k = static_cast<float>(static_cast<double>(placement_.scale) * hud_state_.hud_unit_);
+    hud_state_.hud_frame_ = ::godot::Transform2D(0.0f, ::godot::Vector2(k, k), 0.0f,
                                       ::godot::Vector2(placement_.offset_x, placement_.middle_y));
     ::godot::Viewport* viewport = node_->get_viewport();
-    hud_anchor_.follow(viewport != nullptr ? viewport->get_camera_3d() : nullptr, hud_frame_);
-    hud_ground_.follow(resources_.get_terrain(), start_.ground, resources_.terrain_generation());
+    hud_state_.hud_anchor_.follow(viewport != nullptr ? viewport->get_camera_3d() : nullptr, hud_state_.hud_frame_);
+    hud_state_.hud_ground_.follow(resources_.get_terrain(), start_.ground, resources_.terrain_generation());
 }
 
 bool VivariumView::fill_hud(std::string& failed) {
-    hud_now_ = VivariumHudFrame{};
-    // The surface and the outer bands in the units of hud_frame_ (the zones on a tall surface): the band zone and the
+    hud_state_.hud_now_ = VivariumHudFrame{};
+    // The surface and the outer bands in the units of hud_state_.hud_frame_ (the zones on a tall surface): the band zone and the
     // hand zone stand on the band their y belongs to (band_offset), their offset against the middle band over the
     // frame's scale; the surface is the drawn surface through the inverse of the frame.
     ::godot::Rect2 head_zone;
     ::godot::Rect2 hand_zone;
-    if (!hud_.theme().zone("band", head_zone) || !hud_.theme().zone("hand", hand_zone)) {
+    if (!hud_state_.hud_.theme().zone("band", head_zone) || !hud_state_.hud_.theme().zone("hand", hand_zone)) {
         failed = "hud.zones: band and hand";
         return false;
     }
-    const double k = static_cast<double>(hud_frame_.get_scale().y);
+    const double k = static_cast<double>(hud_state_.hud_frame_.get_scale().y);
     if (!(k > 0.0)) {
         failed = "hud frame: no scale";
         return false;
     }
-    hud_now_.cover.head =
+    hud_state_.hud_now_.cover.head =
         static_cast<double>(band_offset(layout_.bands, placement_, head_zone.position.y) - placement_.middle_y) / k;
-    hud_now_.cover.hand =
+    hud_state_.hud_now_.cover.hand =
         static_cast<double>(band_offset(layout_.bands, placement_, hand_zone.position.y) - placement_.middle_y) / k;
-    const ::godot::Transform2D to_frame = hud_frame_.affine_inverse();
+    const ::godot::Transform2D to_frame = hud_state_.hud_frame_.affine_inverse();
     const ::godot::Vector2 from = to_frame.xform(::godot::Vector2(0.0f, 0.0f));
     const ::godot::Vector2 to = to_frame.xform(::godot::Vector2(drawn_surface_.width, drawn_surface_.height));
-    hud_now_.cover.surface = ::godot::Rect2(from, to - from);
-    if (hud_.mode() != hud_mode_) {
+    hud_state_.hud_now_.cover.surface = ::godot::Rect2(from, to - from);
+    if (hud_state_.hud_.mode() != hud_state_.hud_mode_) {
         // A mode the HUD opened since the last drawn frame: draw_hud writes its edge line once the frame of the new
         // mode stands drawn and its places are logged.
         const uint32_t focus = start_.patches.empty() ? GODOT_NO_PLACE
                                                       : patch_focus_place(selected_place_, start_.patches.front().place);
         // The birch in focus is the patch the fan serves (hud.focus.fan: one tool shows while a place is selected):
         // the focus selects the patch in focus where none is, as Regar and Nivelar do.
-        if (hud_.mode() == VivariumHud::MODE_FOCUS && selected_place_ == GODOT_NO_PLACE && focus != GODOT_NO_PLACE) {
+        if (hud_state_.hud_.mode() == VivariumHud::MODE_FOCUS && selected_place_ == GODOT_NO_PLACE && focus != GODOT_NO_PLACE) {
             select(focus);
         }
-        hud_refresh_.force();  // setMode renders at once in the mockup (T10)
+        hud_state_.hud_refresh_.force();  // setMode renders at once in the mockup (T10)
     }
-    hud_now_.clock = hud_clock_;
+    hud_state_.hud_now_.clock = hud_state_.hud_clock_;
 
     // THE PATCH IN FOCUS: the selected one, without a selection the first - the place the camera looks at.
     if (start_.patches.empty()) {
@@ -176,39 +177,39 @@ bool VivariumView::fill_hud(std::string& failed) {
     // renders at once: another place in focus, its record appearing or gone, a new stage or condition (the stage
     // toast and the death, m.html 1033), besides the press, the release and the mode the view forces itself.
     const VivariumPatchView* live = resources_.get_patch_at(focus);
-    if (focus != hud_shown_.place || (live != nullptr) != hud_shown_.patch_known ||
-        (live != nullptr && (live->stage != hud_shown_.patch.stage || live->cond_known != hud_shown_.patch.cond_known ||
-                             live->wilted != hud_shown_.patch.wilted || live->dead != hud_shown_.patch.dead))) {
-        hud_refresh_.force();
+    if (focus != hud_state_.hud_shown_.place || (live != nullptr) != hud_state_.hud_shown_.patch_known ||
+        (live != nullptr && (live->stage != hud_state_.hud_shown_.patch.stage || live->cond_known != hud_state_.hud_shown_.patch.cond_known ||
+                             live->wilted != hud_state_.hud_shown_.patch.wilted || live->dead != hud_state_.hud_shown_.patch.dead))) {
+        hud_state_.hud_refresh_.force();
     }
-    if (hud_refresh_.take()) {
-        hud_shown_.place = focus;
-        hud_shown_.patch_known = live != nullptr;
+    if (hud_state_.hud_refresh_.take()) {
+        hud_state_.hud_shown_.place = focus;
+        hud_state_.hud_shown_.patch_known = live != nullptr;
         if (live != nullptr) {
-            hud_shown_.patch = *live;
+            hud_state_.hud_shown_.patch = *live;
         }
-        hud_shown_.clock = resources_.get_clock();
+        hud_state_.hud_shown_.clock = resources_.get_clock();
         // Night is the sun under the horizon of ase-pl-sky's sun, the same test the scene's sun disc stands by.
         const VivariumSkyView& sampled_sky = resources_.get_sky();
-        hud_shown_.night = sampled_sky.known && !(sampled_sky.sun_y > 0.0);
+        hud_state_.hud_shown_.night = sampled_sky.known && !(sampled_sky.sun_y > 0.0);
         // the debug drawer's run numbers are readings of the same render (debugLayer, m.html 903)
-        hud_shown_.simulation_s = resources_.simulation_seconds();
-        hud_shown_.steps = resources_.tick_count();
+        hud_state_.hud_shown_.simulation_s = resources_.simulation_seconds();
+        hud_state_.hud_shown_.steps = resources_.tick_count();
     }
-    const VivariumPatchView* patch = hud_shown_.patch_known ? &hud_shown_.patch : nullptr;
+    const VivariumPatchView* patch = hud_state_.hud_shown_.patch_known ? &hud_state_.hud_shown_.patch : nullptr;
     const PlantOrigin* origin = nullptr;
-    hud_segments_.clear();
+    hud_state_.hud_segments_.clear();
     if (patch != nullptr) {
-        const auto found = scene_origins_.find(patch->object_id);
-        if (found != scene_origins_.end()) {
+        const auto found = scene_state_.scene_origins_.find(patch->object_id);
+        if (found != scene_state_.scene_origins_.end()) {
             origin = &found->second;
         }
-        plant_segments(patch->object_id, hud_segments_);
+        plant_segments(patch->object_id, hud_state_.hud_segments_);
     }
 
     // The game state: the marks the patch record decides, the level the skill port will carry. flora.skill.v1
     // files no level yet: the bridge writes the start level of SHA in its place (N0453, bridge_skill).
-    HudGameState& game = hud_now_.game;
+    HudGameState& game = hud_state_.hud_now_.game;
     game.place_selected = selected_place_ != GODOT_NO_PLACE;
     bridge_skill(game);
     if (patch != nullptr) {
@@ -225,16 +226,16 @@ bool VivariumView::fill_hud(std::string& failed) {
     }
     // The mockup's lastKey (m.html 903): the fades and drawings of every frame below play again from this clock when
     // the mode, the open sign, the level, the debug view, its drawer or tab, the stage or the death changed (T05).
-    // The seconds count on the wall clock as the mockup's CSS animations do, never on the capped hud_clock_.
-    const double opened = hud_.replay(game.level, patch != nullptr ? patch->stage : GODOT_STAGE_NONE,
+    // The seconds count on the wall clock as the mockup's CSS animations do, never on the capped hud_state_.hud_clock_.
+    const double opened = hud_state_.hud_.replay(game.level, patch != nullptr ? patch->stage : GODOT_STAGE_NONE,
                                       patch != nullptr && patch->dead);
 
     // The birch on the screen: the foot of its trunk and the height up to its highest internode.
     if (origin != nullptr) {
-        hud_now_.tree_placed = hud_anchor_.trunk(*origin, hud_now_.trunk);
+        hud_state_.hud_now_.tree_placed = hud_state_.hud_anchor_.trunk(*origin, hud_state_.hud_now_.trunk);
         ::godot::Vector2 crown;
-        if (hud_now_.tree_placed && hud_anchor_.crown(*origin, hud_segments_, crown)) {
-            hud_now_.tree_height = static_cast<double>(hud_now_.trunk.y - crown.y);
+        if (hud_state_.hud_now_.tree_placed && hud_state_.hud_anchor_.crown(*origin, hud_state_.hud_segments_, crown)) {
+            hud_state_.hud_now_.tree_height = static_cast<double>(hud_state_.hud_now_.trunk.y - crown.y);
         }
     }
     // The shade under the birch, or the seed mound: the stem place and the stage of the stand (N19). The shade is
@@ -243,22 +244,22 @@ bool VivariumView::fill_hud(std::string& failed) {
     // itself, so a planting hole lowers it and a filled one raises it again. The height of the sown seed belongs to
     // its owner, reported through its port as the body ase-physics holds (the seed port does so for flying seeds,
     // D2312). Until the patch port carries it, the terrain at the stem stands in; a bridge, never evidence
-    hud_now_.shade.placed = origin != nullptr && hud_ground_.surface(hud_anchor_, origin->x, origin->z, 0.0,
-                                                                      hud_now_.shade.trunk);
-    hud_now_.shade.stage = patch != nullptr ? patch->stage : GODOT_STAGE_NONE;
-    hud_now_.shade.seed = patch != nullptr && patch->seed;
-    hud_now_.shade.sprout = patch != nullptr && patch->sprout;
-    hud_now_.shade.grow = patch != nullptr && patch->grow;
-    if (hud_now_.shade.placed) {
+    hud_state_.hud_now_.shade.placed = origin != nullptr && hud_state_.hud_ground_.surface(hud_state_.hud_anchor_, origin->x, origin->z, 0.0,
+                                                                      hud_state_.hud_now_.shade.trunk);
+    hud_state_.hud_now_.shade.stage = patch != nullptr ? patch->stage : GODOT_STAGE_NONE;
+    hud_state_.hud_now_.shade.seed = patch != nullptr && patch->seed;
+    hud_state_.hud_now_.shade.sprout = patch != nullptr && patch->sprout;
+    hud_state_.hud_now_.shade.grow = patch != nullptr && patch->grow;
+    if (hud_state_.hud_now_.shade.placed) {
         open_gap(VivariumCarryBridge::GAP_BODY, "flora.patch.v1.mound_y");  // seed mound on the terrain (D2314)
     }
 
     // The clock record: the SURA date, the hour and the phase of the band and of the calendar sheet.
     // The port's record of the last sample first; every group it leaves empty is the mockup's, written by the bridge
     // (N0460).
-    VivariumClockView clock = hud_shown_.clock;
+    VivariumClockView clock = hud_state_.hud_shown_.clock;
     bridge_clock(clock);
-    SkyBandFrame& band = hud_now_.band;
+    SkyBandFrame& band = hud_state_.hud_now_.band;
     band.vec = static_cast<uint32_t>(clock.year);
     band.lun = static_cast<uint32_t>(clock.month);
     band.tum = static_cast<uint32_t>(clock.month_day);
@@ -272,10 +273,13 @@ bool VivariumView::fill_hud(std::string& failed) {
     band.sunrise = clock.sunrise_h;
     band.sunset = clock.sunset_h;
     band.season = static_cast<int32_t>(clock.season);
-    // Night as the last sample read it from ase-pl-sky's sun (hud_shown_.night).
-    band.night = hud_shown_.night;
-    band.elapsed = hud_clock_;
-    CalendarSheetFrame& sheet = hud_now_.sheet;
+    // Night as the last sample read it from ase-pl-sky's sun (hud_state_.hud_shown_.night).
+    band.night = hud_state_.hud_shown_.night;
+    band.elapsed = hud_state_.hud_clock_;
+    // The sky arc: flora.arc.v1 is read in every frame (resources_.get_arc), never held to hud_refresh_ms; only the
+    // date of the clock above is the sample's. Each port that carries no record is the mockup's (N0448, bridge_arc).
+    bridge_arc(hud_state_.hud_now_.arc, clock);
+    CalendarSheetFrame& sheet = hud_state_.hud_now_.sheet;
     sheet.year.lun = band.lun;
     sheet.year.months_per_year = static_cast<uint32_t>(clock.months_per_year);
     // The season records (N0460, flora.season.v1) and today's share of the year from the day record: ase-calendar
@@ -291,24 +295,42 @@ bool VivariumView::fill_hud(std::string& failed) {
     sheet.year.elapsed = opened;
     // The past events of the trail on arrival and the ring's dots: flora.trail.v1 files none yet, so the bridge
     // writes the mockup's S.log (N0450, bridge_trail).
-    bridge_trail(hud_now_.trail, sheet.year);
+    bridge_trail(hud_state_.hud_now_.trail, sheet.year);
     // The body of the figure for the rail CORPO from survival.body.v1 of the seat's figure; without its record the
     // bridge writes the mockup's body under its gap (N0530, bridge_body).
-    bridge_body(hud_now_.body);
+    bridge_body(hud_state_.hud_now_.body);
     // The camp fire for the card FOGUEIRA from ingle.fire.v1; without a record the bridge writes the mockup's camp
     // fire under its gap (B0657, bridge_fire).
-    bridge_fire(hud_now_.fire);
+    bridge_fire(hud_state_.hud_now_.fire);
     // The figure's rest for the rest card: survival.rest.v1 lays is_resting and sleeping of the seat's figure; while
     // no record carries them the bridge writes the mockup's resting figure (N0530, N0555, bridge_rest).
-    bridge_rest(hud_now_.rest);
+    bridge_rest(hud_state_.hud_now_.rest);
     // The owner's grade of the air at the figure's cell for the mark AR TÓXICO from the breath of survival.body.v1;
     // without it the bridge writes the mockup's air under its gap (N0530, bridge_air).
-    bridge_air(hud_now_.air);
+    bridge_air(hud_state_.hud_now_.air);
     // The spoil of the bag's food for the ring ESTRAGO from survival.food.v1; without the port the bridge writes the
     // mockup's food of the bag under its gap (N0530, bridge_food).
-    bridge_food(hud_now_.food);
+    bridge_food(hud_state_.hud_now_.food);
+    // The activity bars (usecase:101305, MIG_ASE_SKILL_RSM B5): every time slice of the seat's figure as the skill port
+    // laid it (avatar.skill.bar.v1), copied as it stands; while the seat's figure is not known no bar shows, since a
+    // bar of another figure would read as the own. The order, the place and the lit action belong to ActivityBars;
+    // the adapter counts nothing.
+    hud_state_.hud_now_.bars.bars.clear();
+    if (figure_state_.figure_controls_.led_known) {
+        for (const VivariumSkillBarView& slice : resources_.get_skill_bars()) {
+            if (slice.bearer != static_cast<double>(figure_state_.figure_controls_.led)) {
+                continue;
+            }
+            ActivityBar bar;
+            bar.id = slice.object_id;
+            bar.action = slice.action;
+            bar.qnt = slice.qnt;
+            bar.age = slice.age;
+            hud_state_.hud_now_.bars.bars.push_back(bar);
+        }
+    }
     // The states of the frames just written, logged on their edges for the acceptance (survival_line, U0245).
-    const std::string survival = survival_line(hud_now_);
+    const std::string survival = survival_line(hud_state_.hud_now_);
     if (survival != survival_watch_.line) {
         survival_watch_.line = survival;
         note(::godot::String(survival.c_str()));
@@ -334,63 +356,63 @@ bool VivariumView::fill_hud(std::string& failed) {
 
     // The veil stands from the horizon of the scene camera down.
     double horizon_y = 0.0;
-    if (!hud_anchor_.horizon(horizon_y)) {
+    if (!hud_state_.hud_anchor_.horizon(horizon_y)) {
         failed = "the horizon of the scene camera";
         return false;
     }
-    hud_now_.veil.horizon_y = horizon_y;
-    hud_now_.veil.time = hud_clock_;
-    hud_now_.veil.dt = hud_dt_;
+    hud_state_.hud_now_.veil.horizon_y = horizon_y;
+    hud_state_.hud_now_.veil.time = hud_state_.hud_clock_;
+    hud_state_.hud_now_.veil.dt = hud_state_.hud_dt_;
     // The weather of the band, the strip, the veil and the hand's rain warning: sky.weather.v1's record, the
     // mockup's while it is silent.
-    bridge_weather(band, sheet.forecast, hud_now_.veil, hud_now_.hand, hud_now_.sky);
+    bridge_weather(band, sheet.forecast, hud_state_.hud_now_.veil, hud_state_.hud_now_.hand, hud_state_.hud_now_.sky);
 
     // The signs: the tree they stand at and the line of the first brook on the ground.
-    SignMarkerFrame& signs = hud_now_.signs;
-    signs.trunk_placed = hud_now_.tree_placed;
-    signs.trunk = hud_now_.trunk;
-    signs.height = hud_now_.tree_height;
+    SignMarkerFrame& signs = hud_state_.hud_now_.signs;
+    signs.trunk_placed = hud_state_.hud_now_.tree_placed;
+    signs.trunk = hud_state_.hud_now_.trunk;
+    signs.height = hud_state_.hud_now_.tree_height;
     const std::vector<VivariumStreamView>& streams = resources_.get_streams();
     if (!streams.empty()) {
         // The brook's line on the water the camera sees (SignMarker::follow_brook, B0285); its flank is told once
         // when it changes, so a sign beside the water names what put it there.
-        const float left = hud_now_.cover.surface.position.x;
+        const float left = hud_state_.hud_now_.cover.surface.position.x;
         std::string brook_line;
-        SignMarker::follow_brook(streams.front(), ground_surface_.arrays, ground_surface_.revision, hud_anchor_,
-                                 hud_ground_, left, left + hud_now_.cover.surface.size.x, hud_brook_, signs.brook,
+        SignMarker::follow_brook(streams.front(), scene_state_.ground_surface_.arrays, scene_state_.ground_surface_.revision, hud_state_.hud_anchor_,
+                                 hud_state_.hud_ground_, left, left + hud_state_.hud_now_.cover.surface.size.x, hud_state_.hud_brook_, signs.brook,
                                  brook_line);
-        if (brook_line != hud_brook_.told) {
-            hud_brook_.told = brook_line;
+        if (brook_line != hud_state_.hud_brook_.told) {
+            hud_state_.hud_brook_.told = brook_line;
             note(::godot::String(brook_line.c_str()));
         }
     }
-    signs.elapsed = hud_clock_;
+    signs.elapsed = hud_state_.hud_clock_;
     signs.opened = opened;
     // The signs themselves: the ports' sign cases, the mockup's signs() over this frame's values while they are
     // silent (N0461, N0449).
-    bridge_signs(game, signs, patch, clock, band, hud_now_.hand);
+    bridge_signs(game, signs, patch, clock, band, hud_state_.hud_now_.hand);
 
     // The focus: the patch record of the plant in focus.
-    FocusClusterFrame& view = hud_now_.focus;
-    view.trunk = hud_now_.trunk;
-    view.height = hud_now_.tree_height;
+    FocusClusterFrame& view = hud_state_.hud_now_.focus;
+    view.trunk = hud_state_.hud_now_.trunk;
+    view.height = hud_state_.hud_now_.tree_height;
     view.area = focus + 1u;
-    view.debug = hud_.debug_on();
+    view.debug = hud_state_.hud_.debug_on();
     // A NEW STAGE IS ANNOUNCED ONCE. The mockup raises S.stage when growth fills and posts NOVO ESTÁGIO with the
     // stage's word (m.html 1033); here ase-flora's patch record carries the stage, and the frame that first sees a
     // higher one than the last posts the toast. The first frame only learns the stage, a dead plant grows none.
     if (patch != nullptr && patch->stage < GODOT_STAGE_COUNT) {
-        const bool rose = hud_stage_seen_ != GODOT_STAGE_NONE && patch->stage > hud_stage_seen_ &&
+        const bool rose = hud_state_.hud_stage_seen_ != GODOT_STAGE_NONE && patch->stage > hud_state_.hud_stage_seen_ &&
                           !patch->dead;
-        hud_stage_seen_ = patch->stage;
+        hud_state_.hud_stage_seen_ = patch->stage;
         if (rose) {
             std::string stage_word;
-            if (!word_line(hud_.theme(), HUD_WORD_STAGE + std::to_string(patch->stage), stage_word, failed)) {
+            if (!word_line(hud_state_.hud_.theme(), HUD_WORD_STAGE + std::to_string(patch->stage), stage_word, failed)) {
                 return false;
             }
             const std::vector<HudPortValue> reached{HudPortValue{"stage", stage_word}};
             note(::godot::String(("hud stage reached " + std::to_string(patch->stage)).c_str()));
-            if (!hud_.toast(HUD_TOAST_NEW_STAGE, reached, VivariumCarryBridge::COLOUR_LIFE, failed)) {
+            if (!hud_state_.hud_.toast(HUD_TOAST_NEW_STAGE, reached, VivariumCarryBridge::COLOUR_LIFE, failed)) {
                 return false;
             }
         }
@@ -408,23 +430,30 @@ bool VivariumView::fill_hud(std::string& failed) {
     // first, every field no port carries yet the mockup's, written by the bridge (N0454, N0456, N0457).
     bridge_patch(view, patch, clock, sheet.year);
     view.elapsed = opened;
-    hud_now_.fan.elapsed = opened;
-    hud_now_.trail.elapsed = opened;
+    hud_state_.hud_now_.fan.elapsed = opened;
+    hud_state_.hud_now_.trail.elapsed = opened;
     // Every block that moves holds its motion while the still mode stands (read_hud_still): the frame and each block
     // frame the HUD hands on without passing it down itself.
-    hud_now_.still = hud_still_;
-    for (bool* held : {&hud_now_.band.still, &hud_now_.signs.still, &hud_now_.focus.still, &hud_now_.fan.still,
-                       &hud_now_.prune.still, &hud_now_.trail.still, &hud_now_.sheet.still, &hud_now_.sheet.year.still,
-                       &hud_now_.sheet.forecast.still, &hud_now_.sheet.glass.still, &hud_now_.rack.still,
-                       &hud_now_.hand.still, &hud_now_.debug.still}) {
-        *held = hud_still_;
+    hud_state_.hud_now_.still = hud_state_.hud_still_;
+    for (bool* held : {&hud_state_.hud_now_.arc.still, &hud_state_.hud_now_.band.still, &hud_state_.hud_now_.signs.still, &hud_state_.hud_now_.focus.still, &hud_state_.hud_now_.fan.still,
+                       &hud_state_.hud_now_.prune.still, &hud_state_.hud_now_.trail.still, &hud_state_.hud_now_.sheet.still, &hud_state_.hud_now_.sheet.year.still,
+                       &hud_state_.hud_now_.sheet.forecast.still, &hud_state_.hud_now_.sheet.glass.still, &hud_state_.hud_now_.rack.still,
+                       &hud_state_.hud_now_.hand.still, &hud_state_.hud_now_.debug.still}) {
+        *held = hud_state_.hud_still_;
     }
 
     fill_hud_world(patch, origin, *spec, opened);
     // debug_patch names the patch in focus, the selected one or without a selection the first (patch_focus_place),
     // as the mockup shows the line in every open drawer (PLAN_ASE_VIVARIUM_PHASE_06_HUD, debug_layer).
     fill_hud_debug(patch);
-    hud_now_.debug_data = &debug_;
+    hud_state_.hud_now_.debug_data = &debug_;
+    // THE SKILL RINGS READ THE SAME LEARNING ENTRIES the timer table reads (fill_hud_debug laid the led figure's set
+    // of avatar.skill.v1 into debug.rsm): DCD is the largest dcd_shr, ACD the largest acd / acd_max, both the owner's
+    // shares; a frame without an entry leaves known false and the rings keep what they drew last (usecase:101305, B5).
+    const DebugRsmShares shares = debug_rsm_shares(hud_state_.hud_now_.debug.rsm);
+    hud_state_.hud_now_.skill.known = !hud_state_.hud_now_.debug.rsm.empty();
+    hud_state_.hud_now_.skill.dcd = shares.dcd;
+    hud_state_.hud_now_.skill.acd = shares.acd;
     return true;
 }
 

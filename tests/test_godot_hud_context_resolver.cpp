@@ -18,8 +18,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-09
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -28,7 +28,13 @@
 
 #include "test_godot_hud_context_support.hpp"
 
+#include <ase/adp/godot/godot_hud_spine_pure.hpp>
+#include <ase/fileio/path.hpp>
+#include <ase/fileio/text_reader.hpp>
+
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -167,9 +173,10 @@ TEST_CASE("hud context resolver: debug draws over every mode, the open drawer hi
     CHECK(shown.layers == Names{"ground_rows", "band", "sky", "drag"});
 }
 
-// B0937: the values of the plant card end at the x of the body rail (350), and the focus ring stands in the fire card
-// the layer body carries; the mockup's render lays the card without the rail. Both directions: the rail stands in rest.
-TEST_CASE("hud context resolver: the plant card never draws together with the body rail") {
+// B0937 and the operator order of 2026-11-25: the body of the player with its survival bars stays on screen while a
+// plant is looked at, and the rail is drawn before the card. The rail stands in rest, sign and focus; where the card's
+// values end beside it is pinned by the case after this one.
+TEST_CASE("hud context resolver: the plant card draws with the body rail before it") {
     const ContextResolver resolver = ready_resolver();
     const auto draws = [](const HudShown& shown, const char* name) {
         for (const std::string& layer : shown.layers) {
@@ -178,6 +185,16 @@ TEST_CASE("hud context resolver: the plant card never draws together with the bo
             }
         }
         return false;
+    };
+    const auto rank = [](const HudShown& shown, const char* name) {
+        uint32_t at = 0u;
+        for (const std::string& layer : shown.layers) {
+            if (layer == name) {
+                return at;
+            }
+            ++at;
+        }
+        return at;
     };
     uint32_t rails = 0u;
     uint32_t cards = 0u;
@@ -190,10 +207,110 @@ TEST_CASE("hud context resolver: the plant card never draws together with the bo
         REQUIRE(resolver.resolve(state, shown, failed));
         rails += draws(shown, "body") ? 1u : 0u;
         cards += draws(shown, "focus") ? 1u : 0u;
-        CHECK_FALSE((draws(shown, "body") && draws(shown, "focus")));
+        if (draws(shown, "focus")) {
+            CHECK(draws(shown, "body"));
+            CHECK(rank(shown, "body") < rank(shown, "focus"));
+        }
     }
-    CHECK(rails == 2u);  // rest and sign
+    CHECK(rails == 3u);  // rest, sign and focus
     CHECK(cards == 1u);  // focus
+}
+
+namespace {
+
+// SHA's theme in the tree, from the adapter's folder: the file the stage turns into the tokens UiSpine reads
+std::string theme_text() {
+    const std::string adapter = ase::fileio::parent_of(ase::fileio::parent_of(__FILE__));
+    return ase::fileio::read_text(
+        ase::fileio::path_join(adapter, "../../clients/sha-client-web/sha-web-styles/src/theme.css"));
+}
+
+// the number of `--ase-<name>:` in the theme; found is false when the token is not there
+double theme_token(const std::string& theme, const std::string& name, bool& found) {
+    const std::string key = "--ase-" + name + ":";
+    const std::size_t at = theme.find(key);
+    found = at != std::string::npos;
+    return found ? std::strtod(theme.c_str() + at + key.size(), nullptr) : 0.0;
+}
+
+}  // namespace
+
+// B0937: the card's values are end-anchored at hud-focus-row-value-x, and the rail's line stands at the same x; the
+// rail's content (track from hud-survival-rail-track-left to -right, the name end-anchored at -name-x, the number from
+// -number-x on) lies left of its line, and rail row 1 and card row 0 share a band. No word of one is drawn over the
+// other only when the card's values, and the bars under them, end at the rail's content while the rail draws.
+TEST_CASE("hud context resolver: the values of the plant card end left of the body rail's content") {
+    const std::string theme = theme_text();
+    REQUIRE_MESSAGE(!theme.empty(), "clients/sha-client-web/sha-web-styles/src/theme.css");
+    bool found = false;
+    const double value_x = theme_token(theme, "hud-focus-row-value-x", found);
+    REQUIRE(found);
+    const double rail_x = theme_token(theme, "hud-survival-rail-x", found);
+    REQUIRE(found);
+    const double track_left = theme_token(theme, "hud-survival-rail-track-left", found);
+    REQUIRE(found);
+    const double track_right = theme_token(theme, "hud-survival-rail-track-right", found);
+    REQUIRE(found);
+    const double name_x = theme_token(theme, "hud-survival-rail-name-x", found);
+    REQUIRE(found);
+    const double number_x = theme_token(theme, "hud-survival-rail-number-x", found);
+    REQUIRE(found);
+    const double text_dx = theme_token(theme, "hud-focus-title-dx", found);
+    REQUIRE(found);
+
+    // the measured overlap: the content lies left of the line, and the card's own x reaches into it
+    CHECK(track_left < track_right);
+    CHECK(track_right <= rail_x);
+    CHECK(track_left <= number_x);
+    CHECK(name_x <= rail_x);
+    CHECK(value_x > track_left);
+
+    // without the rail the card keeps its own x
+    CHECK(spine_value_end(value_x, false, track_left) == doctest::Approx(value_x));
+    // with the rail it ends at the rail's content: left of the track, the number and the name
+    const double end = spine_value_end(value_x, true, track_left);
+    CHECK(end <= track_left);
+    CHECK(end <= number_x);
+    CHECK(end < name_x);
+    CHECK(end <= value_x);
+
+    // the bar under a value runs from the text column to the same end, and never backwards
+    const double column = end - 2.0 * text_dx;
+    CHECK(spine_bar_width(end, column) == doctest::Approx(end - column));
+    CHECK(spine_bar_width(end, end + text_dx) == doctest::Approx(0.0));
+}
+
+// B1001: the labels start at the card's column and run right; a ring near the rail puts the column itself into the
+// rail's content, and the value's end alone cannot keep a label off it. While the rail draws, the whole card yields
+// left until its widest text (`need`, from the column to its right end) ends at hud-survival-rail-track-left.
+TEST_CASE("hud context resolver: the labels of the plant card end left of the body rail's content") {
+    const std::string theme = theme_text();
+    REQUIRE_MESSAGE(!theme.empty(), "clients/sha-client-web/sha-web-styles/src/theme.css");
+    bool found = false;
+    const double track_left = theme_token(theme, "hud-survival-rail-track-left", found);
+    REQUIRE(found);
+    const double column_dx = theme_token(theme, "hud-focus-column-dx", found);
+    REQUIRE(found);
+    const double text_dx = theme_token(theme, "hud-focus-title-dx", found);
+    REQUIRE(found);
+
+    // a ring whose column stands inside the rail's content, and a card a label and a value wide
+    const double near = track_left - column_dx + text_dx;
+    const double column = near + column_dx;
+    const double need = 4.0 * column_dx;
+    REQUIRE(column + need > track_left);
+
+    // without the rail the card keeps the column the ring gives it
+    CHECK(spine_column_x(column, false, track_left, need) == doctest::Approx(column));
+    // with it the card's right end comes to the rail's content, the labels with it
+    const double yielded = spine_column_x(column, true, track_left, need);
+    CHECK(yielded + need <= doctest::Approx(track_left));
+    CHECK(yielded + text_dx < track_left);
+    CHECK(yielded < column);
+
+    // a card that already ends left of the rail's content never moves right
+    const double far = track_left - 2.0 * need;
+    CHECK(spine_column_x(far, true, track_left, need) == doctest::Approx(far));
 }
 
 TEST_CASE("hud context resolver: the open sign is marked, a lost one falls back to rest") {
@@ -230,7 +347,7 @@ TEST_CASE("hud context resolver: a tool runs only while its item is in possessio
         state.possessed.clear();
         REQUIRE(resolver.resolve(state, shown, failed));
         CHECK(resolver.spec().modes[shown.mode].name == "focus");
-        CHECK(shown.layers == Names{"ground_rows", "band", "rail", "focus", "inventory"});
+        CHECK(shown.layers == Names{"ground_rows", "band", "rail", "body", "focus", "inventory"});
     }
     // a mode of no tool, or of a tool that needs no item, keeps its name without any possession
     for (const char* mode : {"terrain", "hold", "rack", "sky"}) {

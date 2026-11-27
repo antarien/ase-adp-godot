@@ -61,6 +61,18 @@ The same form as plugins/ase-pl-vegetation/tests.
   ase-adp-godot-framerate-test HudFrameRate: the frames per second of a window, the floor of the frame budget,
                               one edge each way, the time away no frame (usecase:101440 grow the interface with
                               skills). Pure computation.
+  ase-adp-godot-rsmtable-test The RSM table of the debug layer: the clock HH:MM:SS, the column order, the ring shares, the
+                              order of the slices of an entry and the view a tap chooses (usecase:101305 show skill
+                              progress, MIG_ASE_SKILL_RSM B6). Pure computation.
+  ase-adp-godot-registro-test The row REGISTRO of the SALTO tab: every event jump of vivarium_start.json lies inside the
+                              debug drawer, hud_debug_registro_per_row to a row, the note above the foot
+                              (usecase:101120 clock the growth cycle, PHASE_06_HUD_EXT D01). Pure computation.
+  ase-adp-godot-activityart-test activity-art.json of SHA (MIG_ASE_SKILL_RSM B7, usecase:101440): the thirteen
+                              symbols in the format of item-art.json, their colours, their words and the way the file
+                              reaches UiActivityArt. Pure computation.
+  ase-adp-godot-activitybars-test The activity bars (MIG_ASE_SKILL_RSM B5, usecase:101305): the youngest slice left, at
+                              most twenty, a slice without a number left out, the height clamped, the lit sum, the
+                              strip and the bar a touch chooses. Pure computation.
   ase-adp-godot-stand-test   Soil water and condition of a patch for its materials (03.2). Pure.
   ase-adp-godot-binding-test  bind_assets against a test manifest, stand-in colours (03.2). Pure.
   ase-adp-godot-ground-test   build_ground, mark_ground (levelled disc, brook bed) and the uniforms of
@@ -114,7 +126,7 @@ endif()
 # manager it drives: a .cpp whose name carries resource_manager is a resource manager implementation
 # (file_types.json, resource_mgr_impl). Each target writes its own log file - ABSOLUTE, like the
 # user:// path the node hands over - so no run rotates the file of another.
-foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap lod)
+foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap lod skill)
     if(_adp_godot_bundle_test STREQUAL "host")
         set(_adp_godot_bundle_source test_godot_host.cpp)
     else()
@@ -145,7 +157,7 @@ foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap l
 endforeach()
 
 # The targets of pure computation: neither bundle nor Godot.
-foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor level templates capscale groundtops framerate stand binding ground figlayout hold water waterpit waterband waterkinds keeper focus seed exposure window context signs chips pose step showcase)
+foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke knots impostor level templates capscale groundtops framerate stand binding ground figlayout hold water waterpit waterband waterkinds keeper focus seed exposure window context signs chips pose step arc rsmtable registro activityart activitybars showcase)
     if(_adp_godot_pure_test STREQUAL "layout")
         set(_adp_godot_pure_source test_godot_view_layout.cpp)
     elseif(_adp_godot_pure_test STREQUAL "plant")
@@ -212,8 +224,18 @@ foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke 
         set(_adp_godot_pure_source test_godot_hud_context.cpp)  # usecase:101440 grow the interface with skills
     elseif(_adp_godot_pure_test STREQUAL "pose")
         set(_adp_godot_pure_source test_godot_figure_pose.cpp)  # usecase:2157 go to Sleep, FIRECAMP T.11: no figure sleeps standing
+    elseif(_adp_godot_pure_test STREQUAL "rsmtable")
+        set(_adp_godot_pure_source test_godot_hud_debug_rsm.cpp)  # usecase:101305 show skill progress, MIG_ASE_SKILL_RSM B6
+    elseif(_adp_godot_pure_test STREQUAL "registro")
+        set(_adp_godot_pure_source test_godot_hud_debug_registro.cpp)  # usecase:101120 clock the growth cycle, PHASE_06_HUD_EXT D01: the row REGISTRO of SALTO inside the drawer
     elseif(_adp_godot_pure_test STREQUAL "step")
         set(_adp_godot_pure_source test_godot_figure_step.cpp)  # usecase:101588 move player figure over ground, B0943: smooth between steps, turn free of the frame rate
+    elseif(_adp_godot_pure_test STREQUAL "arc")
+        set(_adp_godot_pure_source test_godot_hud_arc.cpp)  # usecase:101440 grow the interface with skills, EXT.6: the turn, the fade, the codes and the bridge of the sky arc
+    elseif(_adp_godot_pure_test STREQUAL "activityart")
+        set(_adp_godot_pure_source test_godot_hud_activity_art.cpp)  # usecase:101440 grow the interface with skills, MIG_ASE_SKILL_RSM B7: the thirteen activity symbols
+    elseif(_adp_godot_pure_test STREQUAL "activitybars")
+        set(_adp_godot_pure_source test_godot_hud_activity_bars.cpp)  # usecase:101305 show skill progress, MIG_ASE_SKILL_RSM B5: the order, the places and the hit of the activity bars
     else()
         set(_adp_godot_pure_source test_godot_asset_showcase.cpp)
     endif()
@@ -226,8 +248,14 @@ foreach(_adp_godot_pure_test layout plant instances bark bend tubes ring stroke 
             ase::adp::godot-host
             doctest::doctest
     )
-    if(_adp_godot_pure_test STREQUAL "ground" OR _adp_godot_pure_test STREQUAL "figlayout")
-        # the ground test reads shaders/plant_ground.gdshader, the figlayout test SHA's theme.css from the tree;
+    if(_adp_godot_pure_test STREQUAL "ground" OR _adp_godot_pure_test STREQUAL "figlayout" OR _adp_godot_pure_test STREQUAL "activityart"
+       OR _adp_godot_pure_test STREQUAL "rsmtable" OR _adp_godot_pure_test STREQUAL "registro"
+       OR _adp_godot_pure_test STREQUAL "context")
+        # the context test reads SHA's theme.css: where the plant card's values end beside the body rail (B0937)
+        # the ground test reads shaders/plant_ground.gdshader, the figlayout and the rsmtable test SHA's theme.css (the
+        # rsmtable test the place of the debug console at the foot), the registro test theme.css and the start config
+        # vivarium_start.json (the row REGISTRO of SALTO inside the drawer) and the activityart test
+        # SHA's activity-art.json with its cascade files from the tree;
         # only these targets take ase-fileio, so no other unit's command line changes (usecase:101339 show the
         # ground around plant, usecase:101554 receive player input)
         target_link_libraries(${_adp_godot_pure_target} PRIVATE ase::fileio)

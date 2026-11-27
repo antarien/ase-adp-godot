@@ -13,8 +13,8 @@
  * @actor       Hänge-Birke (Betula pendula)
  * @register    N0461, N0451, N0457, N0460, carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-10
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -23,7 +23,8 @@
 
 #include <ase/adp/godot/godot_hud_sign_reading.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
+#include <ase/adp/godot/hud/sign/types.hpp>
 
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
@@ -91,11 +92,24 @@ bool SignReading::bind_offer(const UiTheme& theme, const HudToolSpec& spec, Offe
     }
     out.thing = !spec.has.empty();
     out.has = spec.has;
-    if (out.thing) {
-        return word_line(theme, "items." + spec.has + ".name", out.item, failed) &&
-               out.drawing.bind(theme, failed) && out.drawing.set(spec.has, failed);
+    // Every offer chip draws the tool's activity symbol (MIG_ASE_SKILL_RSM B7): the symbol on the place tool.<name>.
+    if (activities_ == nullptr) {
+        failed = "hud.sign.activities.unbound";
+        return false;
     }
-    // A tool without an item names the word its SHA token gives, and shows its glyph.
+    const std::string place = "tool." + spec.name;
+    ::godot::Dictionary symbol;
+    if (!activities_->place(place, symbol)) {
+        failed = "activity_art.places." + place;
+        return false;
+    }
+    if (!out.drawing.bind(theme, failed) || !out.drawing.set_entry("activity_art.places." + place, symbol, failed)) {
+        return false;
+    }
+    if (out.thing) {
+        return word_line(theme, "items." + spec.has + ".name", out.item, failed);
+    }
+    // A tool without an item names the word its SHA token gives.
     const std::string offer = "hud_fan_" + spec.name + "_offer";
     if (!theme.token_text(offer, text)) {
         failed = offer;
@@ -106,7 +120,7 @@ bool SignReading::bind_offer(const UiTheme& theme, const HudToolSpec& spec, Offe
         failed = "texts.hud." + word;
         return false;
     }
-    return word_icon(theme, "fan_glyph." + spec.name, out.icon, failed);
+    return true;
 }
 
 bool SignReading::bind(const UiTheme& theme, std::string& failed) {
@@ -273,11 +287,10 @@ bool SignReading::draw_offer(UiPen& canvas, const ::godot::Transform2D& frame,
         return false;
     }
     const Offer& offer = offers_[tool];
-    if (!(offer.thing ? chip_.set_thing(std::string(), failed)
-                      : chip_.set_glyph(offer.icon, std::string(), failed))) {
+    if (!chip_.set_thing(std::string(), failed)) {
         return false;
     }
-    // HXI(hx, hy, 14, item, tone) or HX(hx, hy, 13, glyph, tone), fading in after hud_sign_offer_delay.
+    // HXI(hx, hy, 14 or 13, symbol, tone) for every tool (MIG_ASE_SKILL_RSM B7), fading in after hud_sign_offer_delay.
     UiHexChipPlace place;
     place.centre = ::godot::Vector2(static_cast<float>(column.bx + column.dir * offer_dx_),
                                     static_cast<float>(yy + offer_dy_));
@@ -288,14 +301,12 @@ bool SignReading::draw_offer(UiPen& canvas, const ::godot::Transform2D& frame,
     place.elapsed = now.opened;
     place.still = now.still;
     chip_.draw(canvas, frame, place);
-    if (offer.thing) {
-        const UiHexChipPicture picture = chip_.picture(place);
-        UiItemSpritePlace thing;
-        thing.centre = picture.centre;
-        thing.box = picture.box;
-        thing.opacity = picture.opacity;
-        offer.drawing.draw(canvas, frame, thing);
-    }
+    const UiHexChipPicture picture = chip_.picture(place);
+    UiItemSpritePlace symbol;
+    symbol.centre = picture.centre;
+    symbol.box = picture.box;
+    symbol.opacity = picture.opacity;
+    offer.drawing.draw(canvas, frame, symbol);
     offer_place_ = place;
     offer_tool_ = tool;
 

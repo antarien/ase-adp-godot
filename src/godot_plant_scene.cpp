@@ -27,8 +27,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-11-24
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -187,11 +187,21 @@ void fill_plant_ground(::godot::Node3D* scene, const std::vector<VivariumTerrain
         surface.slots.clear();
         (void)build_ground(samples, cells, surface.arrays, surface.slots);
         (void)mark_ground(discs, beds, surface.arrays);
+        surface.discs = discs;  // the marks of a later patch_ground follow only the discs and beds that changed since
+        surface.beds = beds;
         surface.cells = cells;
         surface.revision += 1u;  // a ground built anew moves every place a reader derived from (P0692)
         const ::godot::Ref<::godot::ArrayMesh> built = mesh_of(surface.arrays);
         node->set_mesh(built);
         hold_ground_surface(built, surface);
+    }
+    shade_plant_ground(scene, step_m, material);
+}
+
+void shade_plant_ground(::godot::Node3D* scene, float step_m, const ::godot::Ref<::godot::Material>& material) {
+    ::godot::MeshInstance3D* node = part_of<::godot::MeshInstance3D>(scene, GODOT_PLANT_GROUND);
+    if (node == nullptr) {
+        return;
     }
     const ::godot::Ref<::godot::ShaderMaterial> shaded = material;
     if (shaded.is_valid()) {
@@ -399,6 +409,17 @@ void light_plant_scene(::godot::Node3D* scene, const VivariumSkyView& sky, const
     ::godot::DirectionalLight3D* sun = part_of<::godot::DirectionalLight3D>(scene, GODOT_SHOWCASE_SUN);
     if (sun != nullptr) {
         sun->set_shadow(true);
+        // THE SUN'S SHADOW IS DRAWN ONLY WHERE AN EYE CAN SEE IT (operator order 2026-11-25: under 30 frames per second
+        // is a failure of the view). Godot's default splits it into four maps over 100 m and draws every caster into
+        // each of them, every frame, because the sun moves: measured 2026-11-24 the render took about 300 ms of a
+        // 480 ms frame (h3_pit render_gpu_ms). Two splits keep the sharp map near the camera; the reach ends where the
+        // sky port's fog begins (ATM_CONST_*_FOG_NEAR 30 to 50 m, shorter when sight falls), since from there the fog
+        // veils the ground and Godot's own fade at the reach's end hands the shadow over to it. The fog's full
+        // distance (150 to 350 m) would reach further than Godot's default of 100 m and cost more, not less.
+        sun->set_shadow_mode(::godot::DirectionalLight3D::SHADOW_PARALLEL_2_SPLITS);
+        if (sky.fog_near > 0.0) {
+            sun->set_param(::godot::Light3D::PARAM_SHADOW_MAX_DISTANCE, static_cast<float>(sky.fog_near));
+        }
     }
     // under an overcast sky the moons and the stars fade behind the clouds (m.html drawSky, row N02)
     light_plant_sky(scene, sky, overcast, edge);

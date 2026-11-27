@@ -54,7 +54,7 @@
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/cap/godot_plant_cap.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
 #include <ase/utils/boot_clock.hpp>
@@ -121,35 +121,35 @@ void VivariumView::ready() {
         }
         // PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.1 point 2: the care view is a 3D scene; it stands once and
         // follow_scene fills it from the ports frame by frame.
-        scene_ = build_plant_scene(node_, scene_camera_);
+        scene_state_.scene_ = build_plant_scene(node_, scene_state_.scene_camera_);
         // 03.2: the materials and organ template files of the stage are read once, here, through the
         // loader the asset showcase shares; a missing one is drawn in the error material
-        scene_look_ = bind_plant_look(assets_, asset_root_, asset_roles_);
+        scene_state_.scene_look_ = bind_plant_look(scene_state_.assets_, scene_state_.asset_root_, scene_state_.asset_roles_);
         // the caps node of the scene holds the fruit body of every species' cap role from here on (usecase:101362
         // scale the organ templates)
-        stamp_plant_caps(scene_, assets_, asset_root_, asset_roles_);
+        stamp_plant_caps(scene_state_.scene_, scene_state_.assets_, scene_state_.asset_root_, scene_state_.asset_roles_);
         // B0482: the least screen width of a bark ring (view.least_ring_px) on the shared bark material, which
         // fill_tube duplicates per plant, so every tube holds a ring narrower than it at this width
-        const ::godot::Ref<::godot::ShaderMaterial> bark = scene_look_.bark;
+        const ::godot::Ref<::godot::ShaderMaterial> bark = scene_state_.scene_look_.bark;
         if (bark.is_valid()) {
-            bark->set_shader_parameter(GODOT_BARK_LEAST_PIXELS, least_ring_px_);
+            bark->set_shader_parameter(GODOT_BARK_LEAST_PIXELS, scene_state_.least_ring_px_);
         }
         // 07.9: the figure file of the stage (role figure) or the error material of its stand-in body. The file
         // (169.6 MB) is parsed and packed by a task of the WorkerThreadPool, so this ready() returns and the
         // start screen draws while it loads; follow_figure takes the pack and warms it behind the screen
-        figure_look_ = bind_figure_look(assets_, asset_roles_, figure_look_.motion);  // the motion load_figure_hud read
-        start_figure_load(figure_look_.load, asset_root_, figure_look_.file);
+        figure_state_.figure_look_ = bind_figure_look(scene_state_.assets_, scene_state_.asset_roles_, figure_state_.figure_look_.motion);  // the motion load_figure_hud read
+        start_figure_load(figure_state_.figure_look_.load, scene_state_.asset_root_, figure_state_.figure_look_.file);
         // 07.10: each tool of the hand loads in its own task; its node stays a block until its pack is taken
-        for (auto& [kind, tool] : figure_look_.tools) {
-            start_figure_load(tool.load, asset_root_, tool.file);
+        for (auto& [kind, tool] : figure_state_.figure_look_.tools) {
+            start_figure_load(tool.load, scene_state_.asset_root_, tool.file);
         }
         // 06 8.3: the body of the tool place (role rack) loads the same way; lay_tools stands it once taken
-        start_figure_load(figure_look_.rack.load, asset_root_, figure_look_.rack.file);
+        start_figure_load(figure_state_.figure_look_.rack.load, scene_state_.asset_root_, figure_state_.figure_look_.rack.file);
         // PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7: the asset showcase beside the one game host, from
         // the binding of the configuration; its line follows the boot line.
         if (launched_with(modes_.assets_argument)) {
-            const AssetShowcasePlan plan = plan_showcase(asset_names_, asset_materials_, assets_);
-            showcase_ = build_asset_showcase(node_, plan, assets_, asset_root_);
+            const AssetShowcasePlan plan = plan_showcase(scene_state_.asset_names_, scene_state_.asset_materials_, scene_state_.assets_);
+            scene_state_.showcase_ = build_asset_showcase(node_, plan, scene_state_.assets_, scene_state_.asset_root_);
             note(text_of(showcase_line(plan)));
         }
         for (const std::string& line : selftest_report_) {
@@ -167,9 +167,9 @@ void VivariumView::exit_tree() {
         return;
     }
     note("exit " + measure(GODOT_NO_PLACE));
-    // a figure file still loading writes into figure_look_: the view waits for its task before it leaves
-    end_figure_load(figure_look_.load);
-    for (auto& [kind, tool] : figure_look_.tools) {
+    // a figure file still loading writes into figure_state_.figure_look_: the view waits for its task before it leaves
+    end_figure_load(figure_state_.figure_look_.load);
+    for (auto& [kind, tool] : figure_state_.figure_look_.tools) {
         end_figure_load(tool.load);
     }
     end_camp(camp_);  // the camp exports load the same way (godot_camp_load.hpp)
@@ -184,12 +184,12 @@ void VivariumView::boot_host(bool new_seeds) {
     selected_place_ = GODOT_NO_PLACE;
     water_pending_.place = GODOT_NO_PLACE;
     restart_camp(camp_);  // the new host lays the camp anew (T.3)
-    pruning_ = false;
-    bedding_ = false;
-    bed_started_ = false;
-    player_beds_.clear();  // a new host carries only the configured brooks
-    flattening_ = false;
-    player_flats_.clear();  // and only the ground it lays
+    scene_state_.pruning_ = false;
+    scene_state_.bedding_ = false;
+    scene_state_.bed_started_ = false;
+    scene_state_.player_beds_.clear();  // a new host carries only the configured brooks
+    scene_state_.flattening_ = false;
+    scene_state_.player_flats_.clear();  // and only the ground it lays
     // The first frame after a boot starts the clock: the time the boot took is no simulation time.
     last_frame_ns_ = 0;
     // Every boot starts without a jump and measures the game hour and the clock rate anew - the first one
@@ -254,7 +254,7 @@ void VivariumView::boot_host(bool new_seeds) {
              ::godot::String::num_uint64(patch.seed) + " sowing=" + ::godot::String::num_uint64(sowing));
     }
     // 03.2 point 3: one line per missing name and boot, after the boot line that counts them.
-    for (const std::string& missing : assets_.missing) {
+    for (const std::string& missing : scene_state_.assets_.missing) {
         note(text_of(asset_missing_line(missing)));
     }
     announce_patches();
@@ -319,10 +319,10 @@ void VivariumView::restart() {
         + " selftest=" + (selftest_ran_ ? "errors:" + ::godot::String::num_uint64(selftest_errors_) : "off")
         + " measure=" + (measurement_.active ? "on" : "off")
         + " debug=" + (debug_.on ? "on" : "off")
-        + " play_stage=" + ::godot::String::num_uint64(play_stage_)
-        + " assets=" + ::godot::String::num_uint64(assets_.files.size() + assets_.missing.size())
-        + " asset_missing=" + ::godot::String::num_uint64(assets_.missing.size())
-        + " asset_manifest=" + asset_manifest_
+        + " play_stage=" + ::godot::String::num_uint64(scene_state_.play_stage_)
+        + " assets=" + ::godot::String::num_uint64(scene_state_.assets_.files.size() + scene_state_.assets_.missing.size())
+        + " asset_missing=" + ::godot::String::num_uint64(scene_state_.assets_.missing.size())
+        + " asset_manifest=" + scene_state_.asset_manifest_
         + " boots=" + ::godot::String::num_uint64(host_boots_)
         + " units=" + ::godot::String::num_uint64(resources_.unit_count())
         + " patches=" + ::godot::String::num_uint64(resources_.patch_count())
@@ -347,7 +347,7 @@ void VivariumView::process(double delta) {
     }
     if (!resources_.running() || !failure_text_.is_empty()) {
         last_frame_ns_ = 0;
-        frame_rate_.rest();  // no running picture to count: the number is hidden and counts anew with the next host
+        hud_state_.frame_rate_.rest();  // no running picture to count: the number is hidden and counts anew with the next host
         return;
     }
     ::godot::Time* clock = ::godot::Time::get_singleton();
@@ -372,7 +372,7 @@ void VivariumView::process(double delta) {
     watch_ground_host(host_usec);  // the host's share of the frames after a ground act (P0690)
     if (status == ase::kernel::HostStatusOk) {
         announce_patches();
-        follow_catch_up(elapsed_s, static_cast<double>(frame_ns) / static_cast<double>(ase::utils::NANOS_PER_SECOND));
+        follow_return(elapsed_s,static_cast<double>(frame_ns) / static_cast<double>(ase::utils::NANOS_PER_SECOND));
         follow_stages();
         follow_debug();
         follow_hour_length();
@@ -391,12 +391,12 @@ void VivariumView::process(double delta) {
         // The asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7) is lit by the sun of the host's
         // sky port; until the port carried all four records the showcase keeps its light unset.
         const VivariumSkyView& sky = resources_.get_sky();
-        if (showcase_ != nullptr && sky.known) {
+        if (scene_state_.showcase_ != nullptr && sky.known) {
             const float toward_sun[3] = {static_cast<float>(sky.sun_x), static_cast<float>(sky.sun_y),
                                          static_cast<float>(sky.sun_z)};
             const float sun_rgb[3] = {static_cast<float>(sky.sun_r), static_cast<float>(sky.sun_g),
                                       static_cast<float>(sky.sun_b)};
-            light_asset_showcase(showcase_, toward_sun, sun_rgb, static_cast<float>(sky.sun_intensity));
+            light_asset_showcase(scene_state_.showcase_, toward_sun, sun_rgb, static_cast<float>(sky.sun_intensity));
         }
         if (measurement_.active) {
             measure_frame(frame_start_usec, host_usec);

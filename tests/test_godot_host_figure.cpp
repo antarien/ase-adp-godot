@@ -42,11 +42,13 @@
 #include "test_godot_host_figure_support.hpp"
 
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
+#include <ase/adp/godot/host/types.hpp>
 #include <ase/kernel/kernel_embedded_host.hpp>
 
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace ase::adp::godot {
 
@@ -322,6 +324,146 @@ TEST_CASE("07.7 fig.turn: a figure its player leads turns on the spot and the bo
     const VivariumFigureView* turned = figure_of(resources, object_id);
     REQUIRE(turned != nullptr);
     CHECK(turned_by(before, turned->course) == doctest::Approx(kFigureTurn).epsilon(kFigureTurnSlack / kFigureTurn));
+}
+
+/*
+ * THE CUT OF THE FIGURE (usecase:100411 - learn skills by experience, MIG_ASE_SKILL_RSM B2, step 12). The prune port
+ * takes the organ and the figure of the seat; ase-phytomer fells the branch and books the cut on the count of work of
+ * that figure (the booking itself is pinned in modules/ase-phytomer/tests/test_phytomer_bok.cpp, the port that carries
+ * the count to the client is B3). Here: a tap of the led figure on a branch internode fells it, a tap on the stem
+ * leaves it standing.
+ */
+TEST_CASE("usecase:100411 learn skills by experience: the led figure cuts a branch through the prune port, a tap on the stem fells nothing") {
+    AdapterEnvironment& env = figure_environment();
+    REQUIRE(env.booted == ase::kernel::HostStatusOk);
+    GodotHostResourceManager& resources = env.resources;
+    const VivariumFigureView* first = the_figure(resources);
+    REQUIRE(first != nullptr);
+    const uint32_t figure = first->object_id;
+
+    // The seed of place 0 grows before the camera, as the tree case lets it (test_godot_host_tree.cpp, B0295 point 4)
+    advance_frames(resources, 8u);
+    const VivariumPatchView& seen = test::patch_at(resources, 0u);
+    const uint32_t cared = seen.object_id;
+    REQUIRE(resources.view(seen.x, seen.y + 3.0, seen.z + 6.0, seen.x, seen.y, seen.z) == ase::kernel::HostStatusOk);
+    constexpr uint32_t kSoilBoundFrames = 32u;
+    REQUIRE(test::await_soil_class(resources, kSoilBoundFrames));
+    const double amount_mm = test::vivarium_config(env.bundle).irrigate_amount_mm;
+    const double capacity_mm = test::patch_at(resources, 0u).capacity_mm;
+    constexpr uint32_t kBoundFrames = 256u;
+    for (double poured_mm = amount_mm;
+         poured_mm < capacity_mm + amount_mm && resources.get_organs(GODOT_ORGAN_SEGMENT).empty();
+         poured_mm += amount_mm) {
+        REQUIRE(resources.irrigate(cared, amount_mm) == ase::kernel::HostStatusOk);
+        for (uint32_t frame = 0u; frame < kBoundFrames && resources.get_organs(GODOT_ORGAN_SEGMENT).empty(); ++frame) {
+            advance_frames(resources, 1u);
+        }
+    }
+    REQUIRE(!resources.get_organs(GODOT_ORGAN_SEGMENT).empty());
+
+    // The jump to the hour of MADURA: a grown shoot carries branches (order 1 and above) beside its stem (order 0)
+    for (uint32_t frame = 0u; frame < kBoundFrames && !(test::patch_at(resources, 0u).mtur_at_h > 0.0); ++frame) {
+        advance_frames(resources, 1u);
+    }
+    const double mature_h = test::patch_at(resources, 0u).mtur_at_h;
+    REQUIRE(mature_h > 0.0);
+    REQUIRE(resources.seek(1.0, mature_h, GODOT_SEEK_FORM_NONE, GODOT_SEEK_FORM_NONE) == ase::kernel::HostStatusOk);
+    // The clock reaches the hour of the jump first, as in the tree case (test_godot_host_tree.cpp, B0295 point 4),
+    // then the organ port pages the grown shoot: it stands when its size held over a whole run and more
+    const uint32_t frames = test::await_hour(resources, mature_h);
+    std::string growth_steps;
+    uint32_t still = test::await_still_shoot(resources, growth_steps);
+    REQUIRE(still >= test::kShootStillFrames);
+    // The days after the jump (B0988): measured 2026-11-25, the shoot stood still right after the jump with 57
+    // internodes all of order 0 (data/probes/runs/figure_prune_1125.txt). Its buds burst in the cycles of the days
+    // after the jump, as the birch of test_phytomer.cpp bears 10 main internodes two days past its jump (B0299,
+    // data/probes/runs/phytomer_jump_branches_1125.txt); each day is a seek of one game day ahead.
+    for (uint32_t day = 1u; day <= test::kDaysAfterJump; ++day) {
+        const VivariumClockView& clock = resources.get_clock();
+        REQUIRE(clock.seconds_per_hour > 0.0);
+        REQUIRE(clock.hours_per_day > 0.0);
+        const double target_h = clock.elapsed_s / clock.seconds_per_hour + clock.hours_per_day;
+        REQUIRE(resources.seek(1.0 + static_cast<double>(day), GODOT_SEEK_FORM_NONE, clock.hours_per_day,
+                               GODOT_SEEK_FORM_NONE) == ase::kernel::HostStatusOk);
+        (void)test::await_hour(resources, target_h);
+        growth_steps += "| ";
+        still = test::await_still_shoot(resources, growth_steps);
+    }
+    uint32_t branch = 0u;
+    uint32_t stem = 0u;
+    for (const VivariumOrganView& organ : resources.get_organs(GODOT_ORGAN_SEGMENT)) {
+        if (organ.order >= 1.0 && branch == 0u) branch = organ.object_id;
+        if (organ.order < 1.0 && stem == 0u) stem = organ.object_id;
+    }
+    CAPTURE(mature_h);
+    CAPTURE(frames);
+    CAPTURE(growth_steps);  // frame:internodes/leaves/o<top order> at every change, "|" before each day after the jump
+    CAPTURE(resources.get_organs(GODOT_ORGAN_LEAF).size());
+    CAPTURE(resources.get_organs(GODOT_ORGAN_SEGMENT).size());  // growing: the shoot never held still on the last day
+    REQUIRE(still >= test::kShootStillFrames);
+    REQUIRE(branch != 0u);
+    REQUIRE(stem != 0u);
+
+    const auto carries_organ = [&resources](uint32_t object_id) {
+        for (const VivariumOrganView& organ : resources.get_organs(GODOT_ORGAN_SEGMENT)) {
+            if (organ.object_id == object_id) return true;
+        }
+        return false;
+    };
+
+    // The tap of the figure on the branch: the request goes out with the figure, the branch falls off the port
+    CHECK(resources.prune(branch, figure) == ase::kernel::HostStatusOk);
+    CHECK(frames_carry(resources, "cut at organ"));
+    for (uint32_t frame = 0u; frame < kBoundFrames && carries_organ(branch); ++frame) {
+        advance_frames(resources, 1u);
+    }
+    CHECK_FALSE(carries_organ(branch));
+
+    // The tap on the stem: the stem is no branch, it stands on
+    CHECK(resources.prune(stem, figure) == ase::kernel::HostStatusOk);
+    advance_frames(resources, kFigureBoundFrames);
+    CHECK(carries_organ(stem));
+}
+
+/*
+ * THE SPADE STROKE OF THE FIGURE (usecase:100411 - learn skills by experience, MIG_ASE_SKILL_RSM B2, register D2650).
+ * The dig and heap ports take the place and the figure of the seat; ase-pl-flora orders the stroke from ase-terrain
+ * and books it as work of that figure (HUB_SKL_WORK_DIG, taken by ase-skill, pinned in modules/ase-skill/tests/
+ * test_skill.cpp). Here: the stroke of the led figure is booked, a stroke without a figure stands and is booked on
+ * no one.
+ */
+TEST_CASE("usecase:100411 learn skills by experience: the dig and the heap of the led figure are booked as its work, a stroke without a figure on no one") {
+    AdapterEnvironment& env = figure_environment();
+    REQUIRE(env.booted == ase::kernel::HostStatusOk);
+    GodotHostResourceManager& resources = env.resources;
+    const VivariumFigureView* first = the_figure(resources);
+    REQUIRE(first != nullptr);
+    const uint32_t figure = first->object_id;
+    const double x = first->x + 1.0;
+    const double z = first->z + 1.0;
+    constexpr double kStrokeHalfM = 0.5;
+    constexpr double kStrokeDepthM = 0.1;
+
+    // The dig of the figure: ordered from ase-terrain and booked as its work
+    CHECK(resources.lower(x, z, kStrokeHalfM, kStrokeDepthM, figure) == ase::kernel::HostStatusOk);
+    CHECK(frames_carry(resources, "dig stroke booked as work of figure"));
+
+    // The heap of the figure on the same place: booked the same way under its own action
+    CHECK(resources.raise(x, z, kStrokeHalfM, kStrokeDepthM, figure) == ase::kernel::HostStatusOk);
+    CHECK(frames_carry(resources, "heap stroke booked as work of figure"));
+
+    // A stroke while no figure is led: the ground is dug, no one books it
+    CHECK(resources.lower(x, z, kStrokeHalfM, kStrokeDepthM, GODOT_NO_OBJECT) == ase::kernel::HostStatusOk);
+    std::vector<std::string> lines;
+    std::vector<std::string> seen;
+    for (uint32_t frame = 0u; frame < kFigureBoundFrames; ++frame) {
+        advance_frames(resources, 1u);
+        lines.clear();
+        (void)resources.remove_log_lines(lines);
+        seen.insert(seen.end(), lines.begin(), lines.end());
+    }
+    CHECK(any_line_carries(seen, "dig ordered at"));
+    CHECK_FALSE(any_line_carries(seen, "dig stroke booked as work of figure"));
 }
 
 }  // namespace ase::adp::godot

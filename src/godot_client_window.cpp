@@ -21,7 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_client_window.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/window/types.hpp>
 
 #include <ase/utils/strops.hpp>
 

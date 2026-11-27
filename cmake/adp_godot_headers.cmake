@@ -16,8 +16,8 @@ ASE ADAPTER BUILD GROUP
 @usecase     usecase:100653 - publish the module catalog
 @design      DSGN_021
 @created     2026-11-21
-@modified    2026-11-21
-@version     00.00.26.00026 [init]
+@modified    2026-11-25
+@version     00.00.27.00027 [refine]
 
 Copyright (c) Jan Ohlmann. All rights reserved.
 Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -27,12 +27,17 @@ SPDX-License-Identifier: LicenseRef-ASE-LIC
 target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_registration.hpp
     include/ase/adp/godot/godot_vivarium_node.hpp
+    include/ase/adp/godot/godot_vivarium_hud_state.hpp     # VivariumHudState: the HUD, its frame, clock, frame rate and bridges, held by the view as hud_state_ (usecase:101440, R0221)
+    include/ase/adp/godot/godot_vivarium_figure_state.hpp  # VivariumFigureState: the figures and the controls that lead one, held as figure_state_ (usecase:100387, R0221)
+    include/ase/adp/godot/godot_vivarium_scene_state.hpp   # VivariumSceneState: the asset set and the 3D scene with its ground modes, held as scene_state_ (usecase:100387, R0221)
     include/ase/adp/godot/godot_vivarium_hud_bridge_read.hpp  # read_bridge_in: one hud_bridge_* token of SHA within its range, shared by the bridge units (usecase:101440, 06.5)
     include/ase/adp/godot/godot_vivarium_view_config.hpp  # VivariumLayout, VivariumModes, VivariumTexts, VivariumHudVerb (usecase:100387 view the plant)
+    include/ase/adp/godot/godot_vivarium_request_config.hpp  # read_request_config: the request ports and every submit operation of the start file (usecase:100364 host the engine embedded)
     include/ase/adp/godot/godot_vivarium_figure_controls.hpp  # VivariumFigureControls: stick, orbit, the figure's focus (usecase:101554 receive player input)
     include/ase/adp/godot/godot_vivarium_hud_carry.hpp  # VivariumCarryBridge (usecase:101440 grow the interface with skills)
     include/ase/adp/godot/godot_vivarium_hud_hand.hpp   # VivariumHandBridge (usecase:100367 water a patch)
     include/ase/adp/godot/godot_vivarium_hud_loose.hpp  # VivariumLooseBridge (usecase:5939 adapt area terrain)
+    include/ase/adp/godot/godot_vivarium_hud_place_brook.hpp  # brook_place, the brook's place line (usecase:101440 grow the interface with skills)
     include/ase/adp/godot/godot_hud_ui_rng.hpp          # ui_rng_draw, the mockup's seeded draw (usecase:101440 grow the interface with skills)
     include/ase/adp/godot/godot_vivarium_hud_sign_rules.hpp  # VivariumSignRules (usecase:100370 wilt from drought)
     include/ase/adp/godot/godot_vivarium_hud_trail.hpp  # VivariumTrailBridge (usecase:100390 return to the garden)
@@ -120,8 +125,10 @@ target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_hud_survival_air_mark.hpp
     include/ase/adp/godot/godot_hud_survival_spoil_ring.hpp
     include/ase/adp/godot/godot_hud_survival_water_mark.hpp
+    include/ase/adp/godot/godot_hud_survival_view.hpp  # SurvivalView: the eight survival marks U01 to U08 as one part of VivariumHud (usecase:101440)
     include/ase/adp/godot/godot_hud_ui_glyph_chain.hpp
     include/ase/adp/godot/godot_hud_ui_item_shadow.hpp
+    include/ase/adp/godot/godot_hud_ui_activity_art.hpp  # UiActivityArt (usecase:101440, MIG_ASE_SKILL_RSM B7)
     include/ase/adp/godot/godot_hud_ui_item_sprite.hpp
     include/ase/adp/godot/godot_hud_ui_svg_path.hpp
     include/ase/adp/godot/godot_hud_ui_word_fill.hpp
@@ -132,6 +139,8 @@ target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_hud_bag_window.hpp
     include/ase/adp/godot/godot_hud_belt_holster.hpp
     include/ase/adp/godot/godot_hud_bag_icon.hpp
+    include/ase/adp/godot/godot_hud_activity_bars_draw.hpp  # ActivityBars (usecase:101305 show skill progress, MIG_ASE_SKILL_RSM B5)
+    include/ase/adp/godot/godot_hud_skill_rings_draw.hpp  # SkillRings: the wheels DCD and ACD on the top band of the game HUD (usecase:101305, MIG_ASE_SKILL_RSM B5)
     include/ase/adp/godot/godot_hud_fit_check.hpp
     include/ase/adp/godot/godot_hud_screen_shade.hpp
     include/ase/adp/godot/godot_hud_select_label.hpp
@@ -153,6 +162,15 @@ target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_hud_sky_band.hpp
     include/ase/adp/godot/godot_hud_year_ring.hpp
     include/ase/adp/godot/godot_hud_day_ring.hpp
+    include/ase/adp/godot/godot_hud_sky_arc.hpp          # SkyArc (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_hud_arc_frame.hpp        # SkyArcFrame, ArcRingFrame, ArcSignFrame (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_hud_arc_ring.hpp         # ArcRing (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_hud_arc_sign.hpp         # ArcSign, ArcLaidSign (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_hud_arc_needle.hpp       # ArcNeedle (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_hud_arc_readout.hpp      # ArcReadout (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_hud_ui_arc_fade.hpp      # UiArcFade (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_vivarium_hud_arc.hpp     # VivariumArcBridge: the arc's frame from the three ports (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_vivarium_host_config_arc.hpp  # read_arc_ports (usecase:101440, EXT.6)
     include/ase/adp/godot/godot_hud_forecast_strip.hpp
     include/ase/adp/godot/godot_hud_hourglass.hpp
     include/ase/adp/godot/godot_hud_calendar_sheet.hpp
@@ -175,4 +193,18 @@ target_sources(ase-adp-godot PRIVATE
     include/ase/adp/godot/godot_hud_trail_view.hpp
     include/ase/adp/godot/godot_hud_system_ring.hpp
     include/ase/adp/godot/godot_hud_debug_layer.hpp
+    include/ase/adp/godot/godot_hud_debug_rsm_draw.hpp     # DebugRsmTable, drawn by DebugLayer (usecase:101305 show skill progress)
+    include/ase/adp/godot/hud/style/types.hpp       # colours, fonts and layout of AseVivariumView, dedicated from hud/types.hpp (usecase:100387)
+    include/ase/adp/godot/hud/window/types.hpp      # display, feature and window line (usecase:101019)
+    include/ase/adp/godot/hud/log/types.hpp         # log decimals and counted schedules (usecase:101120)
+    include/ase/adp/godot/hud/motion/types.hpp      # CSS easings and the cubic-bezier solver (usecase:101440, 06.3 UiMotion)
+    include/ase/adp/godot/hud/ring/types.hpp        # ring, text anchors, hexagon (usecase:101440, 06.3 UiRing)
+    include/ase/adp/godot/hud/sprite/types.hpp      # SVG path reader of item_art.json (usecase:101440, 06.3 UiItemSprite)
+    include/ase/adp/godot/hud/gap/types.hpp         # register entries of the bridge gaps (usecase:101440, carrier N0448)
+    include/ase/adp/godot/hud/debug/types.hpp       # debug layer tabs (usecase:101120, 06.4 DebugLayer)
+    include/ase/adp/godot/hud/hand/types.hpp        # hand slot modes, verbs and acts (usecase:100367, 06.4 HandSlot)
+    include/ase/adp/godot/hud/sign/types.hpp        # sign anchors and bar (usecase:100370, 06.4 SignMarker)
+    include/ase/adp/godot/hud/weather/types.hpp     # weather kinds of sky.weather.v1 (usecase:101440, WeatherVeil)
+    include/ase/adp/godot/hud/touch/types.hpp       # data-act parts of the care view (usecase:101440, 06.7 BagWindow)
+    include/ase/adp/godot/hud/drag/types.hpp        # drag and drop places, words and verdicts (usecase:101440, 06.7 DragLayer)
 )

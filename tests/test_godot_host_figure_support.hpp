@@ -35,7 +35,9 @@
 #include "test_godot_host_support.hpp"
 
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
+#include <ase/adp/godot/host/types.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -78,6 +80,10 @@ inline void add_figure_ports(VivariumStartConfig& config) {
     config.figure_area_port = "avatar.area.v1";
     config.figure_code_port = "avatar.code.v1";
     config.figure_boundary_port = "avatar.boundary.v1";  // 07.13: the bumps against the chunk edge
+    config.skill_port = "avatar.skill.v1";               // MIG_ASE_SKILL_RSM B3: the learning entries of each figure
+    config.skill_qnt_port = "avatar.skill.qnt.v1";       // the running time slice of each entry
+    config.skill_bar_port = "avatar.skill.bar.v1";       // every booked time slice
+    config.skill_prg_port = "avatar.skill.prg.v1";       // the progress, rate, measured time and work of each entry
     config.op_spawn = "spawn";
     config.op_steer = "steer";
     config.op_turn = "turn";
@@ -120,6 +126,58 @@ inline bool frames_carry(GodotHostResourceManager& resources, const std::string&
         }
     }
     return false;
+}
+
+/** Frames a wait on the grown shoot gets, a quarter second each. */
+inline constexpr uint32_t kShootBoundFrames = 256u;
+/** Frames the organ port holds its internode count before the shoot counts as standing: more than one Dissemination run. */
+inline constexpr uint32_t kShootStillFrames = 16u;
+/**
+ * Game days the shoot lives after the jump to MADURA: the buds of the jump burst in the cycles of the days after it,
+ * as the birch of modules/ase-phytomer/tests/test_phytomer.cpp bears its main branches only in the two days after its
+ * jump (B0299). Each day is one seek of hours_per_day ahead.
+ */
+inline constexpr uint32_t kDaysAfterJump = 2u;
+
+/** Frames until the clock of the host stands at game hour `hour` or later, a bounded number; returns the frames taken. */
+inline uint32_t await_hour(GodotHostResourceManager& resources, double hour) {
+    uint32_t frames = 0u;
+    for (; frames < kShootBoundFrames; ++frames) {
+        advance_frames(resources, 1u);
+        const VivariumClockView& clock = resources.get_clock();
+        if (clock.seconds_per_hour > 0.0 && clock.elapsed_s / clock.seconds_per_hour >= hour) {
+            break;
+        }
+    }
+    return frames;
+}
+
+/**
+ * Frames until the organ port held its internode count kShootStillFrames frames, a bounded number; returns the frames
+ * it held. Every change of the internode and leaf count lands in `steps` as frame:internodes/leaves/o<top order>
+ * (B0988): a top order of 0 at every step says no bud burst, a later 1 that the buds burst in the cycles after it.
+ */
+inline uint32_t await_still_shoot(GodotHostResourceManager& resources, std::string& steps) {
+    std::size_t organ_size = 0u;
+    std::size_t leaf_size = 0u;
+    uint32_t still = 0u;
+    for (uint32_t frame = 0u; frame < kShootBoundFrames && still < kShootStillFrames; ++frame) {
+        advance_frames(resources, 1u);
+        const std::size_t size = resources.get_organs(GODOT_ORGAN_SEGMENT).size();
+        const std::size_t leaves = resources.get_organs(GODOT_ORGAN_LEAF).size();
+        if (size != organ_size || leaves != leaf_size) {
+            double top_order = 0.0;
+            for (const VivariumOrganView& organ : resources.get_organs(GODOT_ORGAN_SEGMENT)) {
+                top_order = organ.order > top_order ? organ.order : top_order;
+            }
+            steps += std::to_string(frame) + ":" + std::to_string(size) + "/" + std::to_string(leaves) + "/o" +
+                     std::to_string(static_cast<uint32_t>(top_order)) + " ";
+        }
+        still = size == organ_size && size > 0u ? still + 1u : 0u;
+        organ_size = size;
+        leaf_size = leaves;
+    }
+    return still;
 }
 
 /** The figure `object_id` as the body port carries it now, nullptr when it carries no such figure. */

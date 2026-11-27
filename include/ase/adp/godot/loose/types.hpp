@@ -8,8 +8,11 @@
  * @description The port terrain.loose.v1 (register N0456, CAUSA_ASE_TERRAIN Loosened soil): one record per macro
  *              cell of ase-terrain, filed by FloraHostCpctExptSystem of ase-pl-flora from the rows HUB_TERN_MCRO,
  *              with the cell's centre x and z (GODOT_KEY_X, GODOT_KEY_Z), its edge (GODOT_KEY_CELL_M) and the
- *              compaction share named here. GodotHostResourceManager::read_loose keeps the cells as the grid they
- *              form; the looseness the HUD's focus card and the crumbs draw is the complement of the share.
+ *              compaction share and the owner's start share of undisturbed topsoil named here.
+ *              GodotHostResourceManager::read_loose keeps the cells as the grid they form; the looseness the HUD's
+ *              focus card and the crumbs draw is how far the share lies below the start share, (start - share) /
+ *              start. Measured 2026-11-25: read as the complement 1 - share, the untouched ground at 0.43 drew
+ *              crumbs of 0.57 over the whole map.
  *
  *              WHY A TYPES HEADER OF ITS OWN: the adapter port/types.hpp is included by more than a hundred own
  *              units of the avt build and takes no new or changed line (header ratchet, operator decision
@@ -22,8 +25,8 @@
  * @usecase     usecase:101339 - show the ground around plant
  * @actor       Worldkeeper Perception Relay (WORLPERREL)
  * @created     2026-11-23
- * @modified    2026-11-23
- * @version     00.00.01.00001 [init]
+ * @modified    2026-11-25
+ * @version     00.00.02.00002 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -42,6 +45,7 @@
 
 namespace ase::adp::godot {
 
-constexpr const char* GODOT_KEY_CPCT_SHARE = "cpct_share";  // loose record: compaction of one macro cell of ase-terrain, share 0 (freshly loosened) to 1 (root-limiting), as its owner keeps it (HUB_TERN_MCRO_CPCT, N0456); the looseness is its complement
+constexpr const char* GODOT_KEY_CPCT_SHARE = "cpct_share";  // loose record: compaction of one macro cell of ase-terrain, share 0 (freshly loosened) to 1 (root-limiting), as its owner keeps it (HUB_TERN_MCRO_CPCT, N0456)
+constexpr const char* GODOT_KEY_CPCT_START = "cpct_start";  // loose record: the owner's compaction of undisturbed topsoil (TER_CONST_SOIL_CPCT_START), the share the rain settles a cell back to; the looseness is (start - share) / start, 0 on untouched ground
 
 }  // namespace ase::adp::godot

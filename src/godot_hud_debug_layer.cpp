@@ -2,7 +2,7 @@
  * ASE GODOT ADAPTER - HUD DEBUG LAYER
  *
  * @file        godot_hud_debug_layer.cpp
- * @brief       The debug layer of the care view: three status lines, the handle and the drawer with its four tabs
+ * @brief       The debug console of the care view: the handle at the foot and the drawer with three tab layers
  * @description PLAN_ASE_VIVARIUM_PHASE_06_HUD package 06.4, see godot_hud_debug_layer.hpp. This unit binds, paints
  *              and answers a tap; where each chip and date field stands is DebugLayer::lay
  *              (godot_hud_debug_layer_lay.cpp), so draw and hit read the one placing.
@@ -14,8 +14,8 @@
  * @usecase     usecase:101120 - clock the growth cycle
  * @actor       Growth Clock Controller (GROWCLOCON)
  * @created     2026-11-10
- * @modified    2026-11-23
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -27,7 +27,9 @@
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/debug/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 
 #include <godot_cpp/variant/string.hpp>
 
@@ -63,6 +65,8 @@ bool DebugLayer::bind(const UiTheme& theme, std::string& failed) {
              {"hud_debug_hour_row", &hour_row_},       {"hud_debug_hour_per_row", &hour_per_row_},
              {"hud_debug_hour_block", &hour_block_},   {"hud_debug_jump_step", &jump_step_},
              {"hud_debug_jump_w", &jump_w_},           {"hud_debug_date_step", &date_step_},
+             {"hud_debug_registro_dy", &registro_dy_}, {"hud_debug_registro_row", &registro_row_},
+             {"hud_debug_registro_per_row", &registro_per_row_},
              {"hud_debug_date_label_dy", &date_label_dy_}, {"hud_debug_date_label_size", &date_label_size_},
              {"hud_debug_date_chip_dy", &date_chip_dy_}, {"hud_debug_date_chip_w", &date_chip_w_},
              {"hud_debug_date_field_dx", &date_field_dx_}, {"hud_debug_date_field_w", &date_field_w_},
@@ -76,15 +80,22 @@ bool DebugLayer::bind(const UiTheme& theme, std::string& failed) {
              {"hud_debug_relief_step", &relief_step_},
              {"hud_debug_relief_w", &relief_w_},       {"hud_debug_chip_radius", &chip_radius_},
              {"hud_debug_chip_line", &chip_line_},     {"hud_debug_chip_label_dy", &chip_label_dy_},
-             {"hud_debug_chip_label_size", &chip_label_size_}}) {
+             {"hud_debug_chip_label_size", &chip_label_size_},
+             {"hud_debug_view_x", &view_x_},           {"hud_debug_view_dy", &view_y_},
+             {"hud_debug_view_step", &view_step_}}) {
         if (!theme.measure(slot.first, *slot.second)) {
             failed = slot.first;
             return false;
         }
     }
+    view_y_ += drawer_y_;  // the view chips stand in the title row of the drawer, never over the scene
     if (!(hour_per_row_ >= 1.0)) {
         failed = "hud_debug_hour_per_row";
         return false;  // a row of no hour jump would lay every hour jump on one place
+    }
+    if (!(registro_per_row_ >= 1.0)) {
+        failed = "hud_debug_registro_per_row";
+        return false;  // a row of no event jump would lay every event jump on one place
     }
     handle_ = ::godot::Rect2(static_cast<float>(handle[0]), static_cast<float>(handle[1]),
                              static_cast<float>(handle[2]), static_cast<float>(handle[3]));
@@ -134,7 +145,15 @@ bool DebugLayer::bind(const UiTheme& theme, std::string& failed) {
             return false;
         }
     }
+    views_.assign(GODOT_HUD_DEBUG_VIEWS, std::string());
+    if (!plain_word(theme, "debug_views.system", views_[GODOT_HUD_DEBUG_VIEW_SYSTEM], failed) ||
+        !plain_word(theme, "debug_views.rsm", views_[GODOT_HUD_DEBUG_VIEW_RSM], failed) ||
+        !plain_word(theme, "debug_views.status", views_[GODOT_HUD_DEBUG_VIEW_STATUS], failed) ||
+        !rsm_table_.bind(theme, failed)) {
+        return false;
+    }
     theme_ = &theme;
+    view_labels_.clear();
     chip_labels_.clear();
     date_labels_.clear();
     date_values_.clear();
@@ -249,6 +268,45 @@ bool DebugLayer::chip(UiPen& canvas, const ::godot::Transform2D& frame, const De
     return true;
 }
 
+void DebugLayer::view_chips(const DebugLayerFrame& now, std::vector<DebugLayerChip>& out) const {
+    // The three tab layers of the console (usecase:101305, MIG_ASE_SKILL_RSM B4): chips in the title row of the open
+    // drawer, the size of a drawer tab, the form of a chip; a tap on one shows its layer and the drawer stays open.
+    // The closed console shows only its handle at the foot, nothing over the scene.
+    if (!now.open) {
+        return;
+    }
+    for (uint32_t view = 0; view < GODOT_HUD_DEBUG_VIEWS; ++view) {
+        DebugLayerChip chip;
+        chip.rect = ::godot::Rect2(static_cast<float>(view_x_ + view * view_step_), static_cast<float>(view_y_),
+                                   static_cast<float>(tab_w_), static_cast<float>(tab_h_));
+        chip.label = views_[view];
+        chip.on = now.view == view;
+        chip.act.view = view;
+        out.push_back(chip);
+    }
+}
+
+bool DebugLayer::draw_view(UiPen& canvas, const ::godot::Transform2D& frame, const DebugLayerFrame& now,
+                           const UiTextPlace& text, std::string& failed) {
+    std::vector<DebugLayerChip> chips;
+    view_chips(now, chips);
+    if (!grown(view_labels_, chips.size(), failed)) {
+        return false;
+    }
+    for (size_t place = 0; place < chips.size(); ++place) {
+        if (!chip(canvas, frame, chips[place], now, view_labels_[place], failed)) {
+            return false;
+        }
+    }
+    if (now.view == GODOT_HUD_DEBUG_VIEW_RSM) {
+        return rsm_table_.draw(canvas, frame, now.rsm, now.elapsed, now.still, failed);
+    }
+    if (now.view == GODOT_HUD_DEBUG_VIEW_STATUS) {
+        return draw_lines(canvas, frame, now, text, failed);
+    }
+    return true;  // SYSTEM: draw() paints the tabs and chips lay() placed
+}
+
 bool DebugLayer::draw(UiPen& canvas, const ::godot::Transform2D& frame, const VivariumDebug& debug,
                       const DebugLayerFrame& now, std::string& failed) {
     UiTextPlace text;
@@ -258,11 +316,8 @@ bool DebugLayer::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Vi
     text.opacity = 1.0;
     text.elapsed = now.elapsed;
     text.still = now.still;
-    if (!draw_lines(canvas, frame, now, text, failed)) {
-        return false;
-    }
 
-    // Closed: the handle at the foot.
+    // Closed: the handle at the foot, and nothing else of the console.
     if (!now.open) {
         UiSvgOutline outline;
         svg_append_rounded_rect(outline, handle_, static_cast<float>(handle_radius_));
@@ -278,8 +333,9 @@ bool DebugLayer::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Vi
         return true;
     }
 
+    // Open: the body of the SYSTEM layer only while that layer shows; the RSM and the STATUS layer have their own.
     DebugLayerBody body;
-    if (!lay(debug, now, body, failed)) {
+    if (now.view == GODOT_HUD_DEBUG_VIEW_SYSTEM && !lay(debug, now, body, failed)) {
         return false;
     }
 
@@ -309,7 +365,15 @@ bool DebugLayer::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Vi
     fold.anchor = GODOT_TEXT_ANCHOR_END;
     close_.draw(canvas, frame, fold);
 
-    // The tabs and the chips of the open tab, then the labels and values of the date fields.
+    // The view chips in the title row and the body of the RSM or the STATUS layer.
+    if (!draw_view(canvas, frame, now, text, failed)) {
+        return false;
+    }
+    if (now.view != GODOT_HUD_DEBUG_VIEW_SYSTEM) {
+        return true;
+    }
+
+    // SYSTEM: the tabs and the chips of the open tab, then the labels and values of the date fields.
     if (!grown(chip_labels_, body.chips.size(), failed) || !grown(date_labels_, body.fields.size(), failed) ||
         !grown(date_values_, body.fields.size(), failed)) {
         return false;
@@ -380,6 +444,7 @@ bool DebugLayer::drawer_place(const DebugLayerFrame& now, ::godot::Rect2& out) c
 bool DebugLayer::places(const VivariumDebug& debug, const DebugLayerFrame& now, std::vector<DebugLayerChip>& out,
                         std::string& failed) const {
     out.clear();
+    view_chips(now, out);  // the three view chips answer a tap while the drawer is open
     if (!now.open) {
         DebugLayerChip handle;
         handle.rect = handle_;
@@ -391,6 +456,9 @@ bool DebugLayer::places(const VivariumDebug& debug, const DebugLayerFrame& now, 
     fold.rect = fold_hit_;
     fold.act.fold = true;
     out.push_back(fold);
+    if (now.view != GODOT_HUD_DEBUG_VIEW_SYSTEM) {
+        return true;  // the RSM and the STATUS layer only show, their body answers no tap
+    }
     DebugLayerBody body;
     if (!lay(debug, now, body, failed)) {
         return false;

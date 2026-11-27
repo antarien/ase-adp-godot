@@ -4,7 +4,7 @@
  * @file        godot_garden_return.cpp
  * @brief       A span the app spent away is noticed in one frame and laid by ase-time; its end carries the duration
  * @description PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.6 point 2 and V6, see godot_garden_return.hpp. Reads only the
- *              three numbers of a frame; the ticks are the host's, the backlog the resource manager's.
+ *              three numbers of a frame; the ticks are the host's, the pending seconds the resource manager's.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)
@@ -26,23 +26,23 @@
 
 namespace ase::adp::godot {
 
-GardenReturnFrame garden_return_frame(GardenReturn& state, double now_s, double elapsed_s, double backlog_s) {
+GardenReturnFrame garden_return_frame(GardenReturn& state, double now_s, double elapsed_s, double pending_s) {
     GardenReturnFrame frame;
-    if (elapsed_s > GODOT_CATCH_UP_NOTE_S) {
+    if (elapsed_s > GODOT_AWAY_NOTE_S) {
         frame.noticed = true;
-        if (backlog_s > 0.0) {
-            // The first frame of a return starts its clock; a later long frame of the same catch-up does not.
-            if (!state.catching_up) {
+        if (pending_s > 0.0) {
+            // The first frame of a return starts its clock; a later long frame while it is pending does not.
+            if (!state.pending) {
                 state.since_s = now_s;
             }
-            state.catching_up = true;
+            state.pending = true;
             return frame;
         }
     }
-    if (state.catching_up && !(backlog_s > 0.0)) {
-        state.catching_up = false;
-        frame.caught_up = true;
-        frame.catch_up_s = now_s - state.since_s;
+    if (state.pending && !(pending_s > 0.0)) {
+        state.pending = false;
+        frame.laid = true;
+        frame.laid_s = now_s - state.since_s;
     }
     return frame;
 }

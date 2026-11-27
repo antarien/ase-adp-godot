@@ -75,18 +75,21 @@
  * @usecase     usecase:101120 - clock the growth cycle
  * @actor       Growth Clock Controller (GROWCLOCON)
  * @created     2026-11-10
- * @modified    2026-11-23
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
+#include <ase/adp/godot/godot_hud_debug_rsm.hpp>
+#include <ase/adp/godot/godot_hud_debug_rsm_draw.hpp>
 #include <ase/adp/godot/godot_hud_ui_text_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
 #include <ase/adp/godot/godot_vivarium_debug.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/debug/types.hpp>
+#include <ase/adp/godot/rsm/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 
 #include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
@@ -105,6 +108,8 @@ namespace ase::adp::godot {
 struct DebugLayerFrame {
     bool open = false;                          // the drawer is open; false: the handle
     uint32_t tab = GODOT_HUD_DEBUG_TAB_TEMPO;   // GODOT_HUD_DEBUG_TAB_* the open drawer shows
+    uint32_t view = GODOT_HUD_DEBUG_VIEW_SYSTEM;// GODOT_HUD_DEBUG_VIEW_* the open drawer shows: the tabs, the RSM table or the four lines
+    std::vector<DebugRsmEntry> rsm;             // the learning entries of avatar.skill.v1 the RSM table shows, last set the host delivered
     uint8_t stage = GODOT_STAGE_NONE;           // the stage of the chosen patch; NONE: no patch chosen
     double factor = 0.0;                        // the factor the clock runs at, the one the hourglass fills
     double height_scale_m = 0.0;                // the relief amplitude that stands, metres
@@ -135,6 +140,7 @@ struct DebugLayerHit {
     bool handle = false;                        // the closed handle: open the drawer
     bool fold = false;                          // the fold: close the drawer
     uint32_t tab = GODOT_HUD_DEBUG_NONE;        // the tab chosen
+    uint32_t view = GODOT_HUD_DEBUG_NONE;       // the tab layer of the drawer chosen (GODOT_HUD_DEBUG_VIEW_*)
     uint32_t button = GODOT_HUD_DEBUG_NONE;     // index in debug.buttons: ask that pace
     uint32_t jump = GODOT_HUD_DEBUG_NONE;       // index in debug.jumps: ask that jump
     uint32_t step = GODOT_HUD_DEBUG_NONE;       // index in debug.date.steps: move that part
@@ -203,6 +209,12 @@ private:
 
     bool draw_lines(UiPen& canvas, const ::godot::Transform2D& frame, const DebugLayerFrame& now,
                     const UiTextPlace& text, std::string& failed);
+    /** The three view chips in the title row of the open drawer, placed; the closed console shows none. */
+    void view_chips(const DebugLayerFrame& now, std::vector<DebugLayerChip>& out) const;
+    /** The view chips and the body of the chosen layer under them: the RSM table or the four status lines; the
+     *  SYSTEM layer's tabs and chips draw() paints from lay(). */
+    bool draw_view(UiPen& canvas, const ::godot::Transform2D& frame, const DebugLayerFrame& now,
+                   const UiTextPlace& text, std::string& failed);
     bool chip(UiPen& canvas, const ::godot::Transform2D& frame, const DebugLayerChip& chip,
               const DebugLayerFrame& now, UiTextBlock& label, std::string& failed);
     /** Grows `blocks` to `count`, each new block bound as data text from theme_; false with the reason. */
@@ -247,6 +259,9 @@ private:
     double hour_block_ = 0.0;         // hud_debug_hour_block
     double jump_step_ = 0.0;          // hud_debug_jump_step
     double jump_w_ = 0.0;             // hud_debug_jump_w
+    double registro_dy_ = 0.0;        // hud_debug_registro_dy, from the row of the other jumps to row REGISTRO
+    double registro_row_ = 0.0;       // hud_debug_registro_row, one row of REGISTRO to the next
+    double registro_per_row_ = 0.0;   // hud_debug_registro_per_row, event jumps in one row before it wraps
     double date_step_ = 0.0;          // hud_debug_date_step
     double date_label_dy_ = 0.0;      // hud_debug_date_label_dy
     double date_label_size_ = 0.0;    // hud_debug_date_label_size
@@ -274,6 +289,9 @@ private:
     double chip_line_ = 0.0;          // hud_debug_chip_line
     double chip_label_dy_ = 0.0;      // hud_debug_chip_label_dy
     double chip_label_size_ = 0.0;    // hud_debug_chip_label_size
+    double view_x_ = 0.0;             // hud_debug_view_x
+    double view_y_ = 0.0;             // the top of the view chips: hud_debug_drawer_y + hud_debug_view_dy
+    double view_step_ = 0.0;          // hud_debug_view_step
 
     ::godot::Color ink_;              // DEBUG_INK
     ::godot::Color ink_on_;           // DEBUG_INK_ON
@@ -291,6 +309,7 @@ private:
     std::string more_;                  // texts.hud.debug_date_more
     std::vector<std::string> tabs_;     // texts.hud.debug_tabs.<tab>, by GODOT_HUD_DEBUG_TAB_*
     std::vector<std::string> notes_;    // texts.hud.debug_notes.<tab>, by GODOT_HUD_DEBUG_TAB_*
+    std::vector<std::string> views_;    // texts.hud.debug_views.<view>, by GODOT_HUD_DEBUG_VIEW_*
 
     UiTextBlock open_;              // texts.hud.debug_open, class d
     UiTextBlock close_;               // texts.hud.debug_close, class d
@@ -304,6 +323,8 @@ private:
     UiTextBlock time_line_;                   // texts.hud.debug_time, class d
     UiTextBlock patch_line_;                  // texts.hud.debug_patch, class d
     UiTextBlock salt_line_;                   // texts.hud.debug_salt, class d
+    DebugRsmTable rsm_table_;                 // the RSM table and its rings (godot_hud_debug_rsm_draw.hpp)
+    std::vector<UiTextBlock> view_labels_;    // the label of each view chip
     std::vector<UiTextBlock> chip_labels_;    // the label of each chip of the open tab, by its place in the body
     std::vector<UiTextBlock> date_labels_;    // the label of each date field, by its place in the body
     std::vector<UiTextBlock> date_values_;    // the value of each date field, by its place in the body

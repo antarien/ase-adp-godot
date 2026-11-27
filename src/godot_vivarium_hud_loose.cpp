@@ -22,7 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_hud_loose.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/weather/types.hpp>
 
 #include <ase/math/math.hpp>
 

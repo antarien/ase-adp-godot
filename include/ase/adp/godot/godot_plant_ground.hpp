@@ -27,8 +27,8 @@
  * @usecase     usecase:101339 - show the ground around plant
  * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-10-26
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -114,6 +114,8 @@ struct PlantGroundSurface {
     PlantGroundSpan                     attributes;     // attribute stream: the colours and coordinates it wrote
     bool                                grown = false;  // the last patch moved a vertex past low_m or high_m
     uint64_t                            revision = 0;   // counts every write that moved a vertex's place (P0692)
+    std::vector<PlantGroundDisc>        discs;          // the levelled discs the marks were last laid over
+    std::vector<PlantGroundBed>         beds;           // the brook beds the marks were last laid over
 };
 
 /**

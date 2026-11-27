@@ -35,7 +35,7 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/log/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
@@ -114,7 +114,7 @@ void VivariumView::follow_moonrise(const ::godot::String& at_words) {
     // without a moon in the frame is ase-ephemeris' forecast to fix.
     const VivariumSkyView& sky = resources_.get_sky();
     ::godot::String where;
-    const uint32_t framed = sky.known ? moons_in_frame(sky, scene_, where) : 0u;
+    const uint32_t framed = sky.known ? moons_in_frame(sky, scene_state_.scene_, where) : 0u;
     note(::godot::String("debug jump ") + (framed > 0u ? "reached" : "missed reason=no_moon_in_frame") +
          " moonrise framed=" + ::godot::String::num_uint64(framed) + where + at_words + " " +
          measure(selected_place_));

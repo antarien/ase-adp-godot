@@ -9,7 +9,7 @@
  * @description The manager is tested against the SAME bundle Godot loads (clients/avt-client-android,
  *              AvtRuntime.cmake) in three executables: test_godot_host_refusal.cpp starts no game host - the
  *              refusals and the self-test on its own test host - while test_godot_host.cpp (boot, pour,
- *              organs, catch-up, teardown) and test_godot_host_scene.cpp (templates, sky, ground, stem
+ *              organs, return, teardown) and test_godot_host_scene.cpp (templates, sky, ground, stem
  *              base) each start the one game host of their run. All read the bundle through the same
  *              stage reader, configure the same ports and patches as the client's start configuration,
  *              and match the host's lines in the form ase-log displays them; these functions are that one

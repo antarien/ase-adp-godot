@@ -32,7 +32,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_debug_layer.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/debug/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 
 #include <godot_cpp/variant/string.hpp>
@@ -99,9 +99,15 @@ bool DebugLayer::lay_salto(const VivariumDebug& debug, const DebugLayerFrame& no
     uint32_t stages = 0;
     uint32_t hours = 0;
     uint32_t others = 0;
+    uint32_t events = 0;
     const double hour_y = y + stage_row_;
     const double other_y = hour_y + hour_block_;
+    // ROW REGISTRO (PLAN_ASE_VIVARIUM_PHASE_06_HUD_EXT "Debug: Zeitraffer und Sprünge"): every jump that names a
+    // kind of ase-calendar's register stands in its own row under the other jumps and wraps after
+    // hud_debug_registro_per_row chips, "Ereignis ▸" first as the config lists it.
+    const double registro_y = other_y + registro_dy_;
     const uint32_t per_row = static_cast<uint32_t>(hour_per_row_);
+    const uint32_t per_registro = static_cast<uint32_t>(registro_per_row_);
     for (uint32_t i = 0; i < debug.jumps.size(); ++i) {
         const VivariumDebugJump& jump = debug.jumps[i];
         DebugLayerChip chip;
@@ -112,16 +118,25 @@ bool DebugLayer::lay_salto(const VivariumDebug& debug, const DebugLayerFrame& no
             chip.on = now.stage == jump.stage;
             ++stages;
         } else if (jump.hour != GODOT_HOUR_NONE) {
-            chip.rect = box(pad_ + (hours % per_row) * hour_step_, hour_y + static_cast<double>(hours / per_row) * hour_row_, hour_w_,
-                            chip_h_);
+            const uint32_t hour_line = hours / per_row;  // the whole row the hour jump falls in
+            chip.rect = box(pad_ + (hours % per_row) * hour_step_, hour_y + static_cast<double>(hour_line) * hour_row_,
+                            hour_w_, chip_h_);
             ++hours;
+        } else if (!jump.event.is_empty()) {
+            const uint32_t event_line = events / per_registro;  // the whole row of REGISTRO the event jump falls in
+            chip.rect = box(pad_ + (events % per_registro) * jump_step_,
+                            registro_y + static_cast<double>(event_line) * registro_row_, jump_w_, chip_h_);
+            ++events;
         } else {
             chip.rect = box(pad_ + others * jump_step_, other_y, jump_w_, chip_h_);
             ++others;
         }
         out.chips.push_back(chip);
     }
-    out.note_y = other_y + row_step_ + note_jump_dy_;
+    // The note stands under the last row of REGISTRO, or under the other jumps while the config names no event jump.
+    const uint32_t registro_rows = (events + per_registro - 1u) / per_registro;
+    out.note_y = events == 0u ? other_y + row_step_ + note_jump_dy_
+                              : registro_y + static_cast<double>(registro_rows) * registro_row_ + note_jump_dy_;
     return true;
 }
 

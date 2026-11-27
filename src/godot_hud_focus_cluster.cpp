@@ -12,8 +12,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
- * @modified    2026-11-10
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.39.00039 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -21,9 +21,11 @@
  */
 
 #include <ase/adp/godot/godot_hud_focus_cluster.hpp>
+#include <ase/adp/godot/godot_hud_spine_pure.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
+#include <ase/math/math.hpp>
 
 #include <godot_cpp/core/math.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
@@ -156,36 +158,43 @@ bool FocusCluster::draw(UiPen& canvas, const ::godot::Transform2D& frame,
     ring.still = now.still;
 
     std::vector<UiSpineRow> lines;
-    if (!ring_.draw(canvas, frame, ring, failed) || !draw_head(canvas, frame, now, failed) ||
-        !rows(now, lines, failed) || !marks(now, lines, failed) || !spine_.set(lines, failed)) {
+    std::string area;
+    if (!ring_.draw(canvas, frame, ring, failed) || !rows(now, lines, failed) || !marks(now, lines, failed) ||
+        !spine_.set(lines, failed) ||
+        !filled(selection_words_, {HudPortValue{"place", hud_whole(now.area)}}, area, failed) ||
+        !subtitle_.set(area, failed)) {
         return false;
     }
-    spine_.draw(canvas, frame, ring_.centre().x + column_dx_, now.elapsed, now.still, now.debug);
+    // B1001: while the body rail draws in the same view, the whole card - leader, species, area line and rows -
+    // yields left until its widest text ends at the rail's content; the texts are set above, so they are measured.
+    double need = 0.0;
+    if (now.rail) {
+        const double head = title_dx_ + ase::math::max(title_.width(canvas, frame, title_size_),
+                                                       subtitle_.width(canvas, frame, subtitle_size_));
+        need = ase::math::max(head, spine_.need(canvas, frame));
+    }
+    const double column_x = spine_column_x(ring_.centre().x + column_dx_, now.rail, spine_.rail_left(), need);
+    draw_head(canvas, frame, now, column_x);
+    spine_.draw(canvas, frame, column_x, now.elapsed, now.still, now.debug, now.rail);
     return draw_next(canvas, frame, now, failed);
 }
 
-bool FocusCluster::draw_head(UiPen& canvas, const ::godot::Transform2D& frame,
-                             const FocusClusterFrame& now, std::string& failed) {
-    // L([[TX+R*k, ry-R*k], [SX, ry-R*k-(SX-TX-R*k)], [SX, top]]): forty-five degrees up, then straight up.
+void FocusCluster::draw_head(UiPen& canvas, const ::godot::Transform2D& frame, const FocusClusterFrame& now,
+                             double column_x) {
+    // L([[TX+R*k, ry-R*k], [SX, ry-R*k-(SX-TX-R*k)], [SX, top]]): forty-five degrees up, then straight up; a column
+    // that yielded left of the knee (B1001) is reached forty-five degrees up as well, never down.
     const ::godot::Vector2& centre = ring_.centre();
-    const double column_x = centre.x + column_dx_;
     const double knee = ring_.radius() * leader_knee_;
     const double start_x = centre.x + knee;
     const double start_y = centre.y - knee;
     ::godot::PackedVector2Array leader;
     leader.push_back(::godot::Vector2(static_cast<float>(start_x), static_cast<float>(start_y)));
-    leader.push_back(
-        ::godot::Vector2(static_cast<float>(column_x), static_cast<float>(start_y - (column_x - start_x))));
+    leader.push_back(::godot::Vector2(static_cast<float>(column_x),
+                                      static_cast<float>(start_y - ase::math::abs(column_x - start_x))));
     leader.push_back(::godot::Vector2(static_cast<float>(column_x), static_cast<float>(leader_top_)));
     canvas.draw_set_transform_matrix(frame);
     leader_.draw(canvas, leader, soft_, leader_.width(), leader_.drawn(now.elapsed, leader_delay_, now.still));
 
-    std::string area;
-    if (!filled(selection_words_, {HudPortValue{"place", hud_whole(now.area)}},
-                area, failed) ||
-        !subtitle_.set(area, failed)) {
-        return false;
-    }
     UiTextPlace text;
     text.at = ::godot::Vector2(static_cast<float>(column_x + title_dx_), static_cast<float>(title_y_));
     text.size = title_size_;
@@ -203,7 +212,6 @@ bool FocusCluster::draw_head(UiPen& canvas, const ::godot::Transform2D& frame,
     line.color = soft_;
     line.delay = subtitle_delay_;
     subtitle_.draw(canvas, frame, line);
-    return true;
 }
 
 bool FocusCluster::rows(const FocusClusterFrame& now, std::vector<UiSpineRow>& out, std::string& failed) const {

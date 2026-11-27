@@ -72,6 +72,7 @@ struct HudDrawStep {
     static constexpr const char* INV_HAND_WARM = "inventory_hand_warm";        // readying, every line
     static constexpr const char* INV_BELT = "inventory_belt";      // ToolBelt
     static constexpr const char* INV_BAG = "inventory_bag";        // BagIcon
+    static constexpr const char* INV_BARS = "inventory_bars";      // ActivityBars (usecase:101305, MIG_ASE_SKILL_RSM B5)
     static constexpr const char* INV_TOAST = "inventory_toast";    // Toast
     static constexpr const char* INV_WINDOW = "inventory_window";  // BagWindow: the pack and the pouch
     static constexpr const char* INV_SELECT = "inventory_select";  // SelectLabel

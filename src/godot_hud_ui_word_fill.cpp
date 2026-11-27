@@ -21,7 +21,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 
 #include <godot_cpp/core/math.hpp>

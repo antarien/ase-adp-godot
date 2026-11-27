@@ -23,7 +23,7 @@
 
 #include <ase/adp/godot/godot_hud_trail_view.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
 
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/string.hpp>

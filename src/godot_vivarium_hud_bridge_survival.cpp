@@ -87,65 +87,65 @@ bool VivariumView::load_hud_bridge_survival(const UiTheme& theme) {
     std::string failed;
     double level_full = 0.0;
     if (!theme.measure("hud_survival_rail_level_full", level_full) || !(level_full > 0.0) ||
-        !theme.measure("hud_bridge_survival_temp", hud_bridge_body_.temp.value) ||
-        !read_bridge_in(theme, "hud_bridge_survival_temp_stress", 0.0, 1.0, hud_bridge_body_.temp_stress, failed) ||
-        !read_bridge_in(theme, "hud_bridge_survival_fatigue", 0.0, 1.0, hud_bridge_body_.fatigue.value, failed) ||
-        !read_bridge_in(theme, "hud_bridge_survival_hunger", 0.0, level_full, hud_bridge_body_.hunger.value, failed) ||
-        !read_bridge_in(theme, "hud_bridge_survival_thirst", 0.0, level_full, hud_bridge_body_.thirst.value, failed) ||
-        !read_bridge_in(theme, "hud_bridge_survival_energy", 0.0, level_full, hud_bridge_body_.energy.value, failed) ||
-        !read_bridge_in(theme, "hud_bridge_survival_health", 0.0, level_full, hud_bridge_body_.health.value, failed)) {
+        !theme.measure("hud_bridge_survival_temp", hud_state_.hud_bridge_body_.temp.value) ||
+        !read_bridge_in(theme, "hud_bridge_survival_temp_stress", 0.0, 1.0, hud_state_.hud_bridge_body_.temp_stress, failed) ||
+        !read_bridge_in(theme, "hud_bridge_survival_fatigue", 0.0, 1.0, hud_state_.hud_bridge_body_.fatigue.value, failed) ||
+        !read_bridge_in(theme, "hud_bridge_survival_hunger", 0.0, level_full, hud_state_.hud_bridge_body_.hunger.value, failed) ||
+        !read_bridge_in(theme, "hud_bridge_survival_thirst", 0.0, level_full, hud_state_.hud_bridge_body_.thirst.value, failed) ||
+        !read_bridge_in(theme, "hud_bridge_survival_energy", 0.0, level_full, hud_state_.hud_bridge_body_.energy.value, failed) ||
+        !read_bridge_in(theme, "hud_bridge_survival_health", 0.0, level_full, hud_state_.hud_bridge_body_.health.value, failed)) {
         return fail_config("hud_bridge_survival_*: temp, temp_stress and fatigue 0..1, the levels 0..level_full");
     }
-    hud_bridge_body_.health.value /= level_full;
-    hud_bridge_body_.temp.counts = true;
-    hud_bridge_body_.hunger.counts = true;
-    hud_bridge_body_.thirst.counts = true;
-    hud_bridge_body_.energy.counts = true;
-    hud_bridge_body_.fatigue.counts = true;
-    hud_bridge_body_.health.counts = true;
+    hud_state_.hud_bridge_body_.health.value /= level_full;
+    hud_state_.hud_bridge_body_.temp.counts = true;
+    hud_state_.hud_bridge_body_.hunger.counts = true;
+    hud_state_.hud_bridge_body_.thirst.counts = true;
+    hud_state_.hud_bridge_body_.energy.counts = true;
+    hud_state_.hud_bridge_body_.fatigue.counts = true;
+    hud_state_.hud_bridge_body_.health.counts = true;
     // The states on the rail SINAIS (U02): which of the four the mockup's body shows, each 0 or 1.
-    if (!read_state(theme, "hud_bridge_survival_poisoned", hud_bridge_body_.poisoned, failed) ||
-        !read_state(theme, "hud_bridge_survival_bleeding", hud_bridge_body_.bleeding, failed) ||
-        !read_state(theme, "hud_bridge_survival_emaciated", hud_bridge_body_.emaciated, failed) ||
-        !read_state(theme, "hud_bridge_survival_well_rested", hud_bridge_body_.well_rested, failed)) {
+    if (!read_state(theme, "hud_bridge_survival_poisoned", hud_state_.hud_bridge_body_.poisoned, failed) ||
+        !read_state(theme, "hud_bridge_survival_bleeding", hud_state_.hud_bridge_body_.bleeding, failed) ||
+        !read_state(theme, "hud_bridge_survival_emaciated", hud_state_.hud_bridge_body_.emaciated, failed) ||
+        !read_state(theme, "hud_bridge_survival_well_rested", hud_state_.hud_bridge_body_.well_rested, failed)) {
         return fail_config(failed.c_str());
     }
 
     // hud_bridge_survival_fire_* of SHA (B0657): the mockup's camp fire for the card FOGUEIRA (U04); shown and toxic
     // are 0 or 1, the stage one of the five stages, the fuel a share of the fuel the cell was laid with.
     double fire_stage = 0.0;
-    if (!read_state(theme, "hud_bridge_survival_fire_shown", hud_bridge_fire_.shown, failed) ||
-        !read_state(theme, "hud_bridge_survival_fire_toxic", hud_bridge_fire_.toxic, failed)) {
+    if (!read_state(theme, "hud_bridge_survival_fire_shown", hud_state_.hud_bridge_fire_.shown, failed) ||
+        !read_state(theme, "hud_bridge_survival_fire_toxic", hud_state_.hud_bridge_fire_.toxic, failed)) {
         return fail_config(failed.c_str());
     }
     if (!read_bridge_in(theme, "hud_bridge_survival_fire_stage", 0.0, SurvivalFireFrame::STAGE_LAST, fire_stage,
                         failed) ||
-        !read_bridge_in(theme, "hud_bridge_survival_fire_fuel", 0.0, 1.0, hud_bridge_fire_.fuel, failed) ||
-        !read_bridge_in(theme, "hud_bridge_survival_fire_oxygen", 0.0, 1.0, hud_bridge_fire_.oxygen, failed) ||
+        !read_bridge_in(theme, "hud_bridge_survival_fire_fuel", 0.0, 1.0, hud_state_.hud_bridge_fire_.fuel, failed) ||
+        !read_bridge_in(theme, "hud_bridge_survival_fire_oxygen", 0.0, 1.0, hud_state_.hud_bridge_fire_.oxygen, failed) ||
         fire_stage != static_cast<double>(static_cast<int32_t>(fire_stage))) {
         return fail_config("hud_bridge_survival_fire_*: stage a whole 0..4, fuel and oxygen 0..1");
     }
-    hud_bridge_fire_.stage = static_cast<int32_t>(fire_stage);
+    hud_state_.hud_bridge_fire_.stage = static_cast<int32_t>(fire_stage);
     // hud_bridge_survival_fire_ash and _burn_left of SHA (E0257): the mockup's ash and burn time while the host
     // offers no ingle.left.v1; neither is negative, and a burn time of 0 is a cell that burns at no rate.
-    if (!theme.measure("hud_bridge_survival_fire_ash", hud_bridge_fire_.ash_kg) || hud_bridge_fire_.ash_kg < 0.0 ||
-        !theme.measure("hud_bridge_survival_fire_burn_left", hud_bridge_fire_.burn_left) ||
-        hud_bridge_fire_.burn_left < 0.0) {
+    if (!theme.measure("hud_bridge_survival_fire_ash", hud_state_.hud_bridge_fire_.ash_kg) || hud_state_.hud_bridge_fire_.ash_kg < 0.0 ||
+        !theme.measure("hud_bridge_survival_fire_burn_left", hud_state_.hud_bridge_fire_.burn_left) ||
+        hud_state_.hud_bridge_fire_.burn_left < 0.0) {
         return fail_config("hud_bridge_survival_fire_ash, _burn_left: 0 or above");
     }
-    hud_bridge_fire_.burning = hud_bridge_fire_.burn_left > 0.0;
+    hud_state_.hud_bridge_fire_.burning = hud_state_.hud_bridge_fire_.burn_left > 0.0;
 
     // hud_bridge_survival_rest_* of SHA (N0530): the mockup's resting figure for the rest card (U05); both 0 or 1.
     // hud_bridge_survival_air_toxic of SHA (N0530): the mockup's state poison for the air mark (U06); 0 or 1.
-    if (!read_state(theme, "hud_bridge_survival_rest_shown", hud_bridge_rest_.shown, failed) ||
-        !read_state(theme, "hud_bridge_survival_rest_sleeping", hud_bridge_rest_.sleeping, failed) ||
-        !read_state(theme, "hud_bridge_survival_air_toxic", hud_bridge_air_.toxic, failed)) {
+    if (!read_state(theme, "hud_bridge_survival_rest_shown", hud_state_.hud_bridge_rest_.shown, failed) ||
+        !read_state(theme, "hud_bridge_survival_rest_sleeping", hud_state_.hud_bridge_rest_.sleeping, failed) ||
+        !read_state(theme, "hud_bridge_survival_air_toxic", hud_state_.hud_bridge_air_.toxic, failed)) {
         return fail_config(failed.c_str());
     }
     // hud_bridge_survival_food_* of SHA (N0530): the mockup's food of the bag for the spoil ring (U07); shown 0 or 1,
     // the spoil a share 0 to 1.
-    if (!read_state(theme, "hud_bridge_survival_food_shown", hud_bridge_food_.shown, failed) ||
-        !read_bridge_in(theme, "hud_bridge_survival_food_spoil", 0.0, 1.0, hud_bridge_food_.spoil, failed)) {
+    if (!read_state(theme, "hud_bridge_survival_food_shown", hud_state_.hud_bridge_food_.shown, failed) ||
+        !read_bridge_in(theme, "hud_bridge_survival_food_spoil", 0.0, 1.0, hud_state_.hud_bridge_food_.spoil, failed)) {
         return fail_config(failed.c_str());
     }
     return true;
@@ -161,9 +161,9 @@ void VivariumView::bridge_body(SurvivalBodyFrame& body) {
     const char* act = "survival.body.v1(effective_temp,temp_stress,hunger,thirst,energy,fatigue,health,poisoned,"
                       "bleeding,emaciated,well_rested)";
     const VivariumSurvivalBodyView* seat = nullptr;
-    if (figure_controls_.led_known) {
+    if (figure_state_.figure_controls_.led_known) {
         for (const VivariumSurvivalBodyView& candidate : resources_.get_survival_bodies()) {
-            if (candidate.object_id == figure_controls_.led) {
+            if (candidate.object_id == figure_state_.figure_controls_.led) {
                 seat = &candidate;
                 break;
             }
@@ -171,7 +171,7 @@ void VivariumView::bridge_body(SurvivalBodyFrame& body) {
     }
     if (seat == nullptr) {
         open_gap(SurvivalBodyFrame::GAP_BODY, act);
-        body = hud_bridge_body_;
+        body = hud_state_.hud_bridge_body_;
         return;
     }
     close_gap(SurvivalBodyFrame::GAP_BODY, act);
@@ -225,7 +225,7 @@ void VivariumView::bridge_fire(SurvivalFireFrame& fire) {
     }
     if (cell == nullptr) {
         open_gap(SurvivalFireFrame::GAP_FIRE, act);
-        fire = hud_bridge_fire_;
+        fire = hud_state_.hud_bridge_fire_;
         return;
     }
     close_gap(SurvivalFireFrame::GAP_FIRE, act);
@@ -255,9 +255,9 @@ void VivariumView::bridge_fire(SurvivalFireFrame& fire) {
         fire.burn_left = fire.burning ? cell->burn_left : 0.0;
     } else {
         open_gap(SurvivalFireFrame::GAP_LEFT, left);
-        fire.ash_kg = hud_bridge_fire_.ash_kg;
-        fire.burning = hud_bridge_fire_.burning;
-        fire.burn_left = hud_bridge_fire_.burn_left;
+        fire.ash_kg = hud_state_.hud_bridge_fire_.ash_kg;
+        fire.burning = hud_state_.hud_bridge_fire_.burning;
+        fire.burn_left = hud_state_.hud_bridge_fire_.burn_left;
     }
     // THE SMOKE OF THE CARD (B0662): the owner's grade breath_state over the grade it gives normal air. While the
     // record lacks one of the two, the smoke stands on the mockup's air and the gap stays logged with both keys.
@@ -266,11 +266,11 @@ void VivariumView::bridge_fire(SurvivalFireFrame& fire) {
     // the key out while the owner has not published it, like both breath keys, so the three share one gap.
     const char* graded = "ingle.fire.v1(breath_state,breath_normal,oxygen)";
     const bool breathed = !std::isnan(cell->oxygen);
-    fire.oxygen = breathed ? cell->oxygen : hud_bridge_fire_.oxygen;
+    fire.oxygen = breathed ? cell->oxygen : hud_state_.hud_bridge_fire_.oxygen;
     bool toxic = false;
     if (!graded_toxic(*cell, toxic)) {
         open_gap(SurvivalFireFrame::GAP_MARKS, graded);
-        fire.toxic = hud_bridge_fire_.toxic;
+        fire.toxic = hud_state_.hud_bridge_fire_.toxic;
         return;
     }
     if (!breathed) {
@@ -293,9 +293,9 @@ void VivariumView::bridge_air(SurvivalAirFrame& air) {
     // stands on the mockup's state poison (hud_bridge_survival_air_toxic, load_hud_bridge_survival) under its gap.
     const char* act = "survival.body.v1(breath from GIS_LOCAL_BREATH)";
     const VivariumSurvivalBodyView* seat = nullptr;
-    if (figure_controls_.led_known) {
+    if (figure_state_.figure_controls_.led_known) {
         for (const VivariumSurvivalBodyView& candidate : resources_.get_survival_bodies()) {
-            if (candidate.object_id == figure_controls_.led) {
+            if (candidate.object_id == figure_state_.figure_controls_.led) {
                 seat = &candidate;
                 break;
             }
@@ -303,7 +303,7 @@ void VivariumView::bridge_air(SurvivalAirFrame& air) {
     }
     if (seat == nullptr || std::isnan(seat->breath)) {
         open_gap(SurvivalAirFrame::GAP_AIR, act);
-        air = hud_bridge_air_;
+        air = hud_state_.hud_bridge_air_;
     } else {
         close_gap(SurvivalAirFrame::GAP_AIR, act);
         air.toxic = seat->breath > 0.0;
@@ -317,9 +317,9 @@ void VivariumView::bridge_air(SurvivalAirFrame& air) {
     // the mark stays on the grade of the air alone; the mockup draws no soot of its own.
     const char* smoked = "survival.smoke.v1(soot from GIS_LOCAL_SOOT)";
     const VivariumSurvivalSmokeView* cell = nullptr;
-    if (resources_.survival_smoke_offered() && figure_controls_.led_known) {
+    if (resources_.survival_smoke_offered() && figure_state_.figure_controls_.led_known) {
         for (const VivariumSurvivalSmokeView& candidate : resources_.get_survival_smokes()) {
-            if (candidate.object_id == figure_controls_.led) {
+            if (candidate.object_id == figure_state_.figure_controls_.led) {
                 cell = &candidate;
                 break;
             }
@@ -351,13 +351,13 @@ void VivariumView::bridge_food(SurvivalSpoilFrame& food) {
     const char* act = "survival.food.v1(spoil from ENT_FOOD_ROT_CARRIED)";
     if (!resources_.survival_food_offered()) {
         open_gap(SurvivalSpoilFrame::GAP_SPOIL, act);
-        food = hud_bridge_food_;
+        food = hud_state_.hud_bridge_food_;
         return;
     }
     const VivariumSurvivalFoodView* seat = nullptr;
-    if (figure_controls_.led_known) {
+    if (figure_state_.figure_controls_.led_known) {
         for (const VivariumSurvivalFoodView& candidate : resources_.get_survival_foods()) {
-            if (candidate.object_id == figure_controls_.led) {
+            if (candidate.object_id == figure_state_.figure_controls_.led) {
                 seat = &candidate;
                 break;
             }
@@ -365,7 +365,7 @@ void VivariumView::bridge_food(SurvivalSpoilFrame& food) {
     }
     if (seat != nullptr && std::isnan(seat->spoil)) {
         open_gap(SurvivalSpoilFrame::GAP_SPOIL, act);
-        food = hud_bridge_food_;
+        food = hud_state_.hud_bridge_food_;
         return;
     }
     close_gap(SurvivalSpoilFrame::GAP_SPOIL, act);
@@ -387,11 +387,11 @@ void VivariumView::bridge_rest(SurvivalRestFrame& rest) {
     // without the key the pose stays the mockup's, its gap logged on its own line.
     const char* act_rest = "survival.rest.v1(is_resting)";
     const char* act_sleep = "survival.rest.v1(sleeping from MTB_IS_SLEEPING)";
-    rest = hud_bridge_rest_;
+    rest = hud_state_.hud_bridge_rest_;
     const VivariumSurvivalRestView* seat = nullptr;
-    if (figure_controls_.led_known) {
+    if (figure_state_.figure_controls_.led_known) {
         for (const VivariumSurvivalRestView& candidate : resources_.get_survival_rests()) {
-            if (candidate.object_id == figure_controls_.led) {
+            if (candidate.object_id == figure_state_.figure_controls_.led) {
                 seat = &candidate;
                 break;
             }

@@ -43,21 +43,21 @@ using ase::kernel::HostStatus;
 
 bool VivariumView::can_prune() const {
     // A running host and an internode on the port: without one there is nothing to cut.
-    return resources_.running() && failure_text_.is_empty() && scene_ != nullptr &&
+    return resources_.running() && failure_text_.is_empty() && scene_state_.scene_ != nullptr &&
            !resources_.get_organs(GODOT_ORGAN_SEGMENT).empty();
 }
 
 void VivariumView::toggle_pruning() {
-    if (!pruning_ && !can_prune()) {
+    if (!scene_state_.pruning_ && !can_prune()) {
         note("prune mode result=disabled");
         return;
     }
-    pruning_ = !pruning_;
+    scene_state_.pruning_ = !scene_state_.pruning_;
     // one mode at a time: a tap in the scene either cuts, lays a bed or levels a disc
-    bedding_ = false;
-    bed_started_ = false;
-    flattening_ = false;
-    note(::godot::String("prune mode ") + (pruning_ ? "on" : "off"));
+    scene_state_.bedding_ = false;
+    scene_state_.bed_started_ = false;
+    scene_state_.flattening_ = false;
+    note(::godot::String("prune mode ") + (scene_state_.pruning_ ? "on" : "off"));
     node_->queue_redraw();
 }
 
@@ -79,7 +79,7 @@ void VivariumView::plant_segments(uint32_t patch_object, std::vector<VivariumIns
 
 uint32_t VivariumView::pick_segment(const ::godot::Vector2& at, uint32_t& candidates, float& nearest_px) const {
     // THE INTERNODE UNDER THE FINGER. The middle of every internode of the focused plant goes through
-    // the current camera onto the surface; the nearest within pick_px_ is hit. The view computes no
+    // the current camera onto the surface; the nearest within scene_state_.pick_px_ is hit. The view computes no
     // geometry of its own: the middle is the instance transform ase-render-data computed for the
     // organ, applied to the middle of the unit tube, beside the stem base the patch record carries -
     // the same numbers the scene draws the internode with. Every internode in front of the camera is
@@ -87,7 +87,7 @@ uint32_t VivariumView::pick_segment(const ::godot::Vector2& at, uint32_t& candid
     // tap lay too far from it.
     candidates = 0u;
     nearest_px = -1.0f;
-    if (scene_ == nullptr) {
+    if (scene_state_.scene_ == nullptr) {
         return GODOT_NO_OBJECT;
     }
     ::godot::Camera3D* camera = node_->get_viewport()->get_camera_3d();
@@ -99,14 +99,14 @@ uint32_t VivariumView::pick_segment(const ::godot::Vector2& at, uint32_t& candid
     if (focused == nullptr) {
         return GODOT_NO_OBJECT;
     }
-    const auto origin = scene_origins_.find(focused->object_id);
-    if (origin == scene_origins_.end()) {
+    const auto origin = scene_state_.scene_origins_.find(focused->object_id);
+    if (origin == scene_state_.scene_origins_.end()) {
         return GODOT_NO_OBJECT;
     }
     std::vector<VivariumInstanceView> segments;
     plant_segments(focused->object_id, segments);
     uint32_t hit = GODOT_NO_OBJECT;
-    float hit_px = pick_px_;
+    float hit_px = scene_state_.pick_px_;
     for (const VivariumInstanceView& instance : segments) {
         // rows: x, y, z axis and origin per row (GODOT_INSTANCE_VALUES); the tube runs along y
         const ::godot::Vector3 middle(origin->second.x + instance.rows[3] + GODOT_TUBE_MID * instance.rows[1],
@@ -140,7 +140,9 @@ void VivariumView::prune(const ::godot::Vector2& at) {
              " nearest_px=" + ::godot::String::num(nearest_px, 1));
         return;
     }
-    const HostStatus status = resources_.prune(organ);
+    // The figure of the seat makes the cut and books it as work (MIG_ASE_SKILL_RSM B2); no figure led, no one books.
+    const uint32_t figure = figure_state_.figure_controls_.led_known ? figure_state_.figure_controls_.led : GODOT_NO_OBJECT;
+    const HostStatus status = resources_.prune(organ, figure);
     note("prune organ=" + ::godot::String::num_uint64(organ) + " result=" + GodotHostResourceManager::status_name(status));
     node_->queue_redraw();
 }

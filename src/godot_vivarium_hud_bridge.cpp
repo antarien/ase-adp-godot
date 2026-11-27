@@ -39,8 +39,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-20
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -50,7 +50,8 @@
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_vivarium_hud_bridge_read.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/gap/types.hpp>
+#include <ase/adp/godot/hud/log/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 
@@ -100,7 +101,7 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
     // hud_bridge_clock_* of SHA (N0460): the date, the day, the phases and the seasons the mockup shows. No share
     // stands there; bridge_clock computes each by the mockup's rules from the hours and the date it ends up with.
     std::string failed;
-    VivariumClockView& out = hud_bridge_clock_;
+    VivariumClockView& out = hud_state_.hud_bridge_clock_;
     out = VivariumClockView{};
     const char* const keys[] = {"hud_bridge_clock_year",           "hud_bridge_clock_month",
                                 "hud_bridge_clock_month_day",      "hud_bridge_clock_year_day",
@@ -153,7 +154,7 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
     // hud.perception.start until flora.skill.v1 files a level, and one outside hud.perception.levels refuses the
     // configuration.
     const ::godot::PackedStringArray launch = ::godot::OS::get_singleton()->get_cmdline_user_args();
-    hud_bridge_level_ = hud_.level_start();
+    hud_state_.hud_bridge_level_ = hud_state_.hud_.level_start();
     const int64_t leveled = modes_.perception_argument.is_empty() ? -1 : launch.find(modes_.perception_argument);
     if (leveled >= 0) {
         const bool given = leveled + 1 < launch.size() && launch[leveled + 1].is_valid_int();
@@ -165,47 +166,52 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
         if (!known) {
             return fail_config("modes.perception: one of hud.perception.levels after the argument");
         }
-        hud_bridge_level_ = static_cast<uint32_t>(asked);
+        hud_state_.hud_bridge_level_ = static_cast<uint32_t>(asked);
         note("stage perception " + launch[leveled + 1]);
     }
 
     // hud_bridge_patch_* of SHA (N0454, N0456, N0457): the growth, the loose soil and the tap the mockup shows.
     double running = 0.0;
-    if (!read_bridge_in(theme, "hud_bridge_patch_growth_share", 0.0, 1.0, hud_bridge_growth_, failed) ||
-        !read_bridge_in(theme, "hud_bridge_patch_loose_share", 0.0, 1.0, hud_bridge_loose_, failed) ||
+    if (!read_bridge_in(theme, "hud_bridge_patch_growth_share", 0.0, 1.0, hud_state_.hud_bridge_growth_, failed) ||
+        !read_bridge_in(theme, "hud_bridge_patch_loose_share", 0.0, 1.0, hud_state_.hud_bridge_loose_, failed) ||
         !read_bridge_in(theme, "hud_bridge_patch_sap_running", 0.0, 1.0, running, failed)) {
         return fail_config((failed + ": a share 0..1").c_str());
     }
     if (!(running == 0.0 || running == 1.0)) {
         return fail_config("hud_bridge_patch_sap_running: 0 or 1");
     }
-    hud_bridge_sap_running_ = running == 1.0;
-    if (!theme.measure("hud_bridge_patch_grow_per_hour", hud_bridge_grow_per_hour_) ||
-        !(hud_bridge_grow_per_hour_ > 0.0)) {
+    hud_state_.hud_bridge_sap_running_ = running == 1.0;
+    if (!theme.measure("hud_bridge_patch_grow_per_hour", hud_state_.hud_bridge_grow_per_hour_) ||
+        !(hud_state_.hud_bridge_grow_per_hour_ > 0.0)) {
         return fail_config("hud_bridge_patch_grow_per_hour: above 0");
     }
-    if (!theme.measure("hud_bridge_patch_sap_l", hud_bridge_sap_l_) || hud_bridge_sap_l_ < 0.0) {
+    if (!theme.measure("hud_bridge_patch_sap_l", hud_state_.hud_bridge_sap_l_) || hud_state_.hud_bridge_sap_l_ < 0.0) {
         return fail_config("hud_bridge_patch_sap_l: from 0");
     }
-    if (!theme.measure("hud_bridge_patch_sap_cap_l", hud_bridge_sap_cap_l_) || !(hud_bridge_sap_cap_l_ > 0.0)) {
+    if (!theme.measure("hud_bridge_patch_sap_cap_l", hud_state_.hud_bridge_sap_cap_l_) || !(hud_state_.hud_bridge_sap_cap_l_ > 0.0)) {
         return fail_config("hud_bridge_patch_sap_cap_l: above 0");
     }
-    if (!read_bridge_in(theme, "hud_bridge_patch_next_share", 0.0, 1.0, hud_bridge_next_share_, failed)) {
+    if (!read_bridge_in(theme, "hud_bridge_patch_next_share", 0.0, 1.0, hud_state_.hud_bridge_next_share_, failed)) {
         return fail_config("hud_bridge_patch_next_share: a share 0..1");
     }
 
     // hud_bridge_pace_factor of SHA (N0459): the factor the mockup's clock runs at before any is asked.
-    if (!theme.measure("hud_bridge_pace_factor", hud_bridge_pace_factor_) || !(hud_bridge_pace_factor_ > 0.0)) {
+    if (!theme.measure("hud_bridge_pace_factor", hud_state_.hud_bridge_pace_factor_) || !(hud_state_.hud_bridge_pace_factor_ > 0.0)) {
         return fail_config("hud_bridge_pace_factor: above 0");
     }
 
     // hud_bridge_sign_* of SHA (N0461): the thresholds and values of the mockup's signs() (VivariumSignRules).
-    if (!hud_sign_rules_.load(theme, failed)) {
+    if (!hud_state_.hud_sign_rules_.load(theme, failed)) {
         return fail_config(failed.c_str());
     }
 
     // hud_bridge_trail_* of SHA (N0450): the span and the events of the mockup's S.log (VivariumTrailBridge).
-    if (!hud_trail_.load(theme, failed)) {
+    if (!hud_state_.hud_trail_.load(theme, failed)) {
+        return fail_config(failed.c_str());
+    }
+
+    // hud_bridge_arc_* of SHA (N0448): the mockup's shares of now and next event while the arc ports are silent.
+    if (!hud_state_.hud_arc_.load(theme, failed)) {
         return fail_config(failed.c_str());
     }
 
@@ -216,12 +222,12 @@ bool VivariumView::load_hud_bridge(const UiTheme& theme) {
 
     // hud_bridge_mark_* of SHA: the threshold and the state of the mockup's TOOLS[].ok().
     double uncut = 0.0;
-    if (!read_bridge_in(theme, "hud_bridge_mark_soil_full_rel", 0.0, 1.0, hud_bridge_soil_full_, failed) ||
+    if (!read_bridge_in(theme, "hud_bridge_mark_soil_full_rel", 0.0, 1.0, hud_state_.hud_bridge_soil_full_, failed) ||
         !read_bridge_in(theme, "hud_bridge_mark_branch_uncut", 0.0, 1.0, uncut, failed) ||
         !(uncut == 0.0 || uncut == 1.0)) {
         return fail_config("hud_bridge_mark_soil_full_rel: a share 0..1, hud_bridge_mark_branch_uncut: 0 or 1");
     }
-    hud_bridge_branch_uncut_ = uncut == 1.0;
+    hud_state_.hud_bridge_branch_uncut_ = uncut == 1.0;
     return true;
 }
 
@@ -231,7 +237,7 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
     // arc and number stand on the mockup's share (hud_bridge_patch_growth_share), the gap logged once with the
     // port field named.
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.growth_share");
-    focus.growth_share = hud_bridge_growth_;
+    focus.growth_share = hud_state_.hud_bridge_growth_;
 
     // The days to the next stage stand on ase-plant's forecast where the forecast port carries one (grow_at_h for
     // CRESCENDO, mtur_at_h for MADURA, an absolute game hour, NaN unmeasured); otherwise they are the mockup's
@@ -240,7 +246,7 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
     const uint32_t next = stage + 1u;
     focus.next_due = next < GODOT_STAGE_COUNT && !(patch != nullptr && patch->dead);
     const double hours =
-        clock.known && clock.hours_per_day > 0.0 ? clock.hours_per_day : hud_bridge_clock_.hours_per_day;
+        clock.known && clock.hours_per_day > 0.0 ? clock.hours_per_day : hud_state_.hud_bridge_clock_.hours_per_day;
     // The forecast of the next position, by the key of the stage record it is read under (usecase:101635, D2455).
     const double due_h = patch != nullptr ? resources_.stage_due_h(*patch, static_cast<uint8_t>(next)) : GODOT_HOUR_NONE;
     if (due_h >= 0.0 && clock.known && hours > 0.0) {
@@ -250,7 +256,7 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
     } else {
         // ase-plant: PLT_GROW_AT_H and PLT_MTUR_AT_H of the forecast port; Broto carries none.
         open_gap(GODOT_HUD_GAP_PATCH, "forecast.due_h");
-        focus.next_days = (1.0 - focus.growth_share) / (hud_bridge_grow_per_hour_ * hours);
+        focus.next_days = (1.0 - focus.growth_share) / (hud_state_.hud_bridge_grow_per_hour_ * hours);
     }
     // The next stage's mark on the year ring: the stage after this one and the share of the year of the day it is
     // reached, as ase-calendar places it; flora.patch.v1 files no such share yet, so it is the mockup's
@@ -258,10 +264,11 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
     year.next_due = focus.next_due;
     year.next_stage = next;
     open_gap(GODOT_HUD_GAP_PATCH, "flora.patch.v1.next_share");
-    year.next_share = hud_bridge_next_share_;
+    year.next_share = hud_state_.hud_bridge_next_share_;
 
     // N0456: the loosened share of the soil comes from terrain.loose.v1, the looseness raster ase-terrain keeps per
-    // cell of its soil layer (the complement of CAUSA_ASE_GIS LYR_LITHO_COMPACTION), once it is offered
+    // cell of its soil layer, how far CAUSA_ASE_GIS LYR_LITHO_COMPACTION lies below the share of undisturbed
+    // topsoil, (start - share) / start, 0 on untouched ground and never the complement 1 - share, once it is offered
     // (GodotHostResourceManager::read_loose); the patch asks the cell under its centre (loose_at), never a mean of its
     // own. Before the raster stands, the loose bridge keeps it point by point: rain settles it over the game hours
     // (m.html 1030), the patch reads the mean within its reach (patchLoose, m.html 372); before the patch's centre is
@@ -273,9 +280,9 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
     } else {
         open_gap(GODOT_HUD_GAP_LOOSE, "terrain.loose.v1(loose_share)");
         if (clock.known && hours > 0.0) {
-            hud_loose_.settle(clock.day * hours + clock.hour, hud_bridge_weather_);
+            hud_state_.hud_loose_.settle(clock.day * hours + clock.hour, hud_state_.hud_bridge_weather_);
         }
-        focus.loose_share = patch != nullptr ? hud_loose_.share(patch->x, patch->z) : hud_bridge_loose_;
+        focus.loose_share = patch != nullptr ? hud_state_.hud_loose_.share(patch->x, patch->z) : hud_state_.hud_bridge_loose_;
     }
 
     // N0457: the tap and its vessel come from flora.sap.v1 (running, held_l, cap_l) once ase-pl-flora files its record
@@ -287,23 +294,23 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
         close_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1(running,held_l,cap_l)");
         // THE FULL VESSEL IS AN EDGE of the owner's litres: the first snapshot at or over the capacity of a running
         // tap toasts 'COCHO CHEIO' once, as the bridge's flow does before the port stands.
-        const bool filled = sap.running && hud_bridge_sap_l_ < sap.cap_l && sap.held_l >= sap.cap_l;
+        const bool filled = sap.running && hud_state_.hud_bridge_sap_l_ < sap.cap_l && sap.held_l >= sap.cap_l;
         if (filled) {
             note("hud sap full: l=" + ::godot::String::num(sap.held_l, GODOT_LOG_DECIMALS) + " port=flora.sap.v1");
             std::string failed;
-            if (!hud_.toast(VivariumHud::TOAST_VESSEL_FULL, {}, VivariumHud::COLOUR_SAP, failed)) {
+            if (!hud_state_.hud_.toast(VivariumHud::TOAST_VESSEL_FULL, {}, VivariumHud::COLOUR_SAP, failed)) {
                 fail_hud(failed);
             }
         }
-        hud_bridge_sap_running_ = sap.running;
-        hud_bridge_sap_l_ = sap.held_l;
-        hud_bridge_sap_cap_l_ = sap.cap_l;
+        hud_state_.hud_bridge_sap_running_ = sap.running;
+        hud_state_.hud_bridge_sap_l_ = sap.held_l;
+        hud_state_.hud_bridge_sap_cap_l_ = sap.cap_l;
     } else {
         open_gap(GODOT_HUD_GAP_SAP, "flora.sap.v1(running,held_l,cap_l)");
     }
-    focus.sap_running = hud_bridge_sap_running_;
-    focus.sap_l = hud_bridge_sap_l_;
-    focus.sap_cap_l = hud_bridge_sap_cap_l_;
+    focus.sap_running = hud_state_.hud_bridge_sap_running_;
+    focus.sap_l = hud_state_.hud_bridge_sap_l_;
+    focus.sap_cap_l = hud_state_.hud_bridge_sap_cap_l_;
 }
 
 void VivariumView::bridge_stow(DragLayerFrame& drag) {
@@ -312,13 +319,13 @@ void VivariumView::bridge_stow(DragLayerFrame& drag) {
     // it as the port's last word (field stow.code). The layer matches key, place and rack itself, so a verdict for a
     // place the finger already left is never applied.
     drag.answer = nullptr;
-    const DragLayer& dragging = hud_.drag();
+    const DragLayer& dragging = hud_state_.hud_.drag();
     if (!dragging.moved() || dragging.target().place == nullptr) {
         return;
     }
     open_gap(GODOT_HUD_GAP_STOW, "flora.stow.v1.code");
-    if (hud_carry_.answer(dragging.thing().key, dragging.target().place, dragging.target().rack, hud_stow_)) {
-        drag.answer = &hud_stow_;
+    if (hud_state_.hud_carry_.answer(dragging.thing().key, dragging.target().place, dragging.target().rack, hud_state_.hud_stow_)) {
+        drag.answer = &hud_state_.hud_stow_;
     }
 }
 
@@ -327,7 +334,7 @@ void VivariumView::bridge_skill(HudGameState& game) {
     // resolver opens the skills by is the start level SHA states (hud.perception.start, VivariumHud::level_start),
     // or the level the launch names (modes.perception, load_hud_bridge).
     open_gap(VivariumHud::GAP_SKILL, "flora.skill.v1.level");
-    game.level = hud_bridge_level_;
+    game.level = hud_state_.hud_bridge_level_;
 }
 
 void VivariumView::bridge_trail(TrailViewFrame& trail, YearRingFrame& year) {
@@ -336,8 +343,8 @@ void VivariumView::bridge_trail(TrailViewFrame& trail, YearRingFrame& year) {
     // VivariumTrailBridge). The log lines name every field of the record the reader takes, per event and for the span.
     open_gap(GODOT_HUD_GAP_TRAIL, "flora.trail.v1.events(kind,tone,lun,tum,year_share,values,case_id,sign,alert)");
     open_gap(GODOT_HUD_GAP_TRAIL, "flora.trail.v1.span(days,lun,from,to)");
-    hud_trail_.trail(trail);
-    hud_trail_.ring(year);
+    hud_state_.hud_trail_.trail(trail);
+    hud_state_.hud_trail_.ring(year);
 }
 
 }  // namespace ase::adp::godot

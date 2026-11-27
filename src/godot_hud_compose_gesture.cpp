@@ -31,8 +31,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-24
- * @version     00.00.22.00022 [init]
+ * @modified    2026-11-25
+ * @version     00.00.23.00023 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -41,19 +41,24 @@
 
 #include <ase/adp/godot/godot_hud_compose.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/debug/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
+#include <ase/adp/godot/hud/hand/types.hpp>
+#include <ase/adp/godot/hud/touch/types.hpp>
+#include <ase/adp/godot/rsm/types.hpp>
 
 #include <ase/math/math.hpp>
 
 namespace ase::adp::godot {
 
-bool VivariumHud::press(const ::godot::Vector2& point, const VivariumHudFrame& now, double clock,
+bool VivariumHud::press(const ::godot::Vector2& point, const VivariumHudFrame& now, double clock, double since,
                         std::string& failed) {
     clock_ = clock;
     press_ = HudPress{};
     press_.down = true;
     press_.at = point;
     press_.wall = wall_;
+    press_.since = ase::math::max(since, 0.0);
     press_.hit = hit(point, now);
     const char* act = press_.hit.act;
 
@@ -194,6 +199,9 @@ bool VivariumHud::release(const ::godot::Vector2& point, VivariumHudFrame& now, 
     if (was.system || was.long_fired) {
         return true;  // the ring let go before it filled, or the long press already opened its mode
     }
+    if (same(was.hit.act, GODOT_RSM_ACT_BARS)) {
+        return true;  // the finger left the activity bars: their action is no longer lit, no swipe and no act follows (B5)
+    }
     const bool tool_mode = mode_ == GODOT_HUD_MODE_WATER || mode_ == GODOT_HUD_MODE_PRUNE ||
                            mode_ == GODOT_HUD_MODE_SOW || mode_ == GODOT_HUD_MODE_TERRAIN ||
                            mode_ == GODOT_HUD_MODE_SAP || mode_ == GODOT_HUD_MODE_PLUG || mode_ == MODE_HOLD;
@@ -242,17 +250,24 @@ bool VivariumHud::tick(double clock, double real, VivariumHudFrame& now, std::ve
     // THE CAN AND THE RING COUNT REAL SECONDS TOO: the ring's sentence promises SEGURE 1,5 S and the can a measure each
     // 0.8 s (m.html 1035), and at two frames a second a hold of 9 s reached 0.9 s on the clock capped at
     // hud_frame_dt_max: the ring never reset (run 1124-ui-hud-n, 18 frames in the hold) and the can let 1 L go after
-    // 1.6 s, too little for a seed (run camp_hud_1124xb). The first frame after the press began before it: only the
-    // frames after it lie wholly inside the hold, so a hold shorter than the token neither resets nor adds a measure.
+    // 1.6 s, too little for a seed (run camp_hud_1124xb). The first frame after the press began before it and counts
+    // only its part after the press (press_.since), so a hold shorter than the token neither resets nor adds a measure,
+    // and the arc grows from the first frame on as the mockup's S.sys+=dt does: at two frames a second the whole first
+    // frame left the ring empty in the picture 0.75 s into the hold (run 20261125-133410, V19).
     if (press_.pouring || press_.system) {
-        const double inside = press_.ticked ? ase::math::max(real, 0.0) : 0.0;
+        const double inside = press_.ticked ? ase::math::max(real, 0.0) : ase::math::max(real - press_.since, 0.0);
         press_.poured_held += press_.pouring ? inside : 0.0;
         press_.system_held += press_.system ? inside : 0.0;
         press_.ticked = true;
     }
-    // A frame longer than a step holds several measures; what is left of it counts for the next.
-    while (press_.pouring && pour_step_s_ > 0.0 && press_.poured_held - press_.poured_at >= pour_step_s_) {
+    // AT MOST ONE MEASURE PER FRAME (register B0967, as the tick scheduler's tiers): a frame longer than a step
+    // lets one measure go and drops the time beyond it, so a slow frame never sends a burst of pours
+    // into the next tick; the remainder below one step counts for the next frame.
+    if (press_.pouring && pour_step_s_ > 0.0 && press_.poured_held - press_.poured_at >= pour_step_s_) {
         press_.poured_at += pour_step_s_;
+        if (press_.poured_held - press_.poured_at >= pour_step_s_) {
+            press_.poured_at = press_.poured_held;
+        }
         VivariumHudRequest pour;
         pour.kind = VivariumHudRequest::ASK_POUR;
         pour.point = press_.at;
@@ -323,6 +338,8 @@ bool VivariumHud::act(const VivariumHudHit& hit, const ::godot::Vector2& point, 
 
     if (same(a, GODOT_HUD_ACT_SKY)) {
         set_mode(mode_ == MODE_SKY ? std::string(GODOT_HUD_MODE_REST) : std::string(MODE_SKY));
+    } else if (same(a, GODOT_RSM_ACT_BAND)) {
+        bars_.toggle();  // the band switch: the next frame turns the bottom band to the other content and holds it
     } else if (same(a, GODOT_HUD_ACT_DEBUG)) {
         debug_on_ = !debug_on_;
         drawer_open_ = true;
@@ -333,6 +350,8 @@ bool VivariumHud::act(const VivariumHudHit& hit, const ::godot::Vector2& point, 
             drawer_open_ = false;
         } else if (hit.debug.tab != GODOT_HUD_DEBUG_NONE) {
             debug_tab_ = hit.debug.tab;
+        } else if (hit.debug.view != GODOT_HUD_DEBUG_NONE) {
+            debug_view_ = debug_view_choose(debug_view_, hit.debug.view);  // a view chip in the title row of the open debug drawer (usecase:101305)
         } else {
             ask.kind = VivariumHudRequest::ASK_DEBUG;
             ask.debug = hit.debug;

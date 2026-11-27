@@ -24,8 +24,8 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @register    N0487 (the stem base as a body its owner reports through its port), carrier N0448
  * @created     2026-10-18
- * @modified    2026-11-24
- * @version     00.00.35.00035 [core]
+ * @modified    2026-11-25
+ * @version     00.00.36.00036 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -46,7 +46,7 @@
 #include <ase/adp/godot/cap/godot_plant_cap.hpp>
 #include <ase/adp/godot/lod/godot_plant_level_scene.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/log/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 #include <ase/adp/godot/tube/godot_knot_resource_manager.hpp>
@@ -87,22 +87,22 @@ bool same_origins(const std::unordered_map<uint32_t, PlantOrigin>& now,
 }  // namespace
 
 void VivariumView::follow_scene(double elapsed_s) {
-    if (scene_ == nullptr || start_.patches.empty()) {
+    if (scene_state_.scene_ == nullptr || start_.patches.empty()) {
         return;
     }
-    const bool orders_moved = order_budget_sample(order_budget_, elapsed_s * GODOT_MS_PER_SECOND);
+    const bool orders_moved = order_budget_sample(scene_state_.order_budget_, elapsed_s * GODOT_MS_PER_SECOND);
     const uint64_t terrain = resources_.terrain_generation();
-    const bool ground_moved = terrain != scene_terrain_;
+    const bool ground_moved = terrain != scene_state_.scene_terrain_;
     // the main thread's time for laying ground and water, in the line of the event: the frame after a dig holds
     // it (P0690, GODOT_GROUND_WATCH_BUDGET_USEC)
     ::godot::Time* ticks = ::godot::Time::get_singleton();
     if (ground_moved) {
-        scene_terrain_ = terrain;
+        scene_state_.scene_terrain_ = terrain;
         const uint64_t fill_start_usec = ticks->get_ticks_usec();
         fill_ground();
         const uint64_t fill_usec = ticks->get_ticks_usec() - fill_start_usec;
         // an event: the terrain port changed (a levelling, a carved bed), never once per frame
-        note("scene ground " + scene_counts(resources_, scene_) + " fill_usec=" + ::godot::String::num_uint64(fill_usec) +
+        note("scene ground " + scene_counts(resources_, scene_state_.scene_) + " fill_usec=" + ::godot::String::num_uint64(fill_usec) +
              " " + measure(GODOT_NO_PLACE));
     }
     // the water of the brooks (usecase:100399 carry brook water): in every bed at its bed plus the depth ase-hydro
@@ -113,11 +113,11 @@ void VivariumView::follow_scene(double elapsed_s) {
     const uint64_t streams = resources_.stream_generation();
     const uint64_t pits = resources_.pit_generation();
     const uint64_t currents = resources_.current_generation();
-    if (ground_moved || streams != water_marks_.streams || pits != water_marks_.pits ||
-        currents != water_marks_.currents) {
-        water_marks_.streams = streams;
-        water_marks_.pits = pits;
-        water_marks_.currents = currents;
+    if (ground_moved || streams != scene_state_.water_marks_.streams || pits != scene_state_.water_marks_.pits ||
+        currents != scene_state_.water_marks_.currents) {
+        scene_state_.water_marks_.streams = streams;
+        scene_state_.water_marks_.pits = pits;
+        scene_state_.water_marks_.currents = currents;
         // the edge of the bridge for the groundwater beside a brook (N0484): the stream port carries no level
         // until ase-gis has mapped the cell at the start of the bed (GIS_HYD_CELL_LEVEL, filed by
         // WaterHostStrmExptSystem of ase-pl-water since H.8); logged once on its edge, the water stays in the beds
@@ -136,8 +136,8 @@ void VivariumView::follow_scene(double elapsed_s) {
         const uint64_t water_start_usec = ticks->get_ticks_usec();
         // the ground as fill_ground just left it: the table reads its vertices, never the ports by object id; the
         // current cells hand every vertex of the brook water the hue of the nearest cell that answered one
-        const uint32_t wet = fill_plant_water(scene_, resources_.get_streams(), resources_.get_pits(),
-                                              resources_.get_currents(), ground_surface_.arrays);
+        const uint32_t wet = fill_plant_water(scene_state_.scene_, resources_.get_streams(), resources_.get_pits(),
+                                              resources_.get_currents(), scene_state_.ground_surface_.arrays);
         const uint64_t water_usec = ticks->get_ticks_usec() - water_start_usec;
         // THE MEASURING POINT OF H.3 (the 3 m pit beside the brook stands just below the brook stage): every pit
         // with the place, the open water and the ice its record carries, every brook with its depth and the table
@@ -165,14 +165,14 @@ void VivariumView::follow_scene(double elapsed_s) {
     const uint64_t lakes = resources_.lake_generation();
     const uint64_t seas = resources_.sea_generation();
     const uint64_t glaciers = resources_.glacier_generation();
-    if (ground_moved || lakes != water_marks_.lakes || seas != water_marks_.seas ||
-        glaciers != water_marks_.glaciers) {
-        water_marks_.lakes = lakes;
-        water_marks_.seas = seas;
-        water_marks_.glaciers = glaciers;
+    if (ground_moved || lakes != scene_state_.water_marks_.lakes || seas != scene_state_.water_marks_.seas ||
+        glaciers != scene_state_.water_marks_.glaciers) {
+        scene_state_.water_marks_.lakes = lakes;
+        scene_state_.water_marks_.seas = seas;
+        scene_state_.water_marks_.glaciers = glaciers;
         const uint64_t kinds_start_usec = ticks->get_ticks_usec();
-        const WaterKindsFilled kinds = fill_plant_water_kinds(scene_, resources_.get_lakes(), resources_.get_seas(),
-                                                              resources_.get_glaciers(), ground_surface_.arrays);
+        const WaterKindsFilled kinds = fill_plant_water_kinds(scene_state_.scene_, resources_.get_lakes(), resources_.get_seas(),
+                                                              resources_.get_glaciers(), scene_state_.ground_surface_.arrays);
         const uint64_t kinds_usec = ticks->get_ticks_usec() - kinds_start_usec;
         constexpr const char* GAP_WATER_KINDS = "F1252";
         constexpr const char* LAKE_FIELD = "water.lake.v1";
@@ -220,17 +220,17 @@ void VivariumView::follow_scene(double elapsed_s) {
     // that height as long as the migration proof of R015 for this block is not accepted (register N0487); both
     // heights agree while the foot follows the ground. This is a bridge, never evidence that the plant stands on
     // the ground; its edge is logged once
-    hud_ground_.follow(resources_.get_terrain(), start_.ground, resources_.terrain_generation());
+    hud_state_.hud_ground_.follow(resources_.get_terrain(), start_.ground, resources_.terrain_generation());
     if (!origins.empty()) {
         open_gap(VivariumCarryBridge::GAP_BODY, "flora.stem.v1.base_y");  // stem base as the owner's body (N0487)
     }
     for (auto& origin : origins) {
         double ground = 0.0;
-        if (hud_ground_.height(origin.second.x, origin.second.z, ground)) {
+        if (hud_state_.hud_ground_.height(origin.second.x, origin.second.z, ground)) {
             origin.second.y = static_cast<float>(ground);
         }
     }
-    const bool stood_moved = !same_origins(origins, scene_origins_);
+    const bool stood_moved = !same_origins(origins, scene_state_.scene_origins_);
     const uint64_t organs = resources_.organ_generation();
     // the templates arrive with the plugin's first Production run and stay; their generation changes then
     // and with every new host (usecase:101011 tessellate the organ templates)
@@ -238,37 +238,37 @@ void VivariumView::follow_scene(double elapsed_s) {
     // the bark tubes are laid anew only when the knot store took a new set of knots, feet and cut faces, which
     // ase-render-data builds only when a body ticked (register B0295 point 4, B0677, usecase:101613)
     const uint64_t bark = resources_.knots().get_generation();
-    if (organs != scene_organs_ || templates != scene_templates_ || bark != scene_bark_ || orders_moved ||
+    if (organs != scene_state_.scene_organs_ || templates != scene_state_.scene_templates_ || bark != scene_state_.scene_bark_ || orders_moved ||
         stood_moved) {
         // the organ views are read anew with every Dissemination run, so only the first fill after a
         // boot gets a line; later counts stand in the next `scene ground` line
-        if (scene_organs_ == 0u) {
-            note("scene organs " + scene_counts(resources_, scene_) + " " + measure(GODOT_NO_PLACE));
+        if (scene_state_.scene_organs_ == 0u) {
+            note("scene organs " + scene_counts(resources_, scene_state_.scene_) + " " + measure(GODOT_NO_PLACE));
         }
         // the edge of the grounded stem base (B0304): the plant moved because the ground under it moved, told
         // once with its new height, so a picture of a dug hole names the level the birch stands on
-        if (stood_moved && !scene_origins_.empty()) {
+        if (stood_moved && !scene_state_.scene_origins_.empty()) {
             for (const auto& [body, origin] : origins) {
                 note("scene stem base body=" + ::godot::String::num_uint64(body) +
                      " ground_y=" + ::godot::String::num(origin.y, GODOT_LOG_DECIMALS));
             }
         }
-        scene_organs_ = organs;
-        scene_templates_ = templates;
-        scene_bark_ = bark;
-        scene_origins_ = std::move(origins);
-        fill_plant_organs(scene_, resources_, scene_origins_, order_budget_.shown, scene_look_);
-        scene_focus_ = GODOT_NO_PLACE;  // the stem bases may have moved: aim again
+        scene_state_.scene_organs_ = organs;
+        scene_state_.scene_templates_ = templates;
+        scene_state_.scene_bark_ = bark;
+        scene_state_.scene_origins_ = std::move(origins);
+        fill_plant_organs(scene_state_.scene_, resources_, scene_state_.scene_origins_, scene_state_.order_budget_.shown, scene_state_.scene_look_);
+        scene_state_.scene_focus_ = GODOT_NO_PLACE;  // the stem bases may have moved: aim again
     }
     // select a patch (03.1 point 2): the camera moves to the plant on the selected place, without a
     // selection to the first place of the configuration (godot_patch_focus.hpp).
     const uint32_t focus = patch_focus_place(selected_place_, start_.patches.front().place);
     const VivariumPatchView* focused = resources_.get_patch_at(focus);
-    if (focus != scene_focus_ && focused != nullptr) {
-        const auto origin = scene_origins_.find(focused->object_id);
-        if (origin != scene_origins_.end()) {
-            const PlantSceneCamera zoomed = patch_focus_zoomed(scene_camera_, zoom_);
-            aim_plant_camera(scene_, zoomed, origin->second);
+    if (focus != scene_state_.scene_focus_ && focused != nullptr) {
+        const auto origin = scene_state_.scene_origins_.find(focused->object_id);
+        if (origin != scene_state_.scene_origins_.end()) {
+            const PlantSceneCamera zoomed = patch_focus_zoomed(scene_state_.scene_camera_, scene_state_.zoom_);
+            aim_plant_camera(scene_state_.scene_, zoomed, origin->second);
             // the engine learns where the camera stands and where it looks (03.11 point 7, 07.4): the level
             // of detail of ase-render-data measures from the eye, the stick of the figure steers along the
             // heading from eye to target; aiming happens on a new focus or zoom only
@@ -279,18 +279,20 @@ void VivariumView::follow_scene(double elapsed_s) {
                  ::godot::String::num(aim.eye_z, 2) + " target " + ::godot::String::num(aim.target_x, 2) + " " +
                  ::godot::String::num(aim.target_y, 2) + " " + ::godot::String::num(aim.target_z, 2) + " status " +
                  ::godot::String::num_int64(viewed));
-            fill_ground();
-            scene_focus_ = focus;
+            // a new focus shows the soil of its patch: the material changes, no vertex does (operator order
+            // 2026-11-25); a ground whose places change comes through the terrain generation above
+            shade_plant_ground(scene_state_.scene_, static_cast<float>(start_.ground.step_m), ground_material());
+            scene_state_.scene_focus_ = focus;
         }
     }
     // soil water and condition to the materials (03.2), every frame as the records carry them: the
     // ground takes the focused patch's soil water, each plant's leaves the condition of its patch
     const std::unordered_map<uint32_t, PlantStand> stands = plant_stands(patches);
     const auto ground = focused == nullptr ? stands.end() : stands.find(focused->object_id);
-    mark_plant_stands(scene_, stands, ground == stands.end() ? PlantStand{} : ground->second);
+    mark_plant_stands(scene_state_.scene_, stands, ground == stands.end() ? PlantStand{} : ground->second);
     // body or view card by the level ase-render-data graded each plant to, every frame (flora.lod.v1,
     // PLAN_ASE_VIVARIUM_PHASE_09_TREEGEN T.10, usecase:101657 grade plants by picture height)
-    show_plant_levels(scene_, resources_.get_lods(), resources_.get_cnpys());
+    show_plant_levels(scene_state_.scene_, resources_.get_lods(), resources_.get_cnpys());
     // an overcast sky turns the sky grey and dims the light (PLAN_ASE_VIVARIUM_PHASE_06_HUD row N01): SkyOvercast
     // derives the shade from the sky frame's kind of weather and the sun's height. The frame carries a kind only
     // while the sky port's colours carry no tint of it (the bridge's weather, N0449); the weather of
@@ -303,22 +305,22 @@ void VivariumView::follow_scene(double elapsed_s) {
     // ends at the far edge of the start square, so the ridges stand on that edge and the ground's rows count from it.
     // It is found first, since the fog's reach there decides how much of the fog colour the sky's horizon takes
     ::godot::Vector3 ground_edge;
-    const bool edged = plant_ground_far_edge(scene_, start_.ground.x, start_.ground.z, 2.0 * start_.ground.half_m,
+    const bool edged = plant_ground_far_edge(scene_state_.scene_, start_.ground.x, start_.ground.z, 2.0 * start_.ground.half_m,
                                              ground_edge);
     SkyOvercastShade overcast;
     if (configured_) {
         const VivariumSkyView& sky = resources_.get_sky();
-        hud_now_.sky.sun_y = sky.sun_y;
+        hud_state_.hud_now_.sky.sun_y = sky.sun_y;
         // the fog record is the colour of the depth fog over the ground: the sky's horizon takes it only by the
         // share the fog reaches at the square's far edge, so the sky is grey in a fog phase and nowhere else
-        hud_now_.sky.fog = ::godot::Color(static_cast<float>(sky.fog_r), static_cast<float>(sky.fog_g),
+        hud_state_.hud_now_.sky.fog = ::godot::Color(static_cast<float>(sky.fog_r), static_cast<float>(sky.fog_g),
                                           static_cast<float>(sky.fog_b));
-        hud_now_.sky.fog_share = edged ? plant_fog_reach(scene_, sky, ground_edge) : 0.0;
+        hud_state_.hud_now_.sky.fog_share = edged ? plant_fog_reach(scene_state_.scene_, sky, ground_edge) : 0.0;
         // the halo around the sun is measured in mockup units (row N03): the frame's pixels per unit size it
-        hud_now_.sky.frame_pixels = hud_frame_.get_scale().y;
-        hud_.overcast().shade(hud_now_.sky, overcast);
+        hud_state_.hud_now_.sky.frame_pixels = hud_state_.hud_frame_.get_scale().y;
+        hud_state_.hud_.overcast().shade(hud_state_.hud_now_.sky, overcast);
     }
-    light_plant_scene(scene_, resources_.get_sky(), overcast, edged ? &ground_edge : nullptr);
+    light_plant_scene(scene_state_.scene_, resources_.get_sky(), overcast, edged ? &ground_edge : nullptr);
     // the two ridges of hills on the horizon (row N05, m.html drawSky 422 to 424): the horizon's colour as the sky
     // shader draws it, the land's light (SkyOvercast::land_light over the sun's height and the overcast dimming) and
     // the start relief of the landscape (the start file's ground height scale), in the HUD frame's units. The ridges are the far scenery: the RELEVO debug chip
@@ -327,13 +329,13 @@ void VivariumView::follow_scene(double elapsed_s) {
     if (hud_live()) {
         HorizonRidgeFrame horizon;
         horizon.horizon = overcast.sky_horizon.lerp(overcast.horizon, overcast.mix);
-        horizon.land_light = hud_.overcast().land_light(resources_.get_sky().sun_y, overcast.light);
+        horizon.land_light = hud_state_.hud_.overcast().land_light(resources_.get_sky().sun_y, overcast.light);
         horizon.relief = start_.ground.height_scale_m;
-        horizon.frame_pixels = hud_frame_.get_scale().y;
-        horizon.frame_origin_x = hud_frame_.get_origin().x;
-        hud_ridge_.shade(horizon, ridge);
+        horizon.frame_pixels = hud_state_.hud_frame_.get_scale().y;
+        horizon.frame_origin_x = hud_state_.hud_frame_.get_origin().x;
+        hud_state_.hud_ridge_.shade(horizon, ridge);
     }
-    light_plant_horizon_ridge(scene_, ridge, edged ? &ground_edge : nullptr);
+    light_plant_horizon_ridge(scene_state_.scene_, ridge, edged ? &ground_edge : nullptr);
     // the ground in the colour of its season (row N06, m.html groundCol): the clock's season where flora.day.v1
     // names it, else the mockup's (hud_bridge_clock_season, N0460), the frame's kind of weather for the snow and the
     // same horizon colour the ridges take. Before the HUD stands the shade leaves the cover as its soils paint it
@@ -342,17 +344,17 @@ void VivariumView::follow_scene(double elapsed_s) {
         const VivariumClockView& clock = resources_.get_clock();
         GroundSeasonFrame season;
         season.season = static_cast<int32_t>(ase::math::floor(
-            static_cast<float>(clock.day_known ? clock.season : hud_bridge_clock_.season)));
-        season.weather = hud_now_.sky.kind;
+            static_cast<float>(clock.day_known ? clock.season : hud_state_.hud_bridge_clock_.season)));
+        season.weather = hud_state_.hud_now_.sky.kind;
         season.horizon = overcast.sky_horizon.lerp(overcast.horizon, overcast.mix);
-        season.frame_top = hud_frame_.get_origin().y;
-        season.frame_pixels = hud_frame_.get_scale().y;
+        season.frame_top = hud_state_.hud_frame_.get_origin().y;
+        season.frame_pixels = hud_state_.hud_frame_.get_scale().y;
         std::string failed;
-        if (!hud_ground_season_.shade(season, ground_shade, failed)) {
+        if (!hud_state_.hud_ground_season_.shade(season, ground_shade, failed)) {
             fail_hud("ground season " + failed);
         }
     }
-    light_plant_ground_season(scene_, ground_shade, edged ? &ground_edge : nullptr);
+    light_plant_ground_season(scene_state_.scene_, ground_shade, edged ? &ground_edge : nullptr);
     // the leaf in the colour of its season (register B0278, m.html leafCol 486): the same season the ground takes, and
     // the olive a leaf turns toward while its stand wilts; the shader lays the olive only where the leaves' instance
     // uniform condition names a wilting stand. Before the HUD stands the shade leaves the leaf as its material paints it
@@ -361,12 +363,12 @@ void VivariumView::follow_scene(double elapsed_s) {
         const VivariumClockView& clock = resources_.get_clock();
         LeafSeasonFrame leaf;
         leaf.season = static_cast<int32_t>(ase::math::floor(
-            static_cast<float>(clock.day_known ? clock.season : hud_bridge_clock_.season)));
+            static_cast<float>(clock.day_known ? clock.season : hud_state_.hud_bridge_clock_.season)));
         // autumn by the code of HALITRIX the date record carries (usecase:101646 colour the leaves in autumn): only
         // then each birch turns at its own pace; without the codes no leaf takes its own colour
         leaf.autumn = clock.season_codes_known && leaf.season == static_cast<int32_t>(clock.season_halitrix);
         std::string failed;
-        if (!hud_leaf_season_.shade(leaf, leaf_shade, failed)) {
+        if (!hud_state_.hud_leaf_season_.shade(leaf, leaf_shade, failed)) {
             fail_hud("leaf season " + failed);
         }
     }
@@ -380,10 +382,10 @@ void VivariumView::follow_scene(double elapsed_s) {
         BrookReflectionFrame brook;
         brook.horizon = overcast.sky_horizon.lerp(overcast.horizon, overcast.mix);
         brook.above = overcast.sky_zenith.lerp(overcast.zenith, overcast.mix);
-        brook.frame_pixels = hud_frame_.get_scale().y;
+        brook.frame_pixels = hud_state_.hud_frame_.get_scale().y;
         brook.stream = &resources_.get_streams().front();
         std::string failed;
-        if (!hud_brook_reflection_.shade(brook, brook_shade, failed)) {
+        if (!hud_state_.hud_brook_reflection_.shade(brook, brook_shade, failed)) {
             fail_hud("brook reflection " + failed);
         }
     }
@@ -397,27 +399,27 @@ void VivariumView::follow_scene(double elapsed_s) {
     const VivariumClockView& clock = resources_.get_clock();
     if (clock.known && std::isfinite(clock.hour)) {
         const int64_t hour = static_cast<int64_t>(ase::math::floor(static_cast<float>(clock.hour)));
-        if (hour != scene_hour_) {
-            scene_hour_ = hour;
-            note("scene hour " + scene_counts(resources_, scene_) + " " + measure(GODOT_NO_PLACE));
+        if (hour != scene_state_.scene_hour_) {
+            scene_state_.scene_hour_ = hour;
+            note("scene hour " + scene_counts(resources_, scene_state_.scene_) + " " + measure(GODOT_NO_PLACE));
         }
     }
     // An event of the sky port: a new star set. It arrives within an hour as often as at its start, and
     // a night whose stars came after the hour line otherwise stood in no line with its stars.
     const uint64_t stars = resources_.get_sky().star_generation;
-    if (stars != scene_stars_) {
-        scene_stars_ = stars;
-        note("scene sky " + scene_counts(resources_, scene_) + " " + measure(GODOT_NO_PLACE));
+    if (stars != scene_state_.scene_stars_) {
+        scene_state_.scene_stars_ = stars;
+        note("scene sky " + scene_counts(resources_, scene_state_.scene_) + " " + measure(GODOT_NO_PLACE));
     }
     // the seeds every frame (register N0173): ase-physics moves a flying seed in every kinetic step, the seed
     // port carries where it is in the frame of the stem foot, and the view places it at the stem base of its
     // plant plus that place without moving it. Its height is the one ase-physics holds (D2312): the body's ground
     // contact measures the terrain sample, over the levelled disc too, so a dug hole takes it down (D2315), and the
     // view never reads a ground height of its own for it
-    fill_plant_seeds(scene_, resources_, scene_origins_, scene_look_);
+    fill_plant_seeds(scene_state_.scene_, resources_, scene_state_.scene_origins_, scene_state_.scene_look_);
     // the fruit body of every cap patch at its stem base, scaled to the cap radius of its individual (usecase:101362
     // scale the organ templates): every frame the cap port carries, like the seeds, each by the body of its species
-    fill_plant_caps(scene_, resources_, scene_origins_, resources_.get_caps(), start_.patches);
+    fill_plant_caps(scene_state_.scene_, resources_, scene_state_.scene_origins_, resources_.get_caps(), start_.patches);
 }
 
 ::godot::Ref<::godot::Material> VivariumView::ground_material() const {
@@ -427,9 +429,9 @@ void VivariumView::follow_scene(double elapsed_s) {
     const uint32_t focus = patch_focus_place(selected_place_, start_.patches.front().place);
     const VivariumPatchView* patch = resources_.get_patch_at(focus);
     if (patch == nullptr || patch->soil >= GODOT_SOIL_COUNT) {
-        return scene_look_.soil;
+        return scene_state_.scene_look_.soil;
     }
-    return scene_look_.ground[patch->soil];
+    return scene_state_.scene_look_.ground[patch->soil];
 }
 
 void VivariumView::fill_ground() {
@@ -447,7 +449,7 @@ void VivariumView::fill_ground() {
                                         static_cast<float>(spec.half_m), static_cast<float>(patch->y)});
     }
     // a disc the player levelled stands at the height of the ground at its centre: the sample nearest it
-    for (const PlantGroundDisc& flat : player_flats_) {
+    for (const PlantGroundDisc& flat : scene_state_.player_flats_) {
         float best = -1.0f;
         PlantGroundDisc disc = flat;
         for (const VivariumTerrainView& sample : resources_.get_terrain()) {
@@ -463,15 +465,15 @@ void VivariumView::fill_ground() {
         }
     }
     std::vector<PlantGroundBed> beds;
-    for (const std::vector<VivariumBrookSpec>* laid : {&start_.brooks, &player_beds_}) {
+    for (const std::vector<VivariumBrookSpec>* laid : {&start_.brooks, &scene_state_.player_beds_}) {
         for (const VivariumBrookSpec& brook : *laid) {
             beds.push_back(PlantGroundBed{static_cast<float>(brook.x), static_cast<float>(brook.z),
                                           static_cast<float>(brook.end_x), static_cast<float>(brook.end_z),
                                           static_cast<float>(brook.half_m)});
         }
     }
-    fill_plant_ground(scene_, resources_.get_terrain(), resources_.get_ground_cells(), discs, beds,
-                      static_cast<float>(start_.ground.step_m), ground_material(), ground_surface_);
+    fill_plant_ground(scene_state_.scene_, resources_.get_terrain(), resources_.get_ground_cells(), discs, beds,
+                      static_cast<float>(start_.ground.step_m), ground_material(), scene_state_.ground_surface_);
 }
 
 }  // namespace ase::adp::godot

@@ -14,7 +14,9 @@
  *              hud_focus_column_dx right of the ring, then up to hud_focus_leader_top. texts.hud.species in class
  *              tb at hud_focus_title_dx right of the column, hud_focus_title_y, size hud_focus_title_size; under
  *              it texts.hud.selection_of with the area in OVERLAY_INK_SOFT at hud_focus_subtitle_y, size
- *              hud_focus_subtitle_size, each fading in after its delay.
+ *              hud_focus_subtitle_size, each fading in after its delay. While the body rail draws in the same view
+ *              (FocusClusterFrame::rail) the column yields left until the widest text of the head and the rows ends
+ *              at hud_survival_rail_track_left (spine_column_x, B1001); the leader reaches it at forty-five degrees.
  *
  *              THE ROWS, drawn by UiSpine down the column. Stage: texts.hud.stages.<n> or texts.hud.words.none
  *              for a dead stand, with the stage pips lit up to the stage. Soil water: below perception levels[1]
@@ -49,8 +51,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
- * @modified    2026-11-10
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.39.00039 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -82,6 +84,7 @@ struct FocusClusterFrame {
     uint32_t area = 0;           // the area number texts.hud.selection_of names
     uint32_t level = 0;          // the perception level (hud.perception.levels)
     bool debug = false;          // the debug view: each row names its source
+    bool rail = false;           // the body rail draws in the same view: the rows yield its content (B0937)
 
     uint8_t stage = 0;           // GODOT_STAGE_* of flora.patch.v1
     bool cond_known = true;      // the patch condition equals a code of flora.cond.v1; a frame without a patch shows a stand without a mark
@@ -122,9 +125,11 @@ public:
     const FocusRing& ring() const { return ring_; }
 
 private:
-    /** The leader line, the species and the area line. */
-    bool draw_head(UiPen& canvas, const ::godot::Transform2D& frame, const FocusClusterFrame& now,
-                   std::string& failed);
+    /**
+     * The leader line, the species and the area line at the card's column `column_x`, which yields left of the body
+     * rail's content while the rail draws (spine_column_x, B1001); the area line is set before it is measured.
+     */
+    void draw_head(UiPen& canvas, const ::godot::Transform2D& frame, const FocusClusterFrame& now, double column_x);
 
     /** The rows of stage, soil water and cover, handed to the spine; false with the reason in `failed`. */
     bool rows(const FocusClusterFrame& now, std::vector<UiSpineRow>& out, std::string& failed) const;

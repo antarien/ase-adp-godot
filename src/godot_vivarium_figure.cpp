@@ -88,27 +88,27 @@ double held(const ::godot::Input* input, ::godot::Key key) {
 }  // namespace
 
 void VivariumView::follow_figure(double elapsed_s) {
-    if (scene_ == nullptr) {
+    if (scene_state_.scene_ == nullptr) {
         return;
     }
     // the frame the task of the figure file completed (godot_figure_load.hpp): its pack becomes the model, and
     // one instance warms its pipelines behind the start screen, which held while the file loaded
-    if (take_figure_load(figure_look_.load, figure_look_.model)) {
-        warm_figure(scene_, figure_look_);
-        note(::godot::String("figure file ") + (figure_look_.model.is_valid() ? "loaded " : "not loaded ") +
-             text_of(figure_look_.file) + " " + figure_load_times(figure_look_.load));
+    if (take_figure_load(figure_state_.figure_look_.load, figure_state_.figure_look_.model)) {
+        warm_figure(scene_state_.scene_, figure_state_.figure_look_);
+        note(::godot::String("figure file ") + (figure_state_.figure_look_.model.is_valid() ? "loaded " : "not loaded ") +
+             text_of(figure_state_.figure_look_.file) + " " + figure_load_times(figure_state_.figure_look_.load));
     }
     // 07.10: the frame a tool's task completed, its pack becomes the tool's model; carry_tool redraws the hand
-    for (auto& [kind, tool] : figure_look_.tools) {
+    for (auto& [kind, tool] : figure_state_.figure_look_.tools) {
         if (take_figure_load(tool.load, tool.model)) {
             note(::godot::String("tool file ") + (tool.model.is_valid() ? "loaded " : "not loaded ") +
                  text_of(tool.file) + " " + figure_load_times(tool.load));
         }
     }
     // the body of the tool place: the frame its task completed, lay_tools redraws it from the file
-    if (take_figure_load(figure_look_.rack.load, figure_look_.rack.model)) {
-        note(::godot::String("rack file ") + (figure_look_.rack.model.is_valid() ? "loaded " : "not loaded ") +
-             text_of(figure_look_.rack.file) + " " + figure_load_times(figure_look_.rack.load));
+    if (take_figure_load(figure_state_.figure_look_.rack.load, figure_state_.figure_look_.rack.model)) {
+        note(::godot::String("rack file ") + (figure_state_.figure_look_.rack.model.is_valid() ? "loaded " : "not loaded ") +
+             text_of(figure_state_.figure_look_.rack.file) + " " + figure_load_times(figure_state_.figure_look_.rack.load));
     }
     const std::vector<VivariumFigureView>& figures = resources_.get_figures();
     const VivariumFigureCodeView& codes = resources_.get_figure_code();
@@ -124,7 +124,7 @@ void VivariumView::follow_figure(double elapsed_s) {
             }
         }
     }
-    fill_figures(scene_, figures, resources_.get_figure_gear(), figure_look_, codes, resources_.get_survival_rests(),
+    fill_figures(scene_state_.scene_, figures, resources_.get_figure_gear(), figure_state_.figure_look_, codes, resources_.get_survival_rests(),
                  stones);
 
     // the rig of every figure node, once per node (07.6): eye height, height and body radius of the skeleton the
@@ -134,7 +134,7 @@ void VivariumView::follow_figure(double elapsed_s) {
         double eye_height = 0.0;
         double height = 0.0;
         double radius = 0.0;
-        if (take_figure_rig(scene_, figure.object_id, eye_height, height, radius)) {
+        if (take_figure_rig(scene_state_.scene_, figure.object_id, eye_height, height, radius)) {
             const ase::kernel::HostStatus measured =
                 resources_.measure_figure(figure.object_id, eye_height, height, radius);
             note(::godot::String("figure rig figure=") + ::godot::String::num_uint64(figure.object_id) + " eye " +
@@ -153,8 +153,8 @@ void VivariumView::follow_figure(double elapsed_s) {
         if (plate == nullptr) {
             break;
         }
-        if (std::find(figure_area_bound_.begin(), figure_area_bound_.end(), figure.object_id) !=
-            figure_area_bound_.end()) {
+        if (std::find(figure_state_.figure_area_bound_.begin(), figure_state_.figure_area_bound_.end(), figure.object_id) !=
+            figure_state_.figure_area_bound_.end()) {
             continue;
         }
         const ase::kernel::HostStatus bound = resources_.bind_figure_area(figure.object_id, plate->object_id);
@@ -162,34 +162,34 @@ void VivariumView::follow_figure(double elapsed_s) {
              ::godot::String::num_uint64(plate->object_id) + " place " +
              ::godot::String::num_uint64(start_.figure_place) + " status " + ::godot::String::num_int64(bound));
         if (bound == ase::kernel::HostStatusOk) {
-            figure_area_bound_.push_back(figure.object_id);
+            figure_state_.figure_area_bound_.push_back(figure.object_id);
         }
     }
 
     // the player camera (07.6): while the camera port carries one, the scene's camera stands at its eye;
     // the frame it carries none any more, the fixed view of Phase 06 aims its camera again (follow_scene)
     const VivariumFigureCameraView& camera = resources_.get_figure_camera();
-    const bool shown = aim_figure_camera(scene_, camera);
-    if (shown != figure_view_shown_) {
+    const bool shown = aim_figure_camera(scene_state_.scene_, camera);
+    if (shown != figure_state_.figure_view_shown_) {
         if (!shown) {
-            scene_focus_ = GODOT_NO_PLACE;
-            figure_controls_.stick_finger = VivariumFigureControls::NO_FINGER;  // the fixed view takes no stick
-            figure_controls_.orbit_finger = VivariumFigureControls::NO_FINGER;
+            scene_state_.scene_focus_ = GODOT_NO_PLACE;
+            figure_state_.figure_controls_.stick_finger = VivariumFigureControls::NO_FINGER;  // the fixed view takes no stick
+            figure_state_.figure_controls_.orbit_finger = VivariumFigureControls::NO_FINGER;
         }
         note(::godot::String("figure camera ") + (shown ? "player" : "fixed") + " figure=" +
              ::godot::String::num_uint64(camera.figure) + " eye " + ::godot::String::num(camera.eye_x, 2) + " " +
              ::godot::String::num(camera.eye_y, 2) + " " + ::godot::String::num(camera.eye_z, 2));
-        figure_view_shown_ = shown;
+        figure_state_.figure_view_shown_ = shown;
     }
 
     // the rim of the area (07-G, RAND DES AREALS): ase-physics holds the followed figure at a chunk border of the
     // loaded ground (HUB_PHYS_STAND_BNDY, 07.13) and the camera record carries that mark; the line is written on each
     // edge, never per frame. The fixed view follows no figure and stands on no rim.
     const bool edge = shown && camera.edge;
-    if (edge != figure_edge_shown_) {
+    if (edge != figure_state_.figure_edge_shown_) {
         note(::godot::String("figure edge figure=") + ::godot::String::num_uint64(camera.figure) + " value " +
              (edge ? "1" : "0"));
-        figure_edge_shown_ = edge;
+        figure_state_.figure_edge_shown_ = edge;
     }
 
     // the rim of the camera (07-G, cam.bound): ase-camera holds the player camera at the chunk borders of the loaded raster
@@ -197,21 +197,21 @@ void VivariumView::follow_figure(double elapsed_s) {
     // key bound of the camera record; the line is written on each edge, never per frame. The fixed view of
     // Phase 06 is no player camera and stands on no rim.
     const bool bound = shown && camera.bound;
-    if (bound != figure_bound_shown_) {
+    if (bound != figure_state_.figure_bound_shown_) {
         note(::godot::String("figure bound figure=") + ::godot::String::num_uint64(camera.figure) + " value " +
              (bound ? "1" : "0"));
-        figure_bound_shown_ = bound;
+        figure_state_.figure_bound_shown_ = bound;
     }
 
     // 07.13 and M0157: the red glass pane where a walking body bumped the chunk edge, from the boundary port, no
     // message with it; it stands at full glow for as long as the rim holds the followed figure (edge or bound above)
-    flash_figure_edges(scene_, resources_.get_figure_bumps(), figures, figure_glass_, camera.figure,
-                       figure_edge_shown_ || figure_bound_shown_, elapsed_s);
+    flash_figure_edges(scene_state_.scene_, resources_.get_figure_bumps(), figures, figure_state_.figure_glass_, camera.figure,
+                       figure_state_.figure_edge_shown_ || figure_state_.figure_bound_shown_, elapsed_s);
 
     // the figure of this seat: the one it held last frame while that still stands, else the first of this frame
     // whose soul is SS/PC. A figure handed to the AI (soul.mode, 07.11) stays the seat's, so cam.mode and
     // soul.mode keep answering and the player can take it back.
-    VivariumFigureControls& controls = figure_controls_;
+    VivariumFigureControls& controls = figure_state_.figure_controls_;
     const VivariumFigureView* led = nullptr;
     const VivariumFigureView* first_self = nullptr;
     for (const VivariumFigureView& figure : figures) {
@@ -233,7 +233,7 @@ void VivariumView::follow_figure(double elapsed_s) {
         controls.orbit_finger = VivariumFigureControls::NO_FINGER;
     }
     if (led == nullptr) {
-        figure_hand_sent_ = false;  // a figure led anew is told the hand's state again
+        figure_state_.figure_hand_sent_ = false;  // a figure led anew is told the hand's state again
     }
 
     // the place of the figure led, at its first stand and then per kFigurePlaceStepM: the line the acceptance reads
@@ -241,7 +241,7 @@ void VivariumView::follow_figure(double elapsed_s) {
     double place_x = 0.0;
     double place_y = 0.0;
     double place_z = 0.0;
-    if (led != nullptr && take_figure_place(scene_, led->object_id, kFigurePlaceStepM, place_x, place_y, place_z)) {
+    if (led != nullptr && take_figure_place(scene_state_.scene_, led->object_id, kFigurePlaceStepM, place_x, place_y, place_z)) {
         note(::godot::String("figure place figure=") + ::godot::String::num_uint64(led->object_id) + " x " +
              ::godot::String::num(place_x, 2) + " y " + ::godot::String::num(place_y, 2) + " z " +
              ::godot::String::num(place_z, 2));
@@ -249,7 +249,7 @@ void VivariumView::follow_figure(double elapsed_s) {
 
     // the gait of the figure led, at its first stand and then per change (07-F): the value of the body port beside
     // the three codes of the code port, so the acceptance names stand, walk and run from the log and never guesses
-    if (led != nullptr && codes.known && take_figure_gait(scene_, led->object_id, led->gait)) {
+    if (led != nullptr && codes.known && take_figure_gait(scene_state_.scene_, led->object_id, led->gait)) {
         note(::godot::String("figure gait figure=") + ::godot::String::num_uint64(led->object_id) + " value " +
              ::godot::String::num(led->gait, 3) + " stand " + ::godot::String::num(codes.gait_stand, 3) + " walk " +
              ::godot::String::num(codes.gait_walk, 3) + " run " + ::godot::String::num(codes.gait_run, 3));
@@ -258,7 +258,7 @@ void VivariumView::follow_figure(double elapsed_s) {
     // the detail level the figure led is drawn on, at its first frame and then per change (07-G, each detail level):
     // the scene picks it by the figure's share of the frame height against the bands of the body port
     int32_t drawn_level = 0;
-    if (led != nullptr && take_figure_level(scene_, led->object_id, drawn_level)) {
+    if (led != nullptr && take_figure_level(scene_state_.scene_, led->object_id, drawn_level)) {
         note(::godot::String("figure lod figure=") + ::godot::String::num_uint64(led->object_id) + " level " +
              ::godot::String::num_int64(drawn_level));
     }
@@ -268,7 +268,7 @@ void VivariumView::follow_figure(double elapsed_s) {
     // line, beside the codes of FIGURE_POSE_*, so a picture without the figure fails and none is guessed from pixels
     uint8_t drawn_pose = FIGURE_POSE_STAND;
     bool framed = false;
-    if (led != nullptr && take_figure_pose(scene_, led->object_id, drawn_pose, framed)) {
+    if (led != nullptr && take_figure_pose(scene_state_.scene_, led->object_id, drawn_pose, framed)) {
         note(::godot::String("figure pose figure=") + ::godot::String::num_uint64(led->object_id) + " value " +
              ::godot::String::num_int64(drawn_pose) + " framed " + (framed ? "1" : "0") + " stand " +
              ::godot::String::num_int64(FIGURE_POSE_STAND) + " sit_ground " +
@@ -282,7 +282,7 @@ void VivariumView::follow_figure(double elapsed_s) {
     // fills the can at the brook and empties it at the birch, so a rise is the fill and a fall the pour - under SS/PC
     // by the player's tap and under AI/PC by the acts of the BDI alike; the acceptance reads both from this line
     double carried_litres = 0.0;
-    if (led != nullptr && take_figure_water(scene_, led->object_id, carried_litres)) {
+    if (led != nullptr && take_figure_water(scene_state_.scene_, led->object_id, carried_litres)) {
         note(::godot::String("figure water figure=") + ::godot::String::num_uint64(led->object_id) + " litres " +
              ::godot::String::num(carried_litres, 3));
     }
@@ -293,7 +293,7 @@ void VivariumView::follow_figure(double elapsed_s) {
     // ase-entropy spoils it there, and the ring ESTRAGO reads the share back from survival.food.v1. A host without the
     // stock port answers NotFound for each piece once and lays nothing; a stock is laid once, never resent.
     if (led != nullptr &&
-        std::find(figure_stocked_.begin(), figure_stocked_.end(), led->object_id) == figure_stocked_.end()) {
+        std::find(figure_state_.figure_stocked_.begin(), figure_state_.figure_stocked_.end(), led->object_id) == figure_state_.figure_stocked_.end()) {
         for (const VivariumStockSpec& piece : start_.stock) {
             const uint32_t item = ase::kernel::KernelEmbeddedHost::name_id(piece.item.c_str());
             const ase::kernel::HostStatus stocked = resources_.stock_figure(led->object_id, item, piece.kg);
@@ -313,25 +313,25 @@ void VivariumView::follow_figure(double elapsed_s) {
             note(::godot::String("figure don figure=") + ::godot::String::num_uint64(led->object_id) + " item=" +
                  ::godot::String::utf8(start_.don.c_str()) + " status " + ::godot::String::num_int64(donned));
         }
-        figure_stocked_.push_back(led->object_id);
+        figure_state_.figure_stocked_.push_back(led->object_id);
     }
 
     // the hand of Phase 06 (07.10): what it holds the figure carries at socket_hand_r. One request per change of
     // the thing in the hand or of the figure led; the item travels as the catalog id of its key, which ase-pl-avatar
     // files as HUB_EQP_SLOT_REQ and ase-equipment puts on. The gear port shows the result (fill_figures).
     if (led != nullptr) {
-        const HandThing* thing = hud_now_.hand.thing;
+        const HandThing* thing = hud_state_.hud_now_.hand.thing;
         const uint32_t item = thing != nullptr ? ase::kernel::KernelEmbeddedHost::name_id(thing->id.c_str()) : 0u;
-        if (!figure_hand_sent_ || figure_hand_figure_ != led->object_id || figure_hand_item_ != item) {
+        if (!figure_state_.figure_hand_sent_ || figure_state_.figure_hand_figure_ != led->object_id || figure_state_.figure_hand_item_ != item) {
             const ase::kernel::HostStatus handed =
                 item != 0u ? resources_.hold_figure(led->object_id, item) : resources_.drop_figure(led->object_id);
             note(::godot::String("figure ") + (item != 0u ? "hold" : "drop") + " figure=" +
                  ::godot::String::num_uint64(led->object_id) + " item=" +
                  ::godot::String::utf8(thing != nullptr ? thing->id.c_str() : "") + " status " +
                  ::godot::String::num_int64(handed));
-            figure_hand_sent_ = true;  // a refused request is noted once; the next change of the hand asks again
-            figure_hand_figure_ = led->object_id;
-            figure_hand_item_ = item;
+            figure_state_.figure_hand_sent_ = true;  // a refused request is noted once; the next change of the hand asks again
+            figure_state_.figure_hand_figure_ = led->object_id;
+            figure_state_.figure_hand_item_ = item;
         }
     }
 
@@ -342,12 +342,12 @@ void VivariumView::follow_figure(double elapsed_s) {
 
     // cam.mode (07.5): one switch per press of C, on its rising edge
     const bool switch_held = input->is_key_pressed(::godot::KEY_C);
-    if (switch_held && !figure_switch_held_) {
+    if (switch_held && !figure_state_.figure_switch_held_) {
         const ase::kernel::HostStatus switched = resources_.switch_figure_camera(led->object_id);
         note("figure switch figure=" + ::godot::String::num_uint64(led->object_id) + " status " +
              ::godot::String::num_int64(switched));
     }
-    figure_switch_held_ = switch_held;
+    figure_state_.figure_switch_held_ = switch_held;
 
     // the stick (07.4): forward and sideways from W A S D; the course they walk along is the course of the
     // active camera, read by ase-pl-avatar from ase-camera. A released stick is sent once more with both axes
@@ -379,7 +379,7 @@ void VivariumView::follow_figure(double elapsed_s) {
     }
     // only a figure its player leads takes the stick; under AI/PC the AI steers it (07.11)
     const bool steering = controls.led_self && (forward != 0.0 || strafe != 0.0 || jump != 0.0);
-    if (controls.led_self && (steering || figure_steered_)) {
+    if (controls.led_self && (steering || figure_state_.figure_steered_)) {
         const ase::kernel::HostStatus steered =
             resources_.steer_figure(led->object_id, forward, strafe, sprint, jump);
         if (steered != ase::kernel::HostStatusOk) {
@@ -387,7 +387,7 @@ void VivariumView::follow_figure(double elapsed_s) {
                  ::godot::String::num_int64(steered));
         }
     }
-    figure_steered_ = steering;
+    figure_state_.figure_steered_ = steering;
 
     // fig.turn (07.7): Q and E turn the figure itself on the spot; only a figure its player leads takes it
     const double spin =
@@ -429,12 +429,12 @@ void VivariumView::follow_figure(double elapsed_s) {
     // are drawn ride on the same line (07.3): the coarser detail level shown and the edges of the albedo on the face
     // and the iris material, which a run holds against level 0 and the edges of the source images; "face none"
     // while no face and eye are drawn
-    if (zoom_delta == 0.0 && figure_zoomed_) {
+    if (zoom_delta == 0.0 && figure_state_.figure_zoomed_) {
         int32_t face_level = 0;
         int64_t face_edge = 0;
         int64_t eye_edge = 0;
         const ::godot::String face =
-            figure_face_look(scene_, camera.figure, face_level, face_edge, eye_edge)
+            figure_face_look(scene_state_.scene_, camera.figure, face_level, face_edge, eye_edge)
                 ? " lod " + ::godot::String::num_int64(face_level) + " face " +
                       ::godot::String::num_int64(face_edge) + " eye " + ::godot::String::num_int64(eye_edge)
                 : ::godot::String(" face none");
@@ -443,7 +443,7 @@ void VivariumView::follow_figure(double elapsed_s) {
              ::godot::String::num(camera.eye_z, 2) + " aim " + ::godot::String::num(camera.aim_x, 2) + " " +
              ::godot::String::num(camera.aim_y, 2) + " " + ::godot::String::num(camera.aim_z, 2) + face);
     }
-    figure_zoomed_ = zoom_delta != 0.0;
+    figure_state_.figure_zoomed_ = zoom_delta != 0.0;
 }
 
 }  // namespace ase::adp::godot

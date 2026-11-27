@@ -85,6 +85,7 @@ struct VivariumDebugJump {
     uint8_t         eclipse_low = GODOT_ECLIPSE_NONE;   // lowest ase-ephemeris ECLIPSE_* kind an eclipse jump lands on; NONE: no eclipse jump
     uint8_t         eclipse_high = GODOT_ECLIPSE_NONE;  // highest ECLIPSE_* kind it lands on (solar 1..2, lunar 3..4)
     bool            moonrise = false;           // the jump goes to the next rise of a moon into the camera's frame; false: another target
+    ::godot::String event;                      // the name of the ase-calendar event kind the jump goes to (fullmoon, eclipse, ...), its code read as the key event_<name> on the code records (flora.event_code.v1); empty: another target
 };
 
 /**
@@ -124,6 +125,8 @@ struct VivariumJump {
     bool     rewound = false;                   // a date jump back: the host was built anew, the seek ahead from its start clock is owed
     bool     entry = false;                    // the jump was asked from the free date entry (debug.date)
     bool     moonrise = false;                  // a moonrise jump: it lands at ase-ephemeris' forecast of the next rise
+    bool     event = false;                     // an event jump: it lands at ase-calendar's next occurrence of a kind less its lead
+    double   event_code = 0.0;                  // the code of that kind on the calendar's code records (flora.event_code.v1)
 };
 
 /**

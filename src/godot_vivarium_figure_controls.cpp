@@ -11,7 +11,7 @@
  *              and the square cam.mode under the debug switch is drawn in both.
  *
  *              Every measure, colour and word is SHA's (hud_figure_*, hud_gesture_*, FIGURE_*, figure.*), read once
- *              with the HUD (load_figure_hud) in the mockup's units of a 360 wide frame; hud_frame_ carries them onto
+ *              with the HUD (load_figure_hud) in the mockup's units of a 360 wide frame; hud_state_.hud_frame_ carries them onto
  *              the canvas. draw_figure_hud lays the frame's figure from the body port and the scene's height of its
  *              node, and keeps the camera's distance the rail drew in the record, where the touch reads it.
  *
@@ -40,7 +40,7 @@
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 #include <ase/math/math.hpp>
 
@@ -80,7 +80,7 @@ double camera_distance(const VivariumFigureCameraView& camera) {
 bool VivariumView::load_figure_hud(const UiTheme& theme) {
     // THE PHONE'S CONTROLS (07.9): every measure of the stick, the orbit and the tap is a hud_* token of SHA in the
     // mockup's units; a missing one stands on the error panel like every other HUD token.
-    VivariumFigureControls& controls = figure_controls_;
+    VivariumFigureControls& controls = figure_state_.figure_controls_;
     double zone[8] = {};
     double rest[2] = {};
     double tap_ms = 0.0;
@@ -110,9 +110,9 @@ bool VivariumView::load_figure_hud(const UiTheme& theme) {
              {"hud_figure_keys_zoom_rate", &controls.key_zoom_rate},
              {"hud_gesture_press_slop", &controls.tap_slop},
              {"hud_gesture_tap_ms", &tap_ms},
-             {"hud_figure_body_turn_rate", &figure_look_.motion.turn_rate},
-             {"hud_figure_body_turn_full", &figure_look_.motion.turn_full},
-             {"hud_figure_body_look_lift", &figure_look_.motion.look_lift}}) {
+             {"hud_figure_body_turn_rate", &figure_state_.figure_look_.motion.turn_rate},
+             {"hud_figure_body_turn_full", &figure_state_.figure_look_.motion.turn_full},
+             {"hud_figure_body_look_lift", &figure_state_.figure_look_.motion.look_lift}}) {
         if (!theme.measure(slot.first, *slot.second) || !std::isfinite(*slot.second)) {
             return fail_config(slot.first);
         }
@@ -120,10 +120,10 @@ bool VivariumView::load_figure_hud(const UiTheme& theme) {
     if (!(controls.stick_radius > 0.0) || !(controls.walk_share > 0.0)) {
         return fail_config("hud_figure_stick_radius");  // a stick without reach or pace leads no figure
     }
-    if (!(figure_look_.motion.turn_rate > 0.0) || !(figure_look_.motion.turn_full > 0.0)) {
+    if (!(figure_state_.figure_look_.motion.turn_rate > 0.0) || !(figure_state_.figure_look_.motion.turn_full > 0.0)) {
         return fail_config("hud_figure_body_turn_rate");  // a body without a turn never follows the course of its port
     }
-    if (!(figure_look_.motion.look_lift > 0.0)) {
+    if (!(figure_state_.figure_look_.motion.look_lift > 0.0)) {
         return fail_config("hud_figure_body_look_lift");  // the distance to the feet would pick the detail level too fine
     }
     if (!(controls.key_turn_rate > 0.0) || !(controls.key_pitch_rate > 0.0) || !(controls.key_spin_rate > 0.0) ||
@@ -172,7 +172,7 @@ bool VivariumView::load_figure_hud(const UiTheme& theme) {
     if (!theme.color("FIGURE_EDGE_GLASS", glass_ink)) {
         return fail_config("FIGURE_EDGE_GLASS");
     }
-    figure_glass_ = bind_figure_glass(glass[0], glass[1], glass[2], glass[3], glass[4], glass_ink);
+    figure_state_.figure_glass_ = bind_figure_glass(glass[0], glass[1], glass[2], glass[3], glass[4], glass_ink);
 
     // the resting stick's word in the label face; the arc, the rail, the focus and the switch bind their own
     std::string failed;
@@ -199,7 +199,7 @@ bool VivariumView::load_figure_hud(const UiTheme& theme) {
 }
 
 void VivariumView::draw_figure_hud(UiPen& pen) {
-    VivariumFigureControls& controls = figure_controls_;
+    VivariumFigureControls& controls = figure_state_.figure_controls_;
     controls.camera_drawn = false;  // until the rail stands again in this frame
     if (!controls.led_known) {
         // no figure of this seat: nothing to press, nothing open, no finger holds anything
@@ -212,7 +212,7 @@ void VivariumView::draw_figure_hud(UiPen& pen) {
         }
         return;
     }
-    if (!figure_view_shown_) {
+    if (!figure_state_.figure_view_shown_) {
         // the fixed view stands: the arc, the rail and the orbit half of the player camera hold no finger
         for (int64_t* held : {&controls.orbit_finger, &controls.turn_finger, &controls.zoom_finger,
                               &controls.pinch_finger}) {
@@ -221,9 +221,9 @@ void VivariumView::draw_figure_hud(UiPen& pen) {
     }
     UiTextPlace text;
     text.anchor = GODOT_TEXT_ANCHOR_MIDDLE;
-    text.still = hud_still_;
-    if (figure_view_shown_) {
-        pen.draw_set_transform_matrix(hud_frame_);
+    text.still = hud_state_.hud_still_;
+    if (figure_state_.figure_view_shown_) {
+        pen.draw_set_transform_matrix(hud_state_.hud_frame_);
         if (controls.stick_finger != VivariumFigureControls::NO_FINGER) {
             // the stick under the thumb: its ring where the thumb came down, the knob where it is
             UiSvgOutline ring;
@@ -244,7 +244,7 @@ void VivariumView::draw_figure_hud(UiPen& pen) {
             text.size = controls.rest_label_size;
             text.color = controls.stick_rest_word;
             text.opacity = controls.rest_alpha;
-            controls.stick_word.draw(pen, hud_frame_, text);
+            controls.stick_word.draw(pen, hud_state_.hud_frame_, text);
         }
     }
 
@@ -252,15 +252,15 @@ void VivariumView::draw_figure_hud(UiPen& pen) {
     // a chunk border of the loaded ground or ase-camera holds the player camera on the rim of the loaded area; the
     // camera record carries both marks and follow_figure keeps them, the fixed view stands on no rim. The touch
     // itself flashes the glass pane where the body met the border (flash_figure_edges, 07.13).
-    if (figure_edge_shown_ || figure_bound_shown_) {
+    if (figure_state_.figure_edge_shown_ || figure_state_.figure_bound_shown_) {
         UiTextPlace rim;
         rim.at = controls.edge_at;
         rim.size = controls.edge_size;
         rim.anchor = GODOT_TEXT_ANCHOR_END;
         rim.color = controls.edge_ink;
         rim.opacity = 1.0;
-        rim.still = hud_still_;
-        controls.edge_word.draw(pen, hud_frame_, rim);
+        rim.still = hud_state_.hud_still_;
+        controls.edge_word.draw(pen, hud_state_.hud_frame_, rim);
     }
 
     // THE FIGURE OF THIS FRAME: its place as the body port reported it, its height as the scene measured its node
@@ -274,18 +274,18 @@ void VivariumView::draw_figure_hud(UiPen& pen) {
         }
     }
     double height = 0.0;
-    controls.led_height = placed && figure_height(scene_, controls.led, height) ? height : 0.0;
+    controls.led_height = placed && figure_height(scene_state_.scene_, controls.led, height) ? height : 0.0;
     ::godot::Vector3 eye;
     ::godot::Vector2 foot;
     ::godot::Vector2 head;
-    const bool shown = placed && hud_anchor_.eye(eye) && hud_anchor_.place(controls.led_at, foot) &&
-                       hud_anchor_.place(controls.led_at + ::godot::Vector3(0.0f, static_cast<float>(controls.led_height),
+    const bool shown = placed && hud_state_.hud_anchor_.eye(eye) && hud_state_.hud_anchor_.place(controls.led_at, foot) &&
+                       hud_state_.hud_anchor_.place(controls.led_at + ::godot::Vector3(0.0f, static_cast<float>(controls.led_height),
                                                                             0.0f),
                                          head);
     if (shown) {
         // fig.turn under the player camera, laid toward the eye; fig.focus about the figure in every camera
-        if (figure_view_shown_ && controls.turn.lay(hud_anchor_, controls.led_at, eye)) {
-            controls.turn.draw(pen, hud_frame_, controls.focus_open,
+        if (figure_state_.figure_view_shown_ && controls.turn.lay(hud_state_.hud_anchor_, controls.led_at, eye)) {
+            controls.turn.draw(pen, hud_state_.hud_frame_, controls.focus_open,
                                controls.turn_finger != VivariumFigureControls::NO_FINGER);
         } else {
             controls.turn.clear();
@@ -294,12 +294,12 @@ void VivariumView::draw_figure_hud(UiPen& pen) {
         now.foot = foot;
         now.head = head;
         now.led_self = controls.led_self;
-        now.elapsed = hud_clock_ - controls.focus_since;
-        now.still = hud_still_;
+        now.elapsed = hud_state_.hud_clock_ - controls.focus_since;
+        now.still = hud_state_.hud_still_;
         controls.focus.lay(now);
         if (controls.focus_open) {
             std::string failed;
-            if (!controls.focus.draw(pen, hud_frame_, now, failed)) {
+            if (!controls.focus.draw(pen, hud_state_.hud_frame_, now, failed)) {
                 fail_hud(failed);
                 return;
             }
@@ -316,20 +316,20 @@ void VivariumView::draw_figure_hud(UiPen& pen) {
     // cam.zoom while the player camera stands and its record carries the eye and the aim; the touch reads the
     // distance it drew, so the rail's jump and the pinch start where the knob stands
     const VivariumFigureCameraView& camera = resources_.get_figure_camera();
-    if (figure_view_shown_ && camera.known) {
+    if (figure_state_.figure_view_shown_ && camera.known) {
         controls.camera_metres = camera_distance(camera);
         controls.camera_drawn = true;
         std::string failed;
         const bool held = controls.zoom_finger != VivariumFigureControls::NO_FINGER ||
                           controls.pinch_finger != VivariumFigureControls::NO_FINGER;
-        if (!controls.zoom.draw(pen, hud_frame_, controls.camera_metres, held, failed)) {
+        if (!controls.zoom.draw(pen, hud_state_.hud_frame_, controls.camera_metres, held, failed)) {
             fail_hud(failed);
             return;
         }
     }
 
     // cam.mode under the debug switch, in every camera
-    controls.cam_switch.draw(pen, hud_frame_, figure_view_shown_);
+    controls.cam_switch.draw(pen, hud_state_.hud_frame_, figure_state_.figure_view_shown_);
 }
 
 }  // namespace ase::adp::godot

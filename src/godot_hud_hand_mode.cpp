@@ -14,8 +14,8 @@
  * @register    N0454 (flora.patch.v1), N0449 (sky.weather.v1), N0462, N0461, N0463 (flora.root.v1), N0457,
  *              N0464 (height and slope under the brush), carrier N0448: gaps of the bridge, never of this unit
  * @created     2026-11-10
- * @modified    2026-11-22
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -24,7 +24,9 @@
 
 #include <ase/adp/godot/godot_hud_hand_mode.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/hand/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 
 #include <godot_cpp/core/math.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -160,10 +162,22 @@ HandMode::VerbChip* HandMode::chip(const std::string& verb, std::string& failed)
         return nullptr;
     }
     made.op = text.utf8().get_data();
-    std::string icon;
-    if (!word_icon(*theme_, "verb_glyph." + verb, icon, failed) || !made.chip.bind(*theme_, failed) ||
-        !made.chip.set_glyph(icon, std::string(), failed) || !word("verbs." + verb, made.name, failed) ||
-        !word("verb_case." + verb, made.case_words, failed) || !made.name_text.bind_label(*theme_, failed)) {
+    // The chip carries the verb's activity symbol of activity_art.json (MIG_ASE_SKILL_RSM B7): a thing chip whose
+    // picture box the drawing fills. A verb the file does not carry refuses the chip; no glyph stands in for it.
+    if (activities_ == nullptr) {
+        failed = "hud.hand.activities.unbound";
+        return nullptr;
+    }
+    ::godot::Dictionary drawing;
+    if (!activities_->art(verb, drawing)) {
+        failed = "activity_art.activities." + verb;
+        return nullptr;
+    }
+    if (!made.chip.bind(*theme_, failed) || !made.chip.set_thing(std::string(), failed) ||
+        !made.drawing.bind(*theme_, failed) ||
+        !made.drawing.set_entry("activity_art.activities." + verb, drawing, failed) ||
+        !word("verbs." + verb, made.name, failed) || !word("verb_case." + verb, made.case_words, failed) ||
+        !made.name_text.bind_label(*theme_, failed)) {
         return nullptr;
     }
     chips_.push_back(made);
@@ -351,6 +365,12 @@ bool HandMode::terrain(UiPen& canvas, const ::godot::Transform2D& frame, const H
         place.elapsed = now.elapsed;
         place.still = now.still;
         entry->chip.draw(canvas, frame, place);
+        const UiHexChipPicture picture = entry->chip.picture(place);
+        UiItemSpritePlace symbol;
+        symbol.centre = picture.centre;
+        symbol.box = picture.box;
+        symbol.opacity = picture.opacity;
+        entry->drawing.draw(canvas, frame, symbol);
         canvas.draw_set_transform_matrix(frame);
         verb_places_.emplace_back(entry->verb, place);
         if ((verbs > 1 || now.level == level_words_) &&

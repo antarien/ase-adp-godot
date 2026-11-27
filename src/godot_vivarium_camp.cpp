@@ -126,7 +126,7 @@ void end_camp(VivariumCampState& camp) {
 }
 
 void VivariumView::follow_camp() {
-    if (!configured_ || scene_ == nullptr) {
+    if (!configured_ || scene_state_.scene_ == nullptr) {
         return;
     }
     // 1. THE EXPORTS: every role of camp.parts and the logs of a refuel, each in a task of its own.
@@ -139,14 +139,14 @@ void VivariumView::follow_camp() {
         for (const std::string& role : roles) {
             CampRoleLoad& load = camp_.loads[role];
             load.role = role;
-            const auto name = asset_roles_.find(role);
-            const auto file = name != asset_roles_.end() ? assets_.files.find(name->second) : assets_.files.end();
-            if (file == assets_.files.end()) {
+            const auto name = scene_state_.asset_roles_.find(role);
+            const auto file = name != scene_state_.asset_roles_.end() ? scene_state_.assets_.files.find(name->second) : scene_state_.assets_.files.end();
+            if (file == scene_state_.assets_.files.end()) {
                 note("camp role " + text_of(role) + " bound to no file");
                 continue;
             }
             load.file = file->second;
-            start_camp_load(load, asset_root_);
+            start_camp_load(load, scene_state_.asset_root_);
         }
     }
     bool loading = false;
@@ -237,7 +237,7 @@ void VivariumView::follow_camp() {
     if (camp_.root == nullptr) {
         camp_.root = memnew(::godot::Node3D);
         camp_.root->set_name(kCampRootName);
-        scene_->add_child(camp_.root);
+        scene_state_.scene_->add_child(camp_.root);
     }
     // THE PICTURE: a body counts as framed when its place lies in the frustum of the camera that draws the frame,
     // the same measure as the figure (take_figure_pose); the line is written when the body enters or leaves it,

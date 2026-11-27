@@ -79,6 +79,7 @@
 #include <ase/adp/godot/godot_cycle_measure.hpp>
 #include <ase/adp/godot/godot_host_bark_view.hpp>
 #include <ase/adp/godot/godot_host_bundle_info.hpp>
+#include <ase/adp/godot/godot_host_arc_view.hpp>
 #include <ase/adp/godot/godot_host_clock_view.hpp>
 #include <ase/adp/godot/godot_host_figure_view.hpp>
 #include <ase/adp/godot/godot_host_fire_view.hpp>
@@ -149,6 +150,55 @@ struct VivariumSurvivalRestView {
     double   sleeping = 0.0;       // MTB_IS_SLEEPING (MetabolismRstSystem): 1 while the resting figure sleeps, else 0 (U05, N0555)
     double   rest_quality = 0.0;   // MTB_REST_QUALITY (MetabolismHubDrvPubSystem): 0 to 1, the side of the sleep (FIRECAMP T.11, N0578)
     double   rest_target = 0.0;    // MTB_CONST_REST_QUALITY_TARGET on GLOBAL: the rest quality of good rest (T.11, N0578)
+};
+
+/**
+ * One learning entry of a figure as the last snapshot of the skill port showed it - a copy (usecase:101305,
+ * MIG_ASE_SKILL_RSM B3). ase-skill measures every value; ase-pl-avatar lays one record per entry (avatar.skill.v1) and
+ * replaces the whole set in every Regulation pass (2 Hz). The adapter counts nothing. A key the record does not carry
+ * stands as NaN.
+ */
+struct VivariumSkillView {
+    uint32_t object_id = 0;        // the entry entity of the learning entry
+    double   bearer = 0.0;         // the figure entity id the entry belongs to
+    double   action = 0.0;         // BDI_CONST_ACTION_*: the acted action code the entry learns (its skill_id)
+    double   phase = 0.0;          // 0 active, 1 after-run, 2 relearn, 3 locked, 4 dormant
+    double   ses = 0.0;            // session seconds
+    double   dcd = 0.0;            // remaining grace seconds
+    double   dcd_max = 0.0;        // grace length, seconds: no key, rsm_grace_length(dcd, dcd_shr)
+    double   dcd_shr = 0.0;        // the share of the grace left, 0 to 1, as the server computed it (grace_remaining / grace)
+    double   acd = 0.0;            // fluctuation_current
+    double   acd_max = 0.0;        // fluctuation_max
+    double   tuc = 0.0;            // seconds
+    double   tuc_max = 0.0;        // seconds
+    double   tul = 0.0;            // seconds
+    double   qnt = 0.0;            // seconds the running time slice has run
+    double   qnt_max = 0.0;        // length of the running time slice, seconds: no key, rsm_slice_length(qnt, qnt_left)
+    double   qnt_left = 0.0;       // seconds until the running time slice ends: the QNT cell (avatar.skill.qnt.v1)
+    double   qnt_shr = 0.0;        // the share of the running time slice that has run, 0 to 1 (avatar.skill.qnt.v1)
+    double   slc_len = 0.0;        // time slices in the ring so far, the places 0 to slc_len - 1 are booked (avatar.skill.qnt.v1)
+    double   slc_head = 0.0;       // the ring place of the running time slice
+    double   slc_max = 0.0;        // ring places of the time slices: no key, the slc_len the server has booked
+    double   que_fill = 0.0;       // fill of the queue, 0 to 1
+    double   lck = 0.0;            // lock seconds
+    double   dgexp = 0.0;          // dgEXP
+    double   prg = 0.0;            // progress toward the next plateau, 0 to 100 (avatar.skill.prg.v1)
+    double   vel = 0.0;            // smoothed rate of experience (avatar.skill.prg.v1)
+    double   msr = 0.0;            // seconds the entry has been measured (avatar.skill.prg.v1)
+    double   vol = 0.0;            // units of work booked while the session runs (avatar.skill.prg.v1)
+};
+
+/** One time slice of a figure as the last snapshot of the skill bar port showed it - a copy (usecase:101305, B3). */
+struct VivariumSkillBarView {
+    uint32_t object_id = 0;        // the slice entity
+    double   entry = 0.0;          // the object id of the learning entry the slice belongs to
+    double   bearer = 0.0;         // the figure entity id the slice belongs to
+    double   action = 0.0;         // BDI_CONST_ACTION_*: the action of the slice, the skill_id of its entry
+    double   slot = 0.0;           // the ring place of the slice in its entry, 0 to slc_max - 1
+    double   back = 0.0;           // places behind the running slice of its entry, 0 the newest: (slc_head - slot + slc_len) % slc_len; NaN without the entry
+    double   slice = 0.0;          // the order of the slice, 0 the oldest booked: slc_len - 1 - back; NaN without the entry
+    double   qnt = 0.0;            // the quantity of the slice
+    double   age = 0.0;            // seconds since the slice began: rsm_slice_age(qnt of its entry, back, qnt_max), NaN without the entry
 };
 
 /**
@@ -262,7 +312,7 @@ public:
      * dropped - the world has no pause) on the real port, run the host for its one tick
      * (KernelEmbeddedHost::advance) and read both snapshots. A long frame is a return from the
      * background: ase-time sets its clock forward to the filed position in one write and reports
-     * the position it laid (TIM_REAL_LAID_S); until then the span is the backlog.
+     * the position it laid (TIM_REAL_LAID_S); until then the span stands as pending.
      *
      * The host gets the frame's own seconds and nothing more. A jump is one write into ase-time's
      * clock through the seek or date port; every module computes the span up to the new time in
@@ -278,9 +328,11 @@ public:
     ase::kernel::HostStatus irrigate(uint32_t object_id, double amount_mm);
     /**
      * Cut the branch the internode `object_id` sits on (03.10 step 9): a prune request on the segment
-     * port; the plugin files it in its next Reception run, ase-phytomer fells the branch.
+     * port; the plugin files it in its next Reception run, ase-phytomer fells the branch. `figure` is the
+     * figure of the seat that made the cut, InvalidEntityId while none is led; ase-phytomer books a cut
+     * that fell on its count of work (MIG_ASE_SKILL_RSM B2, Schritt 12).
      */
-    ase::kernel::HostStatus prune(uint32_t object_id);
+    ase::kernel::HostStatus prune(uint32_t object_id, uint32_t figure);
     /**
      * Level the ground of the patch `object_id` (03.8 point 2): a level request on the level port, no
      * value; the plugin files it in its next Reception run, ase-terrain levels the disc of the patch.
@@ -309,15 +361,17 @@ public:
      * Dig the ground down where the player tapped (a spade stroke at run time): a lower request on the lower
      * port with the centre `x`, `z`, the radius `radius_m` and the depth `depth_m`, metres; ase-pl-flora files
      * it in its next Reception run as a dig order to ase-terrain, which lowers the disc. Water stands wherever
-     * the ground then lies at or below the zero level.
+     * the ground then lies at or below the zero level. `figure` is the figure that made the stroke, carried
+     * under kFigureKeyBearer the way prune carries it, so the stroke can be booked as the figure's work
+     * (MIG_ASE_SKILL_RSM B2, register D2650); GODOT_NO_OBJECT names no figure.
      */
-    ase::kernel::HostStatus lower(double x, double z, double radius_m, double depth_m);
+    ase::kernel::HostStatus lower(double x, double z, double radius_m, double depth_m, uint32_t figure);
     /**
      * Heap the ground up where the player tapped (a spade stroke at run time): a raise request on the raise
      * port with the centre `x`, `z`, the radius `radius_m` and the height `height_m`, metres; ase-pl-flora
-     * files it as a heap order to ase-terrain, which raises the disc.
+     * files it as a heap order to ase-terrain, which raises the disc. `figure` as for lower.
      */
-    ase::kernel::HostStatus raise(double x, double z, double radius_m, double height_m);
+    ase::kernel::HostStatus raise(double x, double z, double radius_m, double height_m, uint32_t figure);
     /**
      * Loosen the soil where the player tapped with the hoe or the digging stick (soltar, furar; B0649): a loosen
      * request on the loosen port with the centre `x`, `z`, the half side `half_m` and the tilth depth `depth_m`,
@@ -350,6 +404,15 @@ public:
      * view computes no date: what a year, a month or a day is stands in ase-calendar, never here.
      */
     ase::kernel::HostStatus seek_date(double seq, double year, double month, double month_day, double hour);
+    /**
+     * Move the host's own game clock to the next occurrence of an event kind: an event request on the
+     * event port numbered `seq` with the code `kind` (CAL_CONST_EVNT_<KIND>_CODE, read from config, or
+     * next_kind of the arc record for "Ereignis ▸"). ase-pl-flora writes them as CAL_REQ_EVNT_SEEK_KIND
+     * and CAL_REQ_EVNT_SEEK_SEQ, ase-calendar lays the occurrence minus its lead on the date seek, and
+     * ase-time moves the clock there and files its verdict with `seq`. The view names the kind only: it
+     * computes no target and compares no hour.
+     */
+    ase::kernel::HostStatus seek_event(double seq, double kind);
     /**
      * Shape the relief of the whole ground - a shape request on the elevation port with the height
      * amplitude `height_scale_m` and the ground level `base_height_m`, metres. ase-pl-flora writes them
@@ -485,6 +548,16 @@ public:
      * are not complete, and the HUD's bridge then draws the weather of SHA.
      */
     [[nodiscard]] const VivariumWeatherView& get_weather() const;
+    /**
+     * The sky arc as its three ports showed it (N0448, PLAN_ASE_VIVARIUM_PHASE_06_HUD_EXT): the shares of now of
+     * flora.arc.v1, read in EVERY frame and never held to hud_refresh_ms; the occurrences of flora.almanac.v1, read
+     * again only when the arc's number differs from the set held, so anchor and occurrences never come from two states;
+     * and the codes of flora.event_code.v1 that name their kinds and rings. `known` stays false while a port is not
+     * offered or files no record, and the HUD's bridge then draws the mockup's arc of SHA.
+     */
+    [[nodiscard]] const VivariumArcView& get_arc() const;
+    [[nodiscard]] const VivariumAlmanacView& get_almanac() const;
+    [[nodiscard]] const VivariumEventCodeView& get_event_codes() const;
     /**
      * The tap in the birch and its bark vessel as flora.sap.v1 showed them (N0457): running, the litres held now and
      * the litres held when full. Read with every snapshot; `known` stays false while the port is not offered or files
@@ -625,6 +698,18 @@ public:
     [[nodiscard]] const std::vector<VivariumSurvivalRestView>& get_survival_rests() const;
     /** true when the running host offers the survival rest port of the start configuration. */
     [[nodiscard]] bool survival_rest_offered() const;
+    /** Every learning entry of every figure as the skill port showed it, read with every snapshot; empty without the port. */
+    [[nodiscard]] const std::vector<VivariumSkillView>& get_skills() const;
+    /** true when the running host offers the skill port of the start configuration. */
+    [[nodiscard]] bool skill_offered() const;
+    /** true when the running host offers the skill qnt port of the start configuration (its values join the skill entries). */
+    [[nodiscard]] bool skill_qnt_offered() const;
+    /** true when the running host offers the skill progress port of the start configuration (its values join the skill entries). */
+    [[nodiscard]] bool skill_prg_offered() const;
+    /** Every time slice of every figure as the skill bar port showed it, read with every snapshot; empty without the port. */
+    [[nodiscard]] const std::vector<VivariumSkillBarView>& get_skill_bars() const;
+    /** true when the running host offers the skill bar port of the start configuration. */
+    [[nodiscard]] bool skill_bar_offered() const;
     /** The spoil of the food of every figure that carries food, read with every snapshot; empty without the port. */
     [[nodiscard]] const std::vector<VivariumSurvivalFoodView>& get_survival_foods() const;
     /** true when the running host offers the survival food port of the start configuration. */
@@ -735,7 +820,7 @@ public:
      * has not been set forward over yet: the filed real position less TIM_REAL_LAID_S, 0 once laid.
      */
     [[nodiscard]] uint32_t last_steps() const;
-    [[nodiscard]] double backlog_seconds() const;
+    [[nodiscard]] double pending_seconds() const;
     [[nodiscard]] uint32_t system_count() const;
     [[nodiscard]] uint32_t unit_count() const;
 
@@ -793,11 +878,16 @@ private:
     ase::kernel::HostStatus read_racks();
     ase::kernel::HostStatus read_survival_bodies();
     ase::kernel::HostStatus read_survival_rests();
+    ase::kernel::HostStatus read_skills();
+    ase::kernel::HostStatus read_skill_qnts();
+    ase::kernel::HostStatus read_skill_prgs();
+    ase::kernel::HostStatus read_skill_bars();
     ase::kernel::HostStatus read_survival_foods();
     ase::kernel::HostStatus read_survival_smokes();
     ase::kernel::HostStatus read_survival_fires();
     ase::kernel::HostStatus read_survival_left();
     ase::kernel::HostStatus read_weather();
+    ase::kernel::HostStatus read_arc();
     ase::kernel::HostStatus read_sap();
     ase::kernel::HostStatus read_loose();
     ase::kernel::HostStatus read_camp_bodies();
@@ -825,6 +915,9 @@ private:
     std::unordered_map<uint32_t, VivariumCnpyView>   cnpys_;       // patch object id → canopy of its raster cell of the canopy port, last read (usecase:100387 view the plant)
     VivariumClockView                                clock_;
     VivariumWeatherView                              weather_;     // the weather of the sky, last read (N0449)
+    VivariumArcView                                  arc_;         // the shares of now of the sky arc, read every frame (N0448)
+    VivariumAlmanacView                              almanac_;     // the occurrences of the set the arc's number names (N0448)
+    VivariumEventCodeView                            event_codes_; // the codes the calendar numbers kinds and rings with (N0448)
     VivariumSapView                                  sap_;         // the birch's tap and bark vessel, last read (N0457)
     VivariumLooseView                                loose_;       // the soil's looseness raster, last read (N0456)
     std::vector<VivariumOrganView>                   organs_[GODOT_ORGAN_COUNT];  // index = GODOT_ORGAN_*
@@ -866,6 +959,8 @@ private:
     std::vector<VivariumRackView>                    racks_;    // the tool rack bodies, last read
     std::vector<VivariumSurvivalBodyView>            survival_bodies_;  // each figure's body of the survival body port, last read
     std::vector<VivariumSurvivalRestView>            survival_rests_;   // each figure's rest of the survival rest port, last read
+    std::vector<VivariumSkillView>                   skills_;           // every learning entry of the skill port, last read
+    std::vector<VivariumSkillBarView>                skill_bars_;       // every time slice of the skill bar port, last read
     std::vector<VivariumSurvivalFoodView>            survival_foods_;   // the spoil of each figure's food of the survival food port, last read
     std::vector<VivariumSurvivalSmokeView>           survival_smokes_;  // the soot in the air of each figure's cell of the survival smoke port, last read
     std::vector<VivariumSurvivalFireView>            survival_fires_;   // every fire cell of the fire port, last read
@@ -879,7 +974,7 @@ private:
     const char*                                     failure_step_;
     ase::kernel::HostStatus                          failure_status_;
     double                                           elapsed_in_s_ = 0.0;
-    double                                           backlog_s_ = 0.0;   // filed real seconds of a return not laid yet
+    double                                           pending_s_ = 0.0;   // filed real seconds of a return not laid yet
     double                                           return_real_s_ = 0.0;  // real position a long frame filed, 0 while no return is open
     uint64_t                                         tick_count_ = 0;
     uint32_t                                         last_steps_ = 0;

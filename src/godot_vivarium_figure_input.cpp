@@ -45,7 +45,7 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
 
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/classes/input.hpp>
@@ -79,7 +79,7 @@ double pinch_delta(VivariumFigureControls& controls) {
 }  // namespace
 
 bool VivariumView::figure_input(const ::godot::Ref<::godot::InputEvent>& local) {
-    VivariumFigureControls& controls = figure_controls_;
+    VivariumFigureControls& controls = figure_state_.figure_controls_;
     if (!controls.led_known) {
         return false;
     }
@@ -114,7 +114,7 @@ bool VivariumView::figure_input(const ::godot::Ref<::godot::InputEvent>& local) 
     } else {
         return false;
     }
-    const ::godot::Vector2 point = hud_frame_.affine_inverse().xform(at);  // the mockup's units
+    const ::godot::Vector2 point = hud_state_.hud_frame_.affine_inverse().xform(at);  // the mockup's units
     const ::godot::String figure = ::godot::String::num_uint64(controls.led);
 
     if (moved) {
@@ -213,7 +213,7 @@ bool VivariumView::figure_input(const ::godot::Ref<::godot::InputEvent>& local) 
         }
         controls.tap_finger = VivariumFigureControls::NO_FINGER;
         if (static_cast<double>(point.distance_to(controls.tap_at)) > controls.tap_slop ||
-            hud_clock_ - controls.tap_since > controls.tap_s) {
+            hud_state_.hud_clock_ - controls.tap_since > controls.tap_s) {
             return taken;  // too far or too long: a hold, a stick or an orbit, never a tap
         }
         if (controls.cam_switch.hit(point)) {
@@ -230,8 +230,8 @@ bool VivariumView::figure_input(const ::godot::Ref<::godot::InputEvent>& local) 
         // the ground too, but the world never draws it (WorldDrop skips at_rack): a hit on it is its row in the rack
         // list above the world, and the tap stays the HUD's, so the row's tap reaches tap_item (B0790).
         if (hud_live()) {
-            const VivariumHudHit over = hud_.hit(point, hud_now_);
-            const VivariumHudThing* held = over.key.empty() ? nullptr : hud_.thing(over.key, hud_now_);
+            const VivariumHudHit over = hud_state_.hud_.hit(point, hud_state_.hud_now_);
+            const VivariumHudThing* held = over.key.empty() ? nullptr : hud_state_.hud_.thing(over.key, hud_state_.hud_now_);
             const bool racked = held != nullptr && held->rack;
             const bool world = over.act == nullptr || over.act == VivariumHud::ACT_GROUND ||
                                over.act == VivariumHud::ACT_TREE || over.act == VivariumHud::ACT_TRUNK ||
@@ -252,7 +252,7 @@ bool VivariumView::figure_input(const ::godot::Ref<::godot::InputEvent>& local) 
             // the figure or its arc: the focus opens, and the next tap on either closes it
             controls.focus_open = !controls.focus_open;
             if (controls.focus_open) {
-                controls.focus_since = hud_clock_;
+                controls.focus_since = hud_state_.hud_clock_;
             } else {
                 controls.focus.close();
             }
@@ -268,8 +268,8 @@ bool VivariumView::figure_input(const ::godot::Ref<::godot::InputEvent>& local) 
     // a press: every finger may still become a tap until it wanders or stays
     controls.tap_finger = finger;
     controls.tap_at = point;
-    controls.tap_since = hud_clock_;
-    if (!figure_view_shown_) {
+    controls.tap_since = hud_state_.hud_clock_;
+    if (!figure_state_.figure_view_shown_) {
         return false;  // the fixed view keeps every other touch for the HUD; only the tap goes on
     }
     if (controls.zoom_finger == VivariumFigureControls::NO_FINGER && controls.zoom.hit(point)) {

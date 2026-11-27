@@ -70,6 +70,8 @@ endforeach()
 add_library(ase-adp-godot-host STATIC
     src/godot_host_resource_manager.cpp
     src/godot_host_record.cpp        # the value under a key of a port record (usecase:101344 carry host records to app)
+    src/godot_hud_arc_pure.cpp       # the turn of a ring, the fade of its ends and the names of the calendar's codes, without a Godot type (usecase:101440 grow the interface with skills, EXT.6)
+    src/godot_hud_spine_pure.cpp     # where the plant card's values end beside the body rail, without a Godot type (usecase:101440 grow the interface with skills, B0937)
     src/godot_organ_records.cpp      # organ, bark, tile, sway and instance records as views (usecase:100974 lay out organ records)
     src/godot_terrain_samples.cpp    # terrain records as ground samples (usecase:100971 lay out terrain samples)
     src/godot_view_layout.cpp
@@ -94,7 +96,7 @@ add_library(ase-adp-godot-host STATIC
     src/godot_scene_exposure.cpp     # the exposure of the scene camera for the sky's light (usecase:101415 hand sky light to app, D1721)
     src/godot_order_budget.cpp
     src/godot_cycle_measure.cpp      # the measurement line of one cycle, also compiled into avt-headless (03.6)
-    src/godot_garden_return.cpp      # the return from the background and its catch-up (usecase:100390 return to the garden, 03.6)
+    src/godot_garden_return.cpp      # the return from the background and the frame that sees it laid (usecase:100390 return to the garden, 03.6)
     src/godot_patch_focus.cpp        # the focused patch and the camera's near view onto it (usecase:100386 select a patch, 03.1)
     src/godot_new_seed.cpp           # the seed of every sowing, a new one with every Reiniciar (usecase:100388 sow a new seed, 03.1)
     src/godot_client_window.cpp      # whether the client window opened and its log line (usecase:101019 start the client window)
@@ -103,6 +105,8 @@ add_library(ase-adp-godot-host STATIC
     src/godot_asset_showcase.cpp     # the plan of the asset showcase (PLAN_ASE_VIVARIUM_PHASE_04_PIPELINE 04.7)
     src/godot_hud_context_resolver.cpp  # the brain of the HUD: mode, layers, fan, signs, offers, level (usecase:101440 grow the interface with skills, 06.2)
     src/godot_hud_frame_rate.cpp        # HudFrameRate: the frames per second of a window and their verdict against the floor (usecase:101440 grow the interface with skills)
+    src/godot_hud_debug_rsm.cpp         # the clock, the column order and the ring shares of the RSM table of the debug layer, without a Godot type (usecase:101305 show skill progress)
+    src/godot_hud_activity_bars.cpp     # the order, the places, the lit sum and the hit of the activity bars, without a Godot type (usecase:101305 show skill progress, MIG_ASE_SKILL_RSM B5)
     src/godot_hud_context.cpp           # the rules of the chip spine the six buttons still run on, until ContextResolver carries them (usecase:101440, 06.11)
     src/godot_figure_pose.cpp           # the pose of a figure at the camp fire from its rest record (usecase:2157 go to Sleep, FIRECAMP T.11)
     src/godot_figure_step.cpp           # the way a figure is drawn on between two fixed steps, its turn free of the frame rate (usecase:101588 move player figure over ground, B0943)
@@ -118,14 +122,22 @@ add_library(ase-adp-godot-host STATIC
     godot_hud_ui_pen.hpp is the collector of the HUD pen in the same form (usecase:101440 grow the interface
     with skills, P0722): its name, its measures and its class, each a sub-header of its own, and every reader
     includes the sub-header of its purpose, never the collector.
+    hud/types.hpp is the collector of the thirteen purpose headers the HUD constants were dedicated into
+    (usecase:100387 view the plant, header ratchet): it holds no constant of its own, and every reader includes
+    the narrowest purpose header, never the collector.
     ]]
     include/ase/adp/godot/godot_host_resource_manager.hpp
     include/ase/adp/godot/godot_hud_ui_pen.hpp
+    include/ase/adp/godot/hud/types.hpp
     include/ase/adp/godot/godot_host_resource_manager_class.hpp  # the class and the survival body view, apart from the view types (wipe_guard ratchet)
     include/ase/adp/godot/godot_host_bark_view.hpp      # the bark view, cut from the collector by reader circle (header ratchet, rule 6)
     include/ase/adp/godot/godot_host_bundle_info.hpp    # the bundle info of a boot
     include/ase/adp/godot/godot_host_camp_view.hpp      # the camp body and refuel views (usecase:5436 kindle fire)
     include/ase/adp/godot/godot_host_clock_view.hpp     # the clock view of the host
+    include/ase/adp/godot/godot_host_arc_view.hpp       # the sky arc views of the host: flora.arc.v1, flora.almanac.v1, flora.event_code.v1 (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_hud_arc_pure.hpp        # the turn, the fade and the code names of the sky arc without a Godot type (usecase:101440, EXT.6)
+    include/ase/adp/godot/godot_hud_spine_pure.hpp      # where the plant card's values end beside the body rail without a Godot type (usecase:101440, B0937)
+    include/ase/adp/godot/arc/types.hpp                 # the keys of the three arc ports and the names the arc's units share (usecase:101440, EXT.6)
     include/ase/adp/godot/godot_host_figure_view.hpp    # the figure view (PLAN_ASE_VIVARIUM_PHASE_07_FIGURE)
     include/ase/adp/godot/godot_host_fire_view.hpp      # the fire view of ase-survival
     include/ase/adp/godot/godot_host_organ_view.hpp     # the organ view
@@ -164,7 +176,6 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/patch/types.hpp
     include/ase/adp/godot/loose/types.hpp
     include/ase/adp/godot/host/types.hpp
-    include/ase/adp/godot/hud/types.hpp
     include/ase/adp/godot/pen/types.hpp       # the HUD pen's measures in screen pixels, cut from godot_hud_ui_pen.hpp (usecase:101440, P0722)
     include/ase/adp/godot/godot_hud_ui_pen_decl.hpp   # the name UiPen for a header that passes the pen on by reference (usecase:101440, P0722)
     include/ase/adp/godot/godot_hud_ui_pen_class.hpp  # the class UiPen for a unit that draws with the pen (usecase:101440, P0722)
@@ -210,6 +221,9 @@ add_library(ase-adp-godot-host STATIC
     include/ase/adp/godot/godot_hud_frame_rate.hpp    # HudFrameRate without a Godot type, callable by the host tests (usecase:101440 grow the interface with skills)
     include/ase/adp/godot/godot_hud_ui_frame_rate.hpp # UiFrameRate: the small number of the frames per second beside the battery (usecase:101440 grow the interface with skills)
     include/ase/adp/godot/godot_hud_context.hpp
+    include/ase/adp/godot/godot_hud_debug_rsm.hpp     # the entries, the clock, the column order and the ring shares of the RSM table without a Godot type (usecase:101305 show skill progress)
+    include/ase/adp/godot/godot_hud_activity_bars.hpp # the slices, the layout and the places of the activity bars without a Godot type (usecase:101305 show skill progress, MIG_ASE_SKILL_RSM B5)
+    include/ase/adp/godot/rsm/types.hpp               # the views of the debug status area and the numbers of the RSM table (usecase:101305)
     include/ase/adp/godot/godot_figure_pose.hpp
     include/ase/adp/godot/godot_figure_step.hpp   # FigureStepWay, figure_step_take, figure_turn_closed without a Godot type (usecase:101588 move player figure over ground)
     include/ase/adp/godot/godot_asset_binding.hpp
@@ -249,7 +263,8 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_node.cpp  # VivariumView: lifecycle, host boot, frame
     src/godot_vivarium_log.cpp          # VivariumView: the one log stream, patch baseline, stage and condition events
     src/godot_vivarium_config.cpp       # VivariumView: start configuration, stage, modes, view section
-    src/godot_vivarium_host_config.cpp  # VivariumView: ports, operations, pour
+    src/godot_vivarium_host_config.cpp  # VivariumView: record ports, pour
+    src/godot_vivarium_request_config.cpp  # read_request_config: request ports and every submit operation
     src/godot_vivarium_host_land.cpp  # VivariumView: patches, ground, brooks
     src/godot_vivarium_layout.cpp       # VivariumView: logical surface, bands, places, buttons, texts
     src/godot_vivarium_assets.cpp       # VivariumView: asset list of the play stage and its manifest (03.2)
@@ -298,6 +313,7 @@ add_library(ase-adp-godot SHARED
     src/godot_vivarium_hud_verb.cpp         # VivariumView::send_hud_verb: a terrain verb through its port, the planting hole of the spade (usecase:100388, B0292)
     src/godot_vivarium_hud_input.cpp   # VivariumView: the touches through the HUD, its clock and its requests over the ports (usecase:101440, 06.5)
     src/godot_vivarium_hud_place.cpp    # VivariumView: the places a tap reaches the HUD through, logged on change (usecase:101440, 06.5/06.11)
+    src/godot_vivarium_hud_place_brook.cpp  # brook_place: the pixel of the brook's bed a tap lands in, for the place lines (usecase:101440, 06.11)
     src/godot_vivarium_return.cpp       # VivariumView: background, foreground and the return to the garden, the HUD opens on the trail (usecase:100390, 03.6/06.4 A08)
     src/godot_vivarium_frame_rate.cpp   # VivariumView: the frames per second of every frame and the line of an edge (usecase:101440 grow the interface with skills)
     src/godot_config_read.cpp           # readers of one key of the start configuration
@@ -350,8 +366,10 @@ add_library(ase-adp-godot SHARED
     src/godot_hud_survival_air_mark.cpp # SurvivalAirMark: the mark AR TOXICO in the sky band while the owner rates the air worse than normal (usecase:101440, U06)
     src/godot_hud_survival_spoil_ring.cpp # SurvivalSpoilRing: the ring ESTRAGO around the food of the bag, closing as the food spoils (usecase:101440, U07)
     src/godot_hud_survival_water_mark.cpp # SurvivalWaterMark: the drop at the bag, ÁGUA TURVA while the figure is poisoned (usecase:101440, U08)
+    src/godot_hud_survival_view.cpp     # SurvivalView: the eight survival marks U01 to U08 bound and drawn as one part of VivariumHud (usecase:101440)
     src/godot_hud_ui_glyph_chain.cpp    # UiGlyphChain: the day's phases on the sky band with daylight and the wandering sun or moon (usecase:101440, 06.3)
     src/godot_hud_ui_item_shadow.cpp    # UiItemShadow: the drop-shadow of a thing's drawing, its mask blurred by a Gaussian and kept as a texture (usecase:101440, 06.3)
+    src/godot_hud_ui_activity_art.cpp   # UiActivityArt: the thirteen activity symbols read from activity_art.json, no fallback (usecase:101440, MIG_ASE_SKILL_RSM B7)
     src/godot_hud_ui_item_sprite.cpp    # UiItemSprite: a carried thing's SVG paths from item_art.json, fitted into its box with fill, stroke and level (usecase:101440, 06.3)
     src/godot_hud_ui_svg_path.cpp       # read_svg_path: SVG path data and the curve pieces of every HUD shape, flattened by one rule (usecase:101440, 06.3)
     src/godot_hud_ui_word_fill.cpp      # fill_words: the one filler of a word's {name} port values, refusing an unfilled one (usecase:101440, 06.0)
@@ -383,6 +401,14 @@ add_library(ase-adp-godot SHARED
     src/godot_hud_sky_band.cpp          # SkyBand: the sky band at the top, the day's phases, the light and the wandering sun or moon, bridge gap N0460 (usecase:5606 observe the sky, 06.4)
     src/godot_hud_year_ring.cpp         # YearRing: the year of the calendar sheet, seasons, events and the next stage, bridge gap N0460, N0450, N0454 (usecase:5606 observe the sky, 06.4)
     src/godot_hud_day_ring.cpp          # DayRing: the day of the calendar sheet, light, six phases, sun or moon and the date, bridge gap N0460 (usecase:5606 observe the sky, 06.4)
+    src/godot_hud_sky_arc.cpp           # SkyArc: the sky arc of the top band, three rigid rings under a fixed needle with the readout, bridge gap N0448 (usecase:101440, EXT.6)
+    src/godot_hud_arc_ring.cpp          # ArcRing: one rigid disc, laid once per set and turned by the share of now (usecase:101440, EXT.6)
+    src/godot_hud_arc_sign.cpp          # ArcSign: one occurrence as a sign on a dark disc, a node or a dot, its word tangent to the ring (usecase:101440, EXT.6)
+    src/godot_hud_arc_needle.cpp        # ArcNeedle: the fixed needle and the dot of now on each ring (usecase:101440, EXT.6)
+    src/godot_hud_arc_readout.cpp       # ArcReadout: the SURA date and the next event with its deadline (usecase:101440, EXT.6)
+    src/godot_hud_ui_arc_fade.cpp       # UiArcFade: the opacity of a point of the arc from its x place, the ends fade out (usecase:101440, EXT.6)
+    src/godot_vivarium_hud_bridge_arc.cpp  # VivariumArcBridge and VivariumView::bridge_arc: the arc's frame, the mockup's while a port is silent, bridge gap N0448 (usecase:101440, EXT.6)
+    src/godot_vivarium_host_config_arc.cpp # read_arc_ports: the names of the three arc ports of the start configuration (usecase:101440, EXT.6)
     src/godot_hud_forecast_strip.cpp    # ForecastStrip: the next phases with glyph, temperature and millimetres, bridge gap N0449 (usecase:5606 observe the sky, 06.4)
     src/godot_hud_hourglass.cpp         # Hourglass: the time lapse of the game range as a row of factor chips, bridge gap N0459 (usecase:101120 clock the growth cycle, 06.4)
     src/godot_hud_calendar_sheet.cpp    # CalendarSheet: the sky mode's sheet of year ring, day ring, weather strip and hourglass (usecase:5606 observe the sky, 06.4)
@@ -405,6 +431,9 @@ add_library(ase-adp-godot SHARED
     src/godot_hud_trail_view.cpp        # TrailView: the trail on arrival, dim, title, span, spine of the last events, play chip, bridge gap N0450 (usecase:100390 return to the garden, 06.4)
     src/godot_hud_system_ring.cpp       # SystemRing: the mode sys, dim, hold ring with its arc toward the reset, words, close (usecase:101019 start the client window, 06.4)
     src/godot_hud_debug_layer.cpp       # DebugLayer: three status lines, the handle, the drawer with title, fold, tabs, chips and note (usecase:101120 clock the growth cycle, 06.4)
+    src/godot_hud_debug_rsm_draw.cpp    # DebugRsmTable: the prototype's timer grid, a column per learning entry (usecase:101305 show skill progress, MIG_ASE_SKILL_RSM B4)
+    src/godot_hud_activity_bars_draw.cpp  # ActivityBars: the bars of the led figure's time slices right of the hand, hud.bars (usecase:101305 show skill progress, MIG_ASE_SKILL_RSM B5)
+    src/godot_hud_skill_rings_draw.cpp  # SkillRings: the two wheels DCD and ACD of the prototype on the top band of the game HUD (usecase:101305 show skill progress, MIG_ASE_SKILL_RSM B5)
     src/godot_hud_debug_layer_lay.cpp   # DebugLayer::lay: where the tabs, the chips of TEMPO, SALTO, DATA, RELEVO and the date fields stand
     src/godot_asset_loader.cpp   # the one loader of bound asset files: GLTFDocument, template mesh, material (03.2)
     src/godot_asset_showcase_scene.cpp  # the asset showcase in Godot: sphere, plane, model (04.7)

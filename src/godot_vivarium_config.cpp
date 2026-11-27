@@ -252,11 +252,11 @@ bool VivariumView::load_view(const ::godot::Dictionary& root) {
         !read_number(view, GODOT_VIEW_KEY_HEADING, heading) || !(heading >= 0.0) || !(heading < 360.0)) {
         return fail_config("view.camera");
     }
-    scene_camera_.distance_m = static_cast<float>(distance);
-    scene_camera_.height_m = static_cast<float>(height);
-    scene_camera_.look_m = static_cast<float>(look);
-    scene_camera_.fov_deg = static_cast<float>(fov);
-    scene_camera_.heading_deg = static_cast<float>(heading);
+    scene_state_.scene_camera_.distance_m = static_cast<float>(distance);
+    scene_state_.scene_camera_.height_m = static_cast<float>(height);
+    scene_state_.scene_camera_.look_m = static_cast<float>(look);
+    scene_state_.scene_camera_.fov_deg = static_cast<float>(fov);
+    scene_state_.scene_camera_.heading_deg = static_cast<float>(heading);
     double budget_ms = 0.0;
     double headroom = 0.0;
     double ceiling = 0.0;
@@ -273,31 +273,31 @@ bool VivariumView::load_view(const ::godot::Dictionary& root) {
         ase::math::floor(static_cast<float>(over)) != static_cast<float>(over)) {
         return fail_config("view.orders");
     }
-    order_budget_ = OrderBudget{};
-    order_budget_.frame_budget_ms = budget_ms;
-    order_budget_.headroom = headroom;
-    order_budget_.ceiling = static_cast<uint32_t>(ceiling);
-    order_budget_.shown = static_cast<uint32_t>(start);
-    order_budget_.calm_frames = static_cast<uint32_t>(calm);
-    order_budget_.over_frames = static_cast<uint32_t>(over);
-    if (!order_budget_valid(order_budget_)) {
+    scene_state_.order_budget_ = OrderBudget{};
+    scene_state_.order_budget_.frame_budget_ms = budget_ms;
+    scene_state_.order_budget_.headroom = headroom;
+    scene_state_.order_budget_.ceiling = static_cast<uint32_t>(ceiling);
+    scene_state_.order_budget_.shown = static_cast<uint32_t>(start);
+    scene_state_.order_budget_.calm_frames = static_cast<uint32_t>(calm);
+    scene_state_.order_budget_.over_frames = static_cast<uint32_t>(over);
+    if (!order_budget_valid(scene_state_.order_budget_)) {
         return fail_config("view.orders");
     }
     double pick = 0.0;
     if (!read_number(view, GODOT_VIEW_KEY_PICK, pick) || !(pick > 0.0)) {
         return fail_config("view.pick_px");
     }
-    pick_px_ = static_cast<float>(pick);
+    scene_state_.pick_px_ = static_cast<float>(pick);
     double least_ring = 0.0;
     if (!read_number(view, GODOT_VIEW_KEY_LEAST_RING, least_ring) || !(least_ring > 0.0)) {
         return fail_config("view.least_ring_px");
     }
-    least_ring_px_ = static_cast<float>(least_ring);
+    scene_state_.least_ring_px_ = static_cast<float>(least_ring);
     double flatten = 0.0;
     if (!read_number(view, GODOT_VIEW_KEY_FLATTEN, flatten) || !(flatten > 0.0)) {
         return fail_config("view.flatten_m");
     }
-    flatten_m_ = static_cast<float>(flatten);
+    scene_state_.flatten_m_ = static_cast<float>(flatten);
     return true;
 }
 

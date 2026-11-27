@@ -45,7 +45,7 @@
 #include <ase/adp/godot/godot_view_layout.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 #include <ase/math/math.hpp>
 
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
@@ -270,11 +270,11 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
 
     if (start_mode_ == GODOT_START_MODE_NONE) {
         // THE CHOICE stands where the loading line stands later, under the HUD's frame (place_hud): one mockup
-        // unit is placement_.scale * hud_unit_ logical pixels on the middle band. Its anchor is the loading
+        // unit is placement_.scale * hud_state_.hud_unit_ logical pixels on the middle band. Its anchor is the loading
         // line's centre on the canvas, carried into mockup units, the first row one row gap above it, so the
         // rows stand around the line.
         use_canvas();
-        const float k = static_cast<float>(static_cast<double>(placement_.scale) * hud_unit_);
+        const float k = static_cast<float>(static_cast<double>(placement_.scale) * hud_state_.hud_unit_);
         start_frame_ = ::godot::Transform2D(0.0f, ::godot::Vector2(k, k), 0.0f,
                                             ::godot::Vector2(placement_.offset_x, placement_.middle_y));
         if (k > 0.0f) {
@@ -283,7 +283,7 @@ void VivariumView::draw_start_screen(const ::godot::Rect2& visible) {
                                             line_y * placement_.scale);
             ::godot::Vector2 anchor = start_frame_.affine_inverse().xform(line);
             UiPen pen(*node_);
-            start_choice_.draw(pen, start_frame_, anchor, hud_clock_, hud_still_);
+            start_choice_.draw(pen, start_frame_, anchor, hud_state_.hud_clock_, hud_state_.hud_still_);
             // The start chip on the canvas, in the logical pixels a tap arrives in (start_input carries it back
             // under start_frame_): named once per new place, so a run that starts the world by tapping it, as the
             // keeper does, reads where it stands instead of guessing it (usecase:100387).

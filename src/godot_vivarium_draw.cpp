@@ -34,9 +34,11 @@
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_view_layout.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
+#include <ase/adp/godot/arc/types.hpp>
 #include <ase/adp/godot/asset/types.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
+#include <ase/adp/godot/hud/window/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/math/math.hpp>
@@ -46,7 +48,9 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/rect2i.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 
 #include <cstddef>
@@ -66,6 +70,30 @@ namespace {
         return {};
     }
     return names[index];
+}
+
+/**
+ * The flank line `debug surface inset_top= inset_bottom= cutout=x,y,w,h` (PLAN_ASE_VIVARIUM_PHASE_06_HUD_EXT,
+ * E02): the safe area of the surface the frame is placed on and the display's first cut-out, the camera's,
+ * both in logical pixels of the canvas. The cut-out comes in window pixels like the safe area in surface(),
+ * so the same inverse of the viewport's final transform maps it onto the canvas; a display without a
+ * cut-out writes the empty rectangle 0,0,0,0.
+ */
+::godot::String surface_line(::godot::Node2D* node, const ViewSurface& surface) {
+    const ::godot::Rect2 visible = node->get_viewport_rect();
+    const ::godot::Transform2D to_canvas = node->get_viewport()->get_final_transform().affine_inverse();
+    const ::godot::TypedArray<::godot::Rect2> cutouts = ::godot::DisplayServer::get_singleton()->get_display_cutouts();
+    ::godot::Rect2 cutout;
+    if (!cutouts.is_empty()) {
+        const ::godot::Rect2 window = cutouts[0];
+        const ::godot::Vector2 start = to_canvas.xform(window.position) - visible.position;
+        const ::godot::Vector2 end = to_canvas.xform(window.position + window.size) - visible.position;
+        cutout = ::godot::Rect2(start, end - start);
+    }
+    const auto pixel = [](float value) { return ::godot::String::num(value, GODOT_ARC_PIXEL_DECIMALS); };
+    return ::godot::String(GODOT_ARC_LINE_SURFACE) + " inset_top=" + pixel(surface.inset_top) +
+           " inset_bottom=" + pixel(surface.inset_bottom) + " cutout=" + pixel(cutout.position.x) + "," +
+           pixel(cutout.position.y) + "," + pixel(cutout.size.x) + "," + pixel(cutout.size.y);
 }
 
 /** One whole part of the SURA number - every part is a count, the hour is its whole hour. */
@@ -171,10 +199,20 @@ void VivariumView::draw() {
         return;
     }
     drawn_surface_ = surface();
+    // Safe area and cut-out exist on a handset only (surface()): there the line is written at the first
+    // frame and on every change, the acceptance reads the cut-out the arc must keep clear from it (E02).
+    if (::godot::OS::get_singleton()->has_feature(GODOT_FEATURE_MOBILE)) {
+        const ::godot::String line = surface_line(node_, drawn_surface_);
+        const std::string flank(line.utf8().get_data());
+        if (flank != hud_state_.hud_surface_) {
+            hud_state_.hud_surface_ = flank;
+            note(line);
+        }
+    }
     const ::godot::Rect2 visible(0.0f, 0.0f, drawn_surface_.width, drawn_surface_.height);
     use_canvas();
     // The canvas draws over the 3D scene (03.1 point 2): while the scene stands, no background covers it.
-    if (scene_ == nullptr) {
+    if (scene_state_.scene_ == nullptr) {
         node_->draw_rect(visible, ::godot::Color::hex(GODOT_COLOR_BACKGROUND));
     }
     if (!configured_) {
@@ -303,16 +341,16 @@ uint32_t VivariumView::ground_color(const VivariumPatchView* patch) const {
     if (patch == nullptr || patch->soil >= GODOT_SOIL_COUNT) {
         return GODOT_COLOR_SOIL;
     }
-    const auto role = asset_roles_.find(patch->soil == GODOT_SOIL_FOREST ? GODOT_ROLE_GROUND_FOREST
+    const auto role = scene_state_.asset_roles_.find(patch->soil == GODOT_SOIL_FOREST ? GODOT_ROLE_GROUND_FOREST
                                                                          : GODOT_ROLE_GROUND_MEADOW);
-    return asset_color(assets_, role == asset_roles_.end() ? std::string() : role->second, GODOT_COLOR_SOIL);
+    return asset_color(scene_state_.assets_, role == scene_state_.asset_roles_.end() ? std::string() : role->second, GODOT_COLOR_SOIL);
 }
 
 void VivariumView::draw_patch(const ::godot::Rect2& rect, uint32_t place) {
     const VivariumPatchView* patch = resources_.get_patch_at(place);
     // With the 3D scene standing the patch is a frame over it - its label, its soil water and the
     // selection; the ground, the cover and the seeds are the scene's (03.1 point 3).
-    const bool flat = scene_ == nullptr;
+    const bool flat = scene_state_.scene_ == nullptr;
     if (flat) {
         node_->draw_rect(rect, ::godot::Color::hex(ground_color(patch)));
     }

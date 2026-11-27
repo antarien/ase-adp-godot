@@ -39,8 +39,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-09
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.39.00039 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -95,10 +95,20 @@ public:
 
     /**
      * Draws the rows down the column at `column_x` (SX) under `frame`, `elapsed` seconds after the focus
-     * opened; `still` puts every animation at its end, `debug` adds each row's source.
+     * opened; `still` puts every animation at its end, `debug` adds each row's source. While `rail` (the body rail
+     * draws in the same view) the values and bars end at the rail's content (spine_value_end, B0937).
      */
     void draw(UiPen& canvas, const ::godot::Transform2D& frame, double column_x, double elapsed,
-              bool still, bool debug);
+              bool still, bool debug, bool rail);
+
+    /**
+     * The widest row of this frame measured from the column to the rail's content while the rail draws (B1001): the
+     * text inset, the label, the inset again and the value, plus the room the values leave before the rail's content.
+     */
+    double need(const UiPen& canvas, const ::godot::Transform2D& frame);
+
+    /** hud_survival_rail_track_left: where the body rail's content begins, the bound the card yields to. */
+    double rail_left() const { return rail_left_; }
 
 private:
     const UiTheme* theme_ = nullptr;   // the theme the text blocks of a new row bind against
@@ -122,6 +132,7 @@ private:
     double label_size_ = 0.0;          // hud_focus_row_label_size
     double label_delay_ = 0.0;         // hud_focus_row_label_delay
     double value_x_ = 0.0;             // hud_focus_row_value_x
+    double rail_left_ = 0.0;           // hud_survival_rail_track_left: where the body rail's content begins
     double value_size_ = 0.0;          // hud_focus_row_value_size
     double value_strong_size_ = 0.0;   // hud_focus_row_value_strong_size
     double value_delay_ = 0.0;         // hud_focus_row_value_delay

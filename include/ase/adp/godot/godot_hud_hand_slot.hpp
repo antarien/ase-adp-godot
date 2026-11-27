@@ -46,8 +46,8 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @register    N0451 (flora.carry.v1), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -106,6 +106,9 @@ class HandSlot {
 public:
     /** Binds measures, colours, words, icons and levels; false with the missing name in `failed`. */
     bool bind(const UiTheme& theme, std::string& failed);
+
+    /** Hands the activity symbols on to the verb chips of the mode (HandMode::bind_activities). */
+    void bind_activities(const UiActivityArt& activities) { mode_.bind_activities(activities); }
 
     /** Draws the hand for this frame; false with the reason in `failed`. */
     bool draw(UiPen& canvas, const ::godot::Transform2D& frame, const HandSlotFrame& now,

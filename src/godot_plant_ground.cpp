@@ -18,8 +18,8 @@
  * @usecase     usecase:101339 - show the ground around plant
  * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-10-26
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -167,6 +167,62 @@ void widen(uint32_t vertex, bool& any, uint32_t& first, uint32_t& last) {
     first = any && first < vertex ? first : vertex;
     last = any && last > vertex ? last : vertex;
     any = true;
+}
+
+/** Appends the reach of every disc of `one` that `other` does not carry, as min x, min z, max x, max z: the ground a
+ *  disc that came, went or changed can mark anew. */
+void disc_reach(const std::vector<PlantGroundDisc>& one, const std::vector<PlantGroundDisc>& other,
+                std::vector<float>& boxes) {
+    for (const PlantGroundDisc& disc : one) {
+        bool kept = false;
+        for (const PlantGroundDisc& was : other) {
+            kept = kept || (was.x == disc.x && was.z == disc.z && was.radius == disc.radius && was.height == disc.height);
+        }
+        if (!kept) {
+            boxes.insert(boxes.end(),
+                         {disc.x - disc.radius, disc.z - disc.radius, disc.x + disc.radius, disc.z + disc.radius});
+        }
+    }
+}
+
+/** Appends the reach of every bed of `one` that `other` does not carry, as min x, min z, max x, max z. */
+void bed_reach(const std::vector<PlantGroundBed>& one, const std::vector<PlantGroundBed>& other,
+               std::vector<float>& boxes) {
+    for (const PlantGroundBed& bed : one) {
+        bool kept = false;
+        for (const PlantGroundBed& was : other) {
+            kept = kept || (was.x == bed.x && was.z == bed.z && was.end_x == bed.end_x && was.end_z == bed.end_z &&
+                            was.half_m == bed.half_m);
+        }
+        if (!kept) {
+            const float low_x = bed.x < bed.end_x ? bed.x : bed.end_x;
+            const float high_x = bed.x < bed.end_x ? bed.end_x : bed.x;
+            const float low_z = bed.z < bed.end_z ? bed.z : bed.end_z;
+            const float high_z = bed.z < bed.end_z ? bed.end_z : bed.z;
+            boxes.insert(boxes.end(),
+                         {low_x - bed.half_m, low_z - bed.half_m, high_x + bed.half_m, high_z + bed.half_m});
+        }
+    }
+}
+
+/** Lays the mark of `vertex` anew (mark_of) and codes it when its colour changed; `changed` says whether it did.
+ *  False when the coding failed. */
+bool remark(const std::vector<PlantGroundDisc>& discs, const std::vector<PlantGroundBed>& beds,
+            PlantGroundSurface& surface, uint32_t vertex, bool& changed) {
+    changed = false;
+    PlantMeshArrays& arrays = surface.arrays;
+    const std::size_t at = static_cast<std::size_t>(vertex) * 3u;
+    float red = 0.0f;
+    float green = 0.0f;
+    mark_of(discs, beds, arrays.positions[at], arrays.positions[at + 1u], arrays.positions[at + 2u], red, green);
+    float* color = arrays.colors.data() + static_cast<std::size_t>(vertex) * 4u;
+    if (color[0] == red && color[1] == green) {
+        return true;
+    }
+    color[0] = red;
+    color[1] = green;
+    changed = true;
+    return encode_ground(surface, vertex);
 }
 
 }  // namespace
@@ -347,24 +403,54 @@ bool patch_ground(const std::vector<VivariumTerrainView>& samples, const std::ve
             widen(vertex, marked_any, marked_first, marked_last);
         }
     }
-    // the vertices whose mark changed: a dig levels or unlevels ground, a flat or a bed comes or goes
-    const auto vertices = static_cast<uint32_t>(arrays.positions.size() / 3u);
-    for (uint32_t v = 0u; v < vertices; ++v) {
-        float red = 0.0f;
-        float green = 0.0f;
-        const std::size_t at = static_cast<std::size_t>(v) * 3u;
-        mark_of(discs, beds, arrays.positions[at], arrays.positions[at + 1u], arrays.positions[at + 2u], red, green);
-        float* color = arrays.colors.data() + static_cast<std::size_t>(v) * 4u;
-        if (color[0] == red && color[1] == green) {
+    // THE MARKS FOLLOW ONLY WHAT CHANGED (operator order 2026-11-25: the ground is written where its vertices change,
+    // never whole). A dig moves vertices: each moved vertex takes its mark anew, because a mark depends on its height.
+    // A disc or bed that came, went or changed marks anew the vertices within its reach and no other. Without either,
+    // no vertex is visited. Soil water, condition and season reach the ground through the shader's parameters only
+    // (mark_plant_stands, light_plant_ground_season) and never write a vertex.
+    for (std::size_t i = 0u; i < samples.size() && moved_any; ++i) {
+        if (surface.slots[i].vertex < 0) {
             continue;
         }
-        color[0] = red;
-        color[1] = green;
-        if (!encode_ground(surface, v)) {
+        const auto vertex = static_cast<uint32_t>(surface.slots[i].vertex);
+        if (vertex < moved_first || vertex > moved_last) {
+            continue;
+        }
+        bool changed = false;
+        if (!remark(discs, beds, surface, vertex, changed)) {
             return false;
         }
-        widen(v, marked_any, marked_first, marked_last);
+        if (changed) {
+            widen(vertex, marked_any, marked_first, marked_last);
+        }
     }
+    std::vector<float> boxes;
+    disc_reach(discs, surface.discs, boxes);
+    disc_reach(surface.discs, discs, boxes);
+    bed_reach(beds, surface.beds, boxes);
+    bed_reach(surface.beds, beds, boxes);
+    const auto vertices = static_cast<uint32_t>(arrays.positions.size() / 3u);
+    for (uint32_t v = 0u; v < vertices && !boxes.empty(); ++v) {
+        const std::size_t at = static_cast<std::size_t>(v) * 3u;
+        const float x = arrays.positions[at];
+        const float z = arrays.positions[at + 2u];
+        bool reached = false;
+        for (std::size_t b = 0u; b + 3u < boxes.size() && !reached; b += 4u) {
+            reached = x >= boxes[b] && z >= boxes[b + 1u] && x <= boxes[b + 2u] && z <= boxes[b + 3u];
+        }
+        if (!reached) {
+            continue;
+        }
+        bool changed = false;
+        if (!remark(discs, beds, surface, v, changed)) {
+            return false;
+        }
+        if (changed) {
+            widen(v, marked_any, marked_first, marked_last);
+        }
+    }
+    surface.discs = discs;
+    surface.beds = beds;
     const PlantGroundLayout& layout = surface.layout;
     if (moved_any) {
         // a reader that keeps what it derived from the places (SignMarker::follow_brook) sees them move (P0692)

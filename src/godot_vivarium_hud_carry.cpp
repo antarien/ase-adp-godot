@@ -29,7 +29,8 @@
 
 #include <ase/adp/godot/godot_vivarium_hud_carry.hpp>
 #include <ase/adp/godot/godot_host_figure_view.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
+#include <ase/adp/godot/hud/touch/types.hpp>
 #include <ase/kernel/kernel_embedded_host.hpp>
 
 #include <ase/math/math.hpp>

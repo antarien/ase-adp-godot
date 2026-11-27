@@ -69,9 +69,11 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
+#include <ase/adp/godot/arc/types.hpp>
+#include <ase/adp/godot/godot_hud_arc_pure.hpp>
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/log/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
@@ -204,6 +206,46 @@ void VivariumView::ask_jump(const VivariumDebugJump& jump, uint32_t index) {
     }
     if (jump.moonrise) {
         ask_moonrise(next);  // the next rise of a moon (godot_vivarium_moonrise.cpp)
+        return;
+    }
+    if (!jump.event.is_empty()) {
+        // AN EVENT JUMP (row REGISTRO, EXT.8) names a kind of ase-calendar's event register by its word; its code
+        // is the calendar's own (flora.event_code.v1), and "next" takes the kind of the next event the arc shows
+        // (next_kind of flora.arc.v1). The write carries the request number and the code only: which occurrence
+        // comes next and how long before it the jump lands is CalendarEvntSeekCalcSystem's, whether it lies ahead
+        // ase-time's. The view computes no game hour and the pace stays.
+        const VivariumEventCodeView& codes = resources_.get_event_codes();
+        const ::godot::CharString word = jump.event.utf8();
+        double code = GODOT_HOUR_NONE;
+        bool named = false;
+        if (jump.event == GODOT_ARC_EVENT_NEXT) {
+            const VivariumArcView& arc = resources_.get_arc();
+            code = arc.next_kind;
+            named = codes.known && arc.known && arc.next_kind != codes.none;
+        } else {
+            named = arc_kind_code(codes, word.get_data(), code);
+        }
+        const ::godot::String kind_words = "kind=" + jump.event + " code=" + ::godot::String::num(code, 0);
+        if (!named) {
+            note("debug arc jump " + kind_words + " seq=0 result=" + (codes.known ? "unnamed" : "unmeasured"));
+            return;
+        }
+        next.event = true;
+        next.event_code = code;
+        if (!take_seq(next)) {
+            note("debug arc jump " + kind_words + " seq=0 result=" +
+                 (clock.seek_bounds_known ? "seq_spent" : "bounds_unknown"));
+            return;
+        }
+        const HostStatus status = resources_.seek_event(next.seq, code);
+        note("debug arc jump " + kind_words + " seq=" + ::godot::String::num(next.seq, 0) +
+             " result=" + GodotHostResourceManager::status_name(status));
+        if (status != ase::kernel::HostStatusOk) {
+            return;
+        }
+        next.sought_run_s = GODOT_HOUR_NONE;  // stamped at the clock's write, ase-time's first verdict on next.seq
+        debug_.jump = next;
+        raise_jump_screen();
         return;
     }
     // AN HOUR JUMP: the button's hour of the game day, sent as such. ase-time lays its next occurrence from its
@@ -357,6 +399,18 @@ void VivariumView::follow_debug() {
              measure(selected_place_));
     } else if (jump.moonrise) {
         follow_moonrise(at_words);  // the moons in the camera's frustum (godot_vivarium_moonrise.cpp)
+    } else if (jump.event) {
+        // THE LANDING OF AN EVENT JUMP: what the arc shows at the new time - the kind of its next event and the
+        // game hours until it, both ase-calendar's. A next event of another kind than the one asked, or one
+        // further than the calendar's lead, is ase-calendar's finding and stays visible in the note.
+        const VivariumArcView& arc = resources_.get_arc();
+        const char* shown = arc_kind_name(resources_.get_event_codes(), arc.next_kind);
+        note("debug arc jump reached code=" + ::godot::String::num(jump.event_code, 0) +
+             " seq=" + ::godot::String::num(jump.seq, 0) +
+             " next_kind=" + ::godot::String(shown == nullptr ? "unnamed" : shown) +
+             " next_in_h=" + ::godot::String::num(arc.next_in_h, GODOT_LOG_DECIMALS) +
+             " next_in_d=" + ::godot::String::num(arc.next_in_d, 0) + at_words + " " +
+             measure(selected_place_));
     } else {
         note("debug jump reached hour=" + ::godot::String::num(jump.hour, GODOT_LOG_DECIMALS) + at_words + " " +
              measure(selected_place_));

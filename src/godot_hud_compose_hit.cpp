@@ -29,7 +29,10 @@
  */
 
 #include <ase/adp/godot/godot_hud_compose.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
+#include <ase/adp/godot/hud/hand/types.hpp>
+#include <ase/adp/godot/hud/touch/types.hpp>
+#include <ase/adp/godot/rsm/types.hpp>
 
 #include <godot_cpp/core/math.hpp>
 
@@ -86,18 +89,35 @@ VivariumHudHit VivariumHud::hit(const ::godot::Vector2& point, const VivariumHud
         }
         // The bag icon, the belt and the hand stand on the bottom band, cover_.hand below the middle one.
         const ::godot::Vector2 at_hand = point - ::godot::Vector2(0.0f, static_cast<float>(cover_.hand));
-        const char* icon = bag_icon_.hit(at_hand);
+        // The band switch in the gap of the dividers over the hand turns the band to the slots or the bars
+        // (operator order 2026-11-25); while the bars hold the band, the hidden slots take no tap.
+        if (bars_.switch_hit(at_hand)) {
+            out.act = GODOT_RSM_ACT_BAND;
+            return out;
+        }
+        const bool slots = bars_.band() != GODOT_RSM_BAND_BARS;
+        const char* icon = slots ? bag_icon_.hit(at_hand) : nullptr;
         if (icon != nullptr) {
             return keyed(icon, std::string());
         }
-        const BeltHolsterHit belt = belt_.hit(at_hand);
-        if (belt.part != nullptr) {
-            return keyed(belt.part, belt.key);
+        // The activity bars right of the hand or on the whole band (usecase:101305, B5): a touch names the action of
+        // its bar, which stays lit while the finger holds it; the act asks the world nothing.
+        uint32_t action = GODOT_RSM_ACTION_NONE;
+        if (bars_.hit(at_hand, action)) {
+            out.act = GODOT_RSM_ACT_BARS;
+            out.index = action;
+            return out;
         }
-        std::string key;
-        const std::string hand = hand_.hit(at_hand, key);
-        if (!hand.empty()) {
-            return keyed(act_of(hand), key);
+        if (slots) {
+            const BeltHolsterHit belt = belt_.hit(at_hand);
+            if (belt.part != nullptr) {
+                return keyed(belt.part, belt.key);
+            }
+            std::string key;
+            const std::string hand = hand_.hit(at_hand, key);
+            if (!hand.empty()) {
+                return keyed(act_of(hand), key);
+            }
         }
     }
     if (shows(LAYER_RACK)) {
@@ -170,6 +190,14 @@ VivariumHudHit VivariumHud::hit(const ::godot::Vector2& point, const VivariumHud
         if (rail_.hit_sign(point, index) && index >= 0 && static_cast<size_t>(index) < shown_.signs.size()) {
             out.act = ACT_SIGN;
             out.index = shown_.signs[static_cast<size_t>(index)].sign;
+            return out;
+        }
+    }
+    if (shows(LAYER_ARC)) {
+        // The sky arc stands on the top band as the band does; a tap on it opens the calendar sheet like the band's.
+        const char* arc = arc_.hit(point - ::godot::Vector2(0.0f, static_cast<float>(cover_.head)));
+        if (arc != nullptr) {
+            out.act = arc;
             return out;
         }
     }

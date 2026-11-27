@@ -22,7 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_ground_season.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/weather/types.hpp>
 
 #include <cstring>
 #include <initializer_list>

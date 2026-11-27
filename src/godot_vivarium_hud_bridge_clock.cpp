@@ -33,7 +33,7 @@
  */
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/gap/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 
 #include <vector>
@@ -45,13 +45,13 @@ void VivariumView::bridge_pace(HourglassFrame& glass) {
     // that one. Before the port filed a record the gap stays open: the hourglass then shows the factor last asked
     // through the debug layer (VivariumView::ask_pace) and, before any was asked, the mockup's S.factor
     // (hud_bridge_pace_factor of SHA).
-    if (hud_shown_.clock.pace_known) {
+    if (hud_state_.hud_shown_.clock.pace_known) {
         close_gap(GODOT_HUD_GAP_PACE, "flora.pace.v1.factor");
-        glass.factor = hud_shown_.clock.pace_factor;
+        glass.factor = hud_state_.hud_shown_.clock.pace_factor;
         return;
     }
     open_gap(GODOT_HUD_GAP_PACE, "flora.pace.v1.factor");
-    glass.factor = debug_.factor > GODOT_PACE_NONE ? debug_.factor : hud_bridge_pace_factor_;
+    glass.factor = debug_.factor > GODOT_PACE_NONE ? debug_.factor : hud_state_.hud_bridge_pace_factor_;
 }
 
 void VivariumView::bridge_clock(VivariumClockView& clock) {
@@ -60,7 +60,7 @@ void VivariumView::bridge_clock(VivariumClockView& clock) {
     // group stands. The port's own fields stand first: a measured hour or date keeps its value, and every share is
     // computed from what stands, by the mockup's rules (hA: an hour over the hours of the day; day: the day of the
     // year less one over the days of the year).
-    const VivariumClockView& mock = hud_bridge_clock_;
+    const VivariumClockView& mock = hud_state_.hud_bridge_clock_;
     if (!clock.known) {
         open_gap(GODOT_HUD_GAP_CLOCK, "time.hour");  // ase-time: TIM_DAY_HOUR, TIM_CONST_HOURS_PER_DAY, TIM_DAY_PERIOD
         clock.hour = mock.hour;

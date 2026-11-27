@@ -27,7 +27,9 @@
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_path.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
+#include <ase/adp/godot/hud/touch/types.hpp>
+#include <ase/adp/godot/hud/weather/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 
 #include <godot_cpp/classes/time.hpp>

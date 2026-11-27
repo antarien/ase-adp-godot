@@ -19,8 +19,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-12
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -33,7 +33,9 @@
 
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/json.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
@@ -116,6 +118,26 @@ bool UiTheme::load(const ::godot::Dictionary& root, std::string& failed) {
     if (!read_text(hud, "language", language)) {
         failed = "hud.language";
         return false;
+    }
+    // THE LANGUAGE OF ONE START (E15 of PLAN_ASE_VIVARIUM_PHASE_06_HUD_EXT): the word after modes.language.argument
+    // on the launch stands in for hud.language, `godot --path godot -- --avt-language de`; a language the words
+    // file does not carry refuses the configuration below, as hud.language does.
+    ::godot::Dictionary modes;
+    ::godot::Dictionary chosen;
+    ::godot::String argument;
+    if (!read_section(root, "modes", modes) || !read_section(modes, "language", chosen) ||
+        !read_text(chosen, "argument", argument)) {
+        failed = "modes.language";
+        return false;
+    }
+    const ::godot::PackedStringArray launch = ::godot::OS::get_singleton()->get_cmdline_user_args();
+    const int64_t named = argument.is_empty() ? -1 : launch.find(argument);
+    if (named >= 0) {
+        if (named + 1 >= launch.size()) {
+            failed = "modes.language: a language after the argument";
+            return false;
+        }
+        language = launch[named + 1];
     }
     language_ = utf8_of(language);
 

@@ -12,8 +12,9 @@
  *              carries out the acts the mockup's doAct carries out on the view.
  *
  *              THE LAYERS. draw() takes HudShown::layers in their order and draws each through its block: band
- *              SkyBand, rail UiEdgeRail, body SurvivalBodyRail (the body rail CORPO at the right edge) with
- *              SurvivalWarmthScale (the scale CONFORTO over its heat row), markers and
+ *              SkyBand, skill the two skill rings DCD and ACD (SkillRings, on the top band beside the arc), rail
+ *              UiEdgeRail with the states of the body under its signs, body the rail CORPO at the right edge with
+ *              the marks that hang on it (both through SurvivalView, godot_hud_survival_view.hpp), markers and
  *              sign_open SignMarker, focus FocusCluster with ActionFan,
  *              prune_marks PruneMarks, root_cut RootCut, reticle TerrainKit, arrive TrailView, sky CalendarSheet,
  *              system SystemRing, rack the list of ToolRack, inventory the hand (HandSlot), the belt (BeltHolster),
@@ -24,10 +25,10 @@
  *              ground's rack and things) lie under all of them for the hits of the mode.
  *
  *              THE BANDS. `frame` is the middle band's frame. VivariumHudFrame::cover carries the surface and the
- *              offsets of the outer bands in its units: the sky band (zone band) draws and hits `head` off it,
- *              the hand, the belt, the bag icon and the toast (zone hand) `hand` off it; every other block stays
- *              on it, and the dims, the drawer, the veil and the shade reach the surface. The places the probe
- *              taps through are given in the middle band's units, shifted by the same offsets.
+ *              offsets of the outer bands in its units: the sky band and the skill rings (zone band) draw and hit
+ *              `head` off it, the hand, the belt, the bag icon and the toast (zone hand) `hand` off it; every other
+ *              block stays on it, and the dims, the drawer, the veil and the shade reach the surface. The places the
+ *              probe taps through are given in the middle band's units, shifted by the same offsets.
  *
  *              FIVE UNITS AND THE CONTRACT. godot_hud_compose.cpp binds, resolves and fills the frame;
  *              godot_hud_compose_draw.cpp draws the layers; godot_hud_compose_hit.cpp finds what a touch hits;
@@ -35,7 +36,8 @@
  *              godot_hud_compose_place.cpp (VivariumHudPlaces, a friend) names where a tap lands on each part.
  *              What crosses between the view and this class - the frame, the hit, the request - stands in
  *              godot_hud_compose_frame.hpp; the steps of the drawing and the CPU time each took (P0692) stand in
- *              godot_hud_compose_share.hpp.
+ *              godot_hud_compose_share.hpp; the eight survival marks (U01 to U08) are one part of their own,
+ *              SurvivalView.
  *
  *              THE HITS. hit() asks the blocks in the reverse order of drawing and gives the first that answers,
  *              with the mockup's data-act id in VivariumHudHit::act, the item's key, the index of a sign, a tool,
@@ -70,8 +72,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-20
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.24.00024 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -100,17 +102,12 @@
 #include <ase/adp/godot/godot_hud_screen_shade.hpp>
 #include <ase/adp/godot/godot_hud_select_label.hpp>
 #include <ase/adp/godot/godot_hud_sign_marker.hpp>
+#include <ase/adp/godot/godot_hud_skill_rings_draw.hpp>
+#include <ase/adp/godot/godot_hud_sky_arc.hpp>
 #include <ase/adp/godot/godot_hud_sky_band.hpp>
 #include <ase/adp/godot/godot_hud_sky_overcast.hpp>
 #include <ase/adp/godot/godot_hud_sow_hole.hpp>
-#include <ase/adp/godot/godot_hud_survival_body_rail.hpp>
-#include <ase/adp/godot/godot_hud_survival_fire_card.hpp>
-#include <ase/adp/godot/godot_hud_survival_rail_states.hpp>
-#include <ase/adp/godot/godot_hud_survival_rest_card.hpp>
-#include <ase/adp/godot/godot_hud_survival_air_mark.hpp>
-#include <ase/adp/godot/godot_hud_survival_spoil_ring.hpp>
-#include <ase/adp/godot/godot_hud_survival_water_mark.hpp>
-#include <ase/adp/godot/godot_hud_survival_warmth_scale.hpp>
+#include <ase/adp/godot/godot_hud_survival_view.hpp>
 #include <ase/adp/godot/godot_hud_system_ring.hpp>
 #include <ase/adp/godot/godot_hud_tap_hole.hpp>
 #include <ase/adp/godot/godot_hud_tree_shade.hpp>
@@ -123,7 +120,7 @@
 #include <ase/adp/godot/godot_hud_weather_veil.hpp>
 #include <ase/adp/godot/godot_hud_world_drop.hpp>
 #include <ase/adp/godot/godot_vivarium_debug.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/debug/types.hpp>
 
 #include <godot_cpp/variant/dictionary.hpp>
 
@@ -160,7 +157,9 @@ public:
     static constexpr const char* MODE_SYS = "sys";             // the system ring
 
     // The layers of hud.modes.
+    static constexpr const char* LAYER_ARC = "arc";              // the sky arc of the top band, layer 3a before the band (EXT.6)
     static constexpr const char* LAYER_BAND = "band";
+    static constexpr const char* LAYER_SKILL = "skill";          // the skill rings DCD and ACD on the top band, after the band (usecase:101305, B5)
     static constexpr const char* LAYER_RAIL = "rail";
     static constexpr const char* LAYER_BODY = "body";            // the body rail CORPO at the right edge (U01)
     static constexpr const char* LAYER_MARKERS = "markers";
@@ -233,6 +232,17 @@ public:
     /** Reads the theme from the start configuration and binds every block; false with the missing name. */
     bool load(const ::godot::Dictionary& root, std::string& failed);
 
+    /**
+     * Hands the activity symbols of activity_art.json (hud_state_.hud_activities_) to the verb chips of the hand, the
+     * chips of the fan and the offer of a sign; called by the view BEFORE load, since load binds the fan and the
+     * signs. They are kept by address and must outlive this HUD.
+     */
+    void bind_activities(const UiActivityArt& activities) {
+        hand_.bind_activities(activities);
+        fan_.bind_activities(activities);
+        signs_.bind_activities(activities);
+    }
+
     /** Applies the context's rules to the frame's game state and the view's own; false with the reason. */
     bool resolve(VivariumHudFrame& frame, std::string& failed);
 
@@ -243,8 +253,10 @@ public:
     /** What `point` (mockup units) hits, the topmost layer first. */
     VivariumHudHit hit(const ::godot::Vector2& point, const VivariumHudFrame& now) const;
 
-    /** A finger comes down at `point` at `clock`; false with the reason in `failed` (a toast word missing). */
-    bool press(const ::godot::Vector2& point, const VivariumHudFrame& now, double clock, std::string& failed);
+    /** A finger comes down at `point` at `clock`, `since` real seconds after the last frame began; false with the
+     *  reason in `failed` (a toast word missing). */
+    bool press(const ::godot::Vector2& point, const VivariumHudFrame& now, double clock, double since,
+               std::string& failed);
 
     /** The finger moves to `point`; false with the reason in `failed`. */
     bool move(const ::godot::Vector2& point, VivariumHudFrame& now, std::string& failed);
@@ -283,8 +295,10 @@ public:
     const DragLayer& drag() const { return drag_; }  // the thing and the place a stow verdict is asked for
     const BeltHolster& belt() const { return belt_; }  // the holsters a drag is carried to, read by the place lines
     const BagWindow& window() const { return window_; }  // the pack and the pouch with this frame's container records, read by the carry bridge's edge
+    std::vector<std::string> take_arc_flank() { return arc_.take_flank(); }  // the debug arc lines of the frames drawn since the last call (EXT.6)
     const CloudBank& clouds() const { return clouds_; }
     const SkyOvercast& overcast() const { return overcast_; }  // the grey and the dimmed light of an overcast sky, laid over the 3D scene (N01)
+    const SkillRings& rings() const { return rings_; }  // the shares the skill rings show, read by the place lines and the probe (B5)
     const HudShown& shown() const { return shown_; }
     const std::vector<HudDrawShare>& shares() const { return shares_; }  // the steps of the last draw with their CPU time (P0692)
     const std::string& mode() const { return mode_; }
@@ -362,6 +376,9 @@ private:
     bool draw_layer(UiPen& canvas, const ::godot::Transform2D& frame, const std::string& layer,
                     VivariumHudFrame& now, std::string& failed);
 
+    /** The survival records of `now` for SurvivalView, on the wall clock of the fades. */
+    SurvivalViewFrame survival(const VivariumHudFrame& now) const;
+
     /** The frame of the top band (the zone band): the middle band's `frame` moved by cover_.head. */
     ::godot::Transform2D head_frame(const ::godot::Transform2D& frame) const;
 
@@ -389,20 +406,15 @@ private:
     ContextResolver resolver_;
     HudShown shown_;
 
+    SkyArc arc_;
     SkyBand band_;
+    SkillRings rings_;          // the skill rings DCD and ACD on the top band beside the arc (usecase:101305, B5)
     WeatherVeil veil_;
     CloudBank clouds_;          // the cloud banks of an overcast sky, laid for the sky of the 3D scene (N04)
     SkyOvercast overcast_;      // the grey and the dimmed light of an overcast sky, shaded over the 3D scene (N01)
     ScreenShade shade_;
     UiEdgeRail rail_;
-    SurvivalBodyRail body_;     // the body rail CORPO at the right edge (U01, mockup VIVARIUM_PHASE_08 S1)
-    SurvivalWarmthScale warmth_;// the scale CONFORTO over the rail's heat row (U03, mockup VIVARIUM_PHASE_08 S3)
-    SurvivalRailStates states_; // the states of the body under the signs on the rail SINAIS (U02, mockup VIVARIUM_PHASE_08 S2)
-    SurvivalFireCard fire_;     // the card of the camp fire on its leader from the hearth (U04, mockup VIVARIUM_PHASE_08 S4)
-    SurvivalRestCard rest_;     // the card of the resting figure on its leader from the figure (U05, mockup VIVARIUM_PHASE_08 S5)
-    SurvivalAirMark air_;       // the mark AR TÓXICO in the sky band under the wind (U06, mockup VIVARIUM_PHASE_08 S6)
-    SurvivalSpoilRing food_;    // the ring ESTRAGO around the food of the bag (U07, mockup VIVARIUM_PHASE_08 S7)
-    SurvivalWaterMark water_;   // the drop at the bag, ÁGUA TURVA while poisoned (U08, mockup VIVARIUM_PHASE_08 S8)
+    SurvivalView survival_;     // the eight survival marks U01 to U08 on the layers rail and body (godot_hud_survival_view.hpp)
     SignMarker signs_;
     FocusCluster focus_;
     ActionFan fan_;
@@ -420,6 +432,7 @@ private:
     HandSlot hand_;
     BeltHolster belt_;
     BagIcon bag_icon_;
+    ActivityBars bars_;         // the bars of the led figure's time slices, right of the hand (usecase:101305, B5)
     BagWindow window_;
     LeatherPack pack_;
     LinenPouch pouch_;
@@ -440,6 +453,7 @@ private:
     bool debug_on_ = false;             // S.debug
     bool drawer_open_ = false;          // S.drawer
     uint32_t debug_tab_ = GODOT_HUD_DEBUG_TAB_TEMPO;  // S.dtab
+    uint32_t debug_view_ = GODOT_HUD_DEBUG_VIEW_SYSTEM;  // the tab layer of the debug drawer, chosen by the three chips in its title row (usecase:101305)
     std::string last_tap_key_;          // S.lastTap.key
     double last_tap_clock_ = 0.0;       // S.lastTap.t
     bool tapped_ = false;               // S.lastTap is set

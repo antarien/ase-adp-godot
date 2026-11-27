@@ -28,7 +28,7 @@
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/log/types.hpp>
 #include <ase/adp/godot/port/types.hpp>
 
 #include <godot_cpp/classes/file_access.hpp>
@@ -201,7 +201,7 @@ void VivariumView::report_measurement() {
          (measurement.pss_start_read ? ::godot::String::num_uint64(measurement.pss_start_kib) : ::godot::String("unknown")) +
          " pss_kib_end=" + (pss_end_read ? ::godot::String::num_uint64(pss_end_kib) : ::godot::String("unknown")) +
          " restarts=" + ::godot::String::num_uint64(host_boots_ - measurement.boots_at_start) +
-         " catch_ups=" + ::godot::String::num_uint64(measurement.catch_ups) + " " + measure(GODOT_NO_PLACE));
+         " returns=" + ::godot::String::num_uint64(measurement.returned) + " " + measure(GODOT_NO_PLACE));
     measurement = VivariumMeasurement{};
 }
 

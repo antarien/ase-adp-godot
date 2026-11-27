@@ -22,8 +22,8 @@
  * @usecase     usecase:101339 - show the ground around plant
  * @actor       Care View Supplier (CARESUPPLY)
  * @created     2026-10-25
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -371,6 +371,22 @@ TEST_CASE("P0690: a dig patches only the vertices that moved and the marks that 
     CHECK(surface.attributes.end == 5u * 12u);
     CHECK(surface.attribute_bytes[4u * 12u] == 0xff);
     CHECK_FALSE(surface.grown);
+
+    // the same disc again and no dig: no mark changes, nothing is written (operator order 2026-11-25: the ground is
+    // written only where it changes)
+    REQUIRE(patch_ground(samples, cells, discs, {}, surface));
+    CHECK(surface.positions.begin == surface.positions.end);
+    CHECK(surface.normals.begin == surface.normals.end);
+    CHECK(surface.attributes.begin == surface.attributes.end);
+
+    // the disc goes: the vertex within its reach loses its mark, and only that vertex is written
+    PlantGroundSurface gone = surface;
+    REQUIRE(patch_ground(samples, cells, {}, {}, gone));
+    CHECK(gone.arrays.colors[4u * 4u] == doctest::Approx(0.0f));
+    CHECK(gone.attributes.begin == 4u * 12u);
+    CHECK(gone.attributes.end == 5u * 12u);
+    CHECK(gone.positions.begin == gone.positions.end);
+    CHECK(gone.discs.empty());
 
     // other cells, other samples or another order: the ground is built anew, nothing is written
     std::vector<VivariumGroundCellView> fewer = cells;

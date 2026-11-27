@@ -18,10 +18,12 @@
  *              place.
  *
  *              THE CHIP. Every chip is drawn in its tool's domain, the token hud_fan_<name>_tone (DOMAIN_<code>).
- *              A tool that serves through an item (has) is a thing chip (UiHexChip::set_thing) with the item's
- *              drawing from item_art.json (UiItemSprite). A tool without an item (the ground tools at the tool
- *              place) is a glyph chip with the icon of texts.hud.fan_glyph.<name>. At perception levels[0]
- *              each chip carries its name texts.hud.tools.<name> as label, above it none.
+ *              Every chip is a thing chip (UiHexChip::set_thing) with the tool's activity symbol (MIG_ASE_SKILL_RSM
+ *              B7, usecase:101440): the symbol activity_art.json puts on the place tool.<name>
+ *              (UiActivityArt::place), drawn by UiItemSprite. It shows the action on its object, not only the
+ *              tool: the drop into the soil for water, the cut on the branch for prune, the tool place for the
+ *              ground tools. A tool without a symbol on its place refuses the binding, no stand-in is drawn. At
+ *              perception levels[0] each chip carries its name texts.hud.tools.<name> as label, above it none.
  *
  *              A TAP on a chip names its tool: a tool with an item takes that item into the hand (data-act
  *              take:<name>), a tool without one opens the tool place (data-act rack).
@@ -33,8 +35,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
- * @modified    2026-11-10
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -42,6 +44,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_context_resolver.hpp>
+#include <ase/adp/godot/godot_hud_ui_activity_art.hpp>
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
 #include <ase/adp/godot/godot_hud_ui_item_sprite.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
@@ -83,7 +86,10 @@ struct ActionFanPlace {
 /** The fan of tools. */
 class ActionFan {
 public:
-    /** Binds the places, the delays, every tool's chip, drawing, tone and name; false with the reason in `failed`. */
+    /** The activity symbols the chips draw; bound before bind() (VivariumHud::bind_activities). */
+    void bind_activities(const UiActivityArt& activities) { activities_ = &activities; }
+
+    /** Binds the places, the delays, every tool's chip, symbol, tone and name; false with the reason in `failed`. */
     bool bind(const UiTheme& theme, std::string& failed);
 
     /** Draws the fan of `now` under `frame`; false with the reason in `failed`. */
@@ -101,9 +107,8 @@ private:
     struct FanTool {
         bool thing = false;          // the tool serves through an item
         ::godot::Color tone;         // hud_fan_<name>_tone, the tool's domain
-        std::string icon;            // texts.hud.fan_glyph.<name> of a tool without an item
         std::string label;           // texts.hud.tools.<name>
-        UiItemSprite drawing;        // the item's drawing of a tool with an item
+        UiItemSprite drawing;        // the activity symbol on the place tool.<name> (UiActivityArt::place)
     };
 
     /** The chip at place `place` drawn last, for hit(). */
@@ -119,6 +124,7 @@ private:
     double delay_ = 0.0;        // hud_fan_delay
     double stagger_ = 0.0;      // hud_fan_stagger
     uint32_t level_words_ = 0;  // hud.perception.levels[0]: the chips carry their names
+    const UiActivityArt* activities_ = nullptr;  // bind_activities
 
     std::vector<::godot::Vector2> offsets_;  // hud_fan_<n>_dx, hud_fan_<n>_dy, one per place
     std::vector<FanTool> tools_;             // one per HudContextSpec::tools, in its order

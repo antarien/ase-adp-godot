@@ -21,8 +21,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -32,7 +32,9 @@
 #include <ase/adp/godot/godot_hud_compose.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_vivarium_watch.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
+#include <ase/adp/godot/hud/hand/types.hpp>
+#include <ase/adp/godot/rsm/types.hpp>
 
 namespace ase::adp::godot {
 
@@ -93,6 +95,19 @@ bool VivariumHud::draw(UiPen& canvas, const ::godot::Transform2D& frame, Vivariu
     return frame.translated_local(::godot::Vector2(0.0f, static_cast<float>(cover_.hand)));
 }
 
+SurvivalViewFrame VivariumHud::survival(const VivariumHudFrame& now) const {
+    // The records the bridges wrote; the marks fade in on the wall clock since the view appeared, as the rail does.
+    SurvivalViewFrame view;
+    view.body = &now.body;
+    view.fire = &now.fire;
+    view.rest = &now.rest;
+    view.air = &now.air;
+    view.food = &now.food;
+    view.elapsed = wall_ - replay_.since();
+    view.still = now.still;
+    return view;
+}
+
 bool VivariumHud::draw_layer(UiPen& canvas, const ::godot::Transform2D& frame, const std::string& layer,
                              VivariumHudFrame& now, std::string& failed) {
     if (layer == LAYER_TAP_PULSE) {
@@ -100,42 +115,27 @@ bool VivariumHud::draw_layer(UiPen& canvas, const ::godot::Transform2D& frame, c
         tap_.draw_pulse(canvas, frame, now.tap, wall_ - replay_.since(), now.still);
         return true;
     }
+    if (layer == LAYER_ARC) {
+        // Layer 3a: the sky arc stands on the top band like the band and in front of it (EXT.6).
+        return arc_.draw(canvas, head_frame(frame), now.arc, failed);
+    }
     if (layer == LAYER_BAND) {
         return band_.draw(canvas, head_frame(frame), now.band, failed);
+    }
+    if (layer == LAYER_SKILL) {
+        // The two wheels of the prototype (PercentageWheel DCD above, ACD below) stand on the top band in the corner
+        // the theme measured free right of the arc, on the wall clock of the fades (usecase:101305, B5).
+        return rings_.draw(canvas, head_frame(frame), now.skill, wall_ - replay_.since(), now.still, failed);
     }
     if (layer == LAYER_RAIL) {
         // THE MARK STANDS ON THE WALL CLOCK (replay, godot_hud_compose.cpp): the elapsed time of a fade is taken on
         // that same clock. On the capped HUD clock it ran negative, the rail's line drew a share of 0 and stood
         // nowhere while its dots and its word showed (run 20261113-230745 debug_stage_3.png)
         rail_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        // The states of the body stand under the signs on the same rail and fade in on the same clock (s.html 187).
-        if (!states_.set(now.body, failed)) {
-            return false;
-        }
-        states_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        return true;
+        return survival_.draw_states(canvas, frame, survival(now), failed);
     }
     if (layer == LAYER_BODY) {
-        // The body rail on the same wall clock as the rail of signs: its rows fade in after the view appeared.
-        // The scale CONFORTO hangs over the heat row on its leader and fades in with it (s.html corpo); the card of
-        // the camp fire follows it, as render() lays fireCard(st) right after corpo(st) (s.html 239), and the card of
-        // the resting figure after the fire, as render() lays rest(st) right after fireCard(st), and the mark of
-        // the air after the rest, as render() lays air(st) right after rest(st), and the spoil ring of the bag's food
-        // after the air, as render() lays food(st) right after air(st), and the water mark after the food, as
-        // render() lays water(st) last; it reads the same sign poison of the body the rail SINAIS draws.
-        if (!body_.set(now.body, failed) || !warmth_.set(now.body, failed) || !fire_.set(now.fire, failed) ||
-            !rest_.set(now.rest, failed) || !air_.set(now.air, failed) || !food_.set(now.food, failed) ||
-            !water_.set(now.body, failed)) {
-            return false;
-        }
-        body_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        warmth_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        fire_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        rest_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        air_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        food_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        water_.draw(canvas, frame, wall_ - replay_.since(), now.still);
-        return true;
+        return survival_.draw_body(canvas, frame, survival(now), failed);
     }
     if (layer == LAYER_MARKERS) {
         return signs_.draw(canvas, frame, now.signs, failed);
@@ -145,6 +145,8 @@ bool VivariumHud::draw_layer(UiPen& canvas, const ::godot::Transform2D& frame, c
         return shows(LAYER_MARKERS) || signs_.draw(canvas, frame, now.signs, failed);
     }
     if (layer == LAYER_FOCUS) {
+        // B0937: the body rail draws before the card in the same view, so the card's rows yield its content.
+        now.focus.rail = shows(LAYER_BODY);
         if (!focus_.draw(canvas, frame, now.focus, failed)) {
             return false;
         }
@@ -212,12 +214,15 @@ bool VivariumHud::draw_inventory(UiPen& canvas, const ::godot::Transform2D& fram
     // THE PARTS OF THE LAYER (P0695): the layer cost 77.6 ms in the first frame after an act and about 5 ms in each
     // frame after it (run 20261113-p0692-split); each part writes its own share, the layer's share names their sum.
     uint64_t cpu_step = thread_cpu_usec();
-    if (!hand_.draw(canvas, hand, now.hand, failed)) {
+    // THE BAND SHOWS THE SLOTS OR THE BARS (operator order 2026-11-25): while the bars hold the whole band, the hand,
+    // the belt and the bag icon stand hidden; hit() and the places ask the same, so no hidden slot takes a tap.
+    const bool slots = bars_.band() != GODOT_RSM_BAND_BARS;
+    if (slots && !hand_.draw(canvas, hand, now.hand, failed)) {
         return false;
     }
     // The parts of the hand (P0692): the first frame after an act cost 68.9 ms in the hand alone while look() and
     // sprite() were already filled (run 20261113-p0695-dig); each part stands before the hand's own share.
-    const HandSlotCost& hand_cost = hand_.cost();
+    const HandSlotCost hand_cost = slots ? hand_.cost() : HandSlotCost{};  // a hidden hand cost nothing this frame
     for (const std::pair<const char*, uint64_t>& part : std::initializer_list<std::pair<const char*, uint64_t>>{
              {HudDrawStep::INV_HAND_LOOK, hand_cost.look_usec},
              {HudDrawStep::INV_HAND_ART, hand_cost.art_usec},
@@ -234,14 +239,22 @@ bool VivariumHud::draw_inventory(UiPen& canvas, const ::godot::Transform2D& fram
         shares_.push_back(HudDrawShare{part.first, part.second});
     }
     share_step(HudDrawStep::INV_HAND, cpu_step);
-    if (!belt_.draw(canvas, hand, now.belt, failed)) {
+    if (slots && !belt_.draw(canvas, hand, now.belt, failed)) {
         return false;
     }
     share_step(HudDrawStep::INV_BELT, cpu_step);
-    if (!bag_icon_.draw(canvas, hand, now.bag_icon, failed)) {
+    if (slots && !bag_icon_.draw(canvas, hand, now.bag_icon, failed)) {
         return false;
     }
     share_step(HudDrawStep::INV_BAG, cpu_step);
+    // The activity bars after row 13 (usecase:101305, MIG_ASE_SKILL_RSM B5): lit by the bar a finger holds, else by
+    // the tool in the hand, hidden or not; a thing lifted by a drag has left the hand. They draw the band switch too.
+    now.bars.held = press_.down && same(press_.hit.act, GODOT_RSM_ACT_BARS) ? press_.hit.index : GODOT_RSM_ACTION_NONE;
+    now.bars.hand = now.hand.thing != nullptr && !now.hand.dragged ? now.hand.thing->id : std::string();
+    if (!bars_.draw(canvas, hand, now.bars, failed)) {
+        return false;
+    }
+    share_step(HudDrawStep::INV_BARS, cpu_step);
     if (!toast_.draw(canvas, hand, toast, failed)) {
         return false;
     }

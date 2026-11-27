@@ -22,7 +22,8 @@
 
 #include <ase/adp/godot/godot_hud_ui_glyph_chain.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/vector2.hpp>

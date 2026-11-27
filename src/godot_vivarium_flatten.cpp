@@ -59,21 +59,21 @@ uint64_t thread_cpu_usec() {
 
 bool VivariumView::can_flatten() const {
     // A running host and a ground to tap on.
-    return resources_.running() && failure_text_.is_empty() && scene_ != nullptr &&
+    return resources_.running() && failure_text_.is_empty() && scene_state_.scene_ != nullptr &&
            !resources_.get_terrain().empty();
 }
 
 void VivariumView::toggle_flattening() {
-    if (!flattening_ && !can_flatten()) {
+    if (!scene_state_.flattening_ && !can_flatten()) {
         note("flatten mode result=disabled");
         return;
     }
-    flattening_ = !flattening_;
+    scene_state_.flattening_ = !scene_state_.flattening_;
     // one mode at a time: a tap in the scene either cuts, lays a bed or levels a disc
-    pruning_ = false;
-    bedding_ = false;
-    bed_started_ = false;
-    note(::godot::String("flatten mode ") + (flattening_ ? "on" : "off"));
+    scene_state_.pruning_ = false;
+    scene_state_.bedding_ = false;
+    scene_state_.bed_started_ = false;
+    note(::godot::String("flatten mode ") + (scene_state_.flattening_ ? "on" : "off"));
     node_->queue_redraw();
 }
 
@@ -92,7 +92,7 @@ bool VivariumView::flatten(const ::godot::Vector2& at, float radius_m) {
     watch_ground_act("flatten", clock->get_ticks_usec() - act_start_usec);
     if (status == ase::kernel::HostStatusOk) {
         // the height is the ground's at the centre once ase-terrain levelled it (fill_ground)
-        player_flats_.push_back(PlantGroundDisc{x, z, radius_m, 0.0f});
+        scene_state_.player_flats_.push_back(PlantGroundDisc{x, z, radius_m, 0.0f});
     }
     note("flatten x=" + ::godot::String::num(x, 2) + " z=" + ::godot::String::num(z, 2) +
          " radius=" + ::godot::String::num(radius_m, 2) + " result=" + GodotHostResourceManager::status_name(status));
@@ -106,7 +106,10 @@ bool VivariumView::lower(float x, float z, float radius_m, float depth_m) {
     // The view shows the dug ground once the terrain port carries it; water stands where it lies at or below NN0.
     ::godot::Time* clock = ::godot::Time::get_singleton();
     const uint64_t act_start_usec = clock->get_ticks_usec();
-    const HostStatus status = resources_.lower(x, z, radius_m, depth_m);
+    // The figure of the seat digs and books the stroke as work, as prune does (MIG_ASE_SKILL_RSM B2, D2650); no figure
+    // led, no one books.
+    const uint32_t figure = figure_state_.figure_controls_.led_known ? figure_state_.figure_controls_.led : GODOT_NO_OBJECT;
+    const HostStatus status = resources_.lower(x, z, radius_m, depth_m, figure);
     watch_ground_act("lower", clock->get_ticks_usec() - act_start_usec);
     note("lower x=" + ::godot::String::num(x, 2) + " z=" + ::godot::String::num(z, 2) +
          " radius=" + ::godot::String::num(radius_m, 2) + " depth=" + ::godot::String::num(depth_m, 2) +
@@ -119,7 +122,9 @@ bool VivariumView::raise(float x, float z, float radius_m, float height_m) {
     // the ground point as lower() takes it: the tap's, or the planting hole's when amontoar fills it (B0297)
     ::godot::Time* clock = ::godot::Time::get_singleton();
     const uint64_t act_start_usec = clock->get_ticks_usec();
-    const HostStatus status = resources_.raise(x, z, radius_m, height_m);
+    // the figure of the seat heaps and books the stroke, as lower() names it (MIG_ASE_SKILL_RSM B2, D2650)
+    const uint32_t figure = figure_state_.figure_controls_.led_known ? figure_state_.figure_controls_.led : GODOT_NO_OBJECT;
+    const HostStatus status = resources_.raise(x, z, radius_m, height_m, figure);
     watch_ground_act("raise", clock->get_ticks_usec() - act_start_usec);
     note("raise x=" + ::godot::String::num(x, 2) + " z=" + ::godot::String::num(z, 2) +
          " radius=" + ::godot::String::num(radius_m, 2) + " height=" + ::godot::String::num(height_m, 2) +

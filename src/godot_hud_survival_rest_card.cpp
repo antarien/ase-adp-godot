@@ -24,7 +24,7 @@
 #include <ase/adp/godot/godot_hud_survival_rest_card.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_svg_paint.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
 
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 

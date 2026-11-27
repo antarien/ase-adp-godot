@@ -49,8 +49,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-23
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -63,6 +63,7 @@
 
 #include <ase/adp/godot/godot_hud_ui_pen_decl.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/transform2d.hpp>
 #include <godot_cpp/variant/vector2.hpp>
@@ -119,6 +120,12 @@ public:
 
     /** Reads the drawing of the thing `name` of item_art.json; false with the reason in `failed`. */
     bool set(const std::string& name, std::string& failed);
+
+    /**
+     * Reads one entry in the format of item_art.json (vw, vh, art, level) handed over by its file, as the activity
+     * symbols of activity_art.json come from UiActivityArt::art; `source_name` names the entry in `failed`.
+     */
+    bool set_entry(const std::string& source_name, const ::godot::Dictionary& entry, std::string& failed);
 
     /** artFit: draws the thing under `frame` fitted into the box of `place`. */
     void draw(UiPen& canvas, const ::godot::Transform2D& frame, const UiItemSpritePlace& place) const;

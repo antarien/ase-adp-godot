@@ -28,9 +28,12 @@
  *              hold) or use_hand for a tool at work; reading weight with hand_weight.
  *
  *              TERRAIN. The tool's verbs stand on an arc hud_hand_verb_distance above the hand: one at 0 degrees,
- *              two at -/+ hud_hand_verb_two_angle, three at -hud_hand_verb_three_angle, 0, + the same; each a glyph
- *              chip of hud_hand_verb_radius with verb_glyph.<v> in the verb's tone (hud_verb_<v>_tone), lit for
- *              the chosen verb, and over it verbs.<v> hud_hand_verb_label_dy above, in the tone when chosen, else
+ *              two at -/+ hud_hand_verb_two_angle, three at -hud_hand_verb_three_angle, 0, + the same; each a thing
+ *              chip (HXI) of hud_hand_verb_radius in the verb's tone (hud_verb_<v>_tone), lit for the chosen verb,
+ *              carrying the activity symbol <v> of activity_art.json (UiActivityArt, MIG_ASE_SKILL_RSM B7,
+ *              usecase:101440 - grow the interface with skills) drawn by UiItemSprite into the chip's picture box;
+ *              a verb the file does not carry refuses the chip, no stand-in glyph is drawn. Over the chip stands
+ *              verbs.<v> hud_hand_verb_label_dy above, in the tone when chosen, else
  *              OVERLAY_INK_SOFT, when the tool has more than one verb or the perception stands at levels[0]. The
  *              instruction is verb_ask.<op> of the verb's op (hud_verb_<v>_op), for the op bed verb_ask.bed_start
  *              or bed_end; the reading label verb_reading.level with the area, .bed, .measure, else .radius with
@@ -54,16 +57,18 @@
  * @register    N0454 (flora.patch.v1), N0449 (sky.weather.v1), N0462, N0461, N0463 (flora.root.v1), N0457,
  *              N0464 (height and slope under the brush), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-22
- * @version     00.00.22.00022 [init]
+ * @modified    2026-11-25
+ * @version     00.00.23.00023 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
+#include <ase/adp/godot/godot_hud_ui_activity_art.hpp>
 #include <ase/adp/godot/godot_hud_ui_hex_chip.hpp>
 #include <ase/adp/godot/godot_hud_ui_icon_class.hpp>
+#include <ase/adp/godot/godot_hud_ui_item_sprite.hpp>
 #include <ase/adp/godot/godot_hud_ui_ring.hpp>
 #include <ase/adp/godot/godot_hud_ui_text_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_theme.hpp>
@@ -160,6 +165,9 @@ public:
     /** Binds measures, colours, words and levels; false with the missing name in `failed`. */
     bool bind(const UiTheme& theme, std::string& failed);
 
+    /** The activity symbols the verb chips draw, read once by the view (hud_state_.hud_activities_); kept by address. */
+    void bind_activities(const UiActivityArt& activities) { activities_ = &activities; }
+
     /** Draws what the mode adds round the hand and fills `lines`; false with the reason in `failed`. */
     bool draw(UiPen& canvas, const ::godot::Transform2D& frame, const HandSlotFrame& now,
               const HandThing& thing, const HandItemLook& look, HandLines& lines, std::string& failed);
@@ -179,7 +187,8 @@ public:
 private:
     struct VerbChip {
         std::string verb;
-        UiHexChip chip;
+        UiHexChip chip;          // HXI: the hexagon in the verb's tone, its picture box carries the drawing
+        UiItemSprite drawing;    // the activity symbol <verb> of activity_art.json
         ::godot::Color tone;
         std::string op;
         std::vector<HudRun> name;
@@ -211,7 +220,8 @@ private:
     static std::string count(uint32_t value);
 
     const UiTheme* theme_ = nullptr;
-    double hand_x_ = 0.0, hand_y_ = 0.0;                                             // hud_hand_x, _y
+    const UiActivityArt* activities_ = nullptr;                                      // bind_activities
+    double hand_x_ = 0.0, hand_y_ = 0.0;                                            // hud_hand_x, _y
     double pour_radius_ = 0.0, pour_step_ = 0.0, pour_from_ = 0.0, pour_to_ = 0.0;  // hud_hand_pour_*
     double pour_width_ = 0.0, pour_arcs_ = 0.0;
     double pour_text_dy_ = 0.0, pour_text_size_ = 0.0, pour_fill_dy_ = 0.0, pour_fill_size_ = 0.0;

@@ -12,8 +12,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
- * @modified    2026-11-10
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -48,11 +48,18 @@ bool ActionFan::bind_tool(const UiTheme& theme, const HudToolSpec& spec, FanTool
         return false;
     }
     out.thing = !spec.has.empty();
-    if (out.thing) {
-        return out.drawing.bind(theme, failed) && out.drawing.set(spec.has, failed);
+    // Every chip draws the tool's activity symbol (MIG_ASE_SKILL_RSM B7): the symbol on the place tool.<name>.
+    if (activities_ == nullptr) {
+        failed = "hud.fan.activities.unbound";
+        return false;
     }
-    // A tool without an item: its glyph is a word of SHA.
-    return word_icon(theme, "fan_glyph." + spec.name, out.icon, failed);
+    const std::string place = "tool." + spec.name;
+    ::godot::Dictionary symbol;
+    if (!activities_->place(place, symbol)) {
+        failed = "activity_art.places." + place;
+        return false;
+    }
+    return out.drawing.bind(theme, failed) && out.drawing.set_entry("activity_art.places." + place, symbol, failed);
 }
 
 bool ActionFan::bind(const UiTheme& theme, std::string& failed) {
@@ -120,11 +127,11 @@ bool ActionFan::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Act
         FanTool& tool = tools_[shown.tool];
         UiHexChip& chip = chips_[shown.place];
         const std::string label = named ? tool.label : std::string();
-        if (!(tool.thing ? chip.set_thing(label, failed) : chip.set_glyph(tool.icon, label, failed))) {
+        if (!chip.set_thing(label, failed)) {
             return false;
         }
 
-        // HXI(p[0], p[1], 15, item, tone, act, {fade, d: .3 + i * .07, lab}) or HX(..., glyph, ...).
+        // HXI(p[0], p[1], 15, symbol, tone, act, {fade, d: .3 + i * .07, lab}) for every tool (MIG_ASE_SKILL_RSM B7).
         UiHexChipPlace place;
         place.centre = now.centre + offsets_[shown.place];
         place.radius = radius_;
@@ -135,14 +142,12 @@ bool ActionFan::draw(UiPen& canvas, const ::godot::Transform2D& frame, const Act
         place.elapsed = now.elapsed;
         place.still = now.still;
         chip.draw(canvas, frame, place);
-        if (tool.thing) {
-            const UiHexChipPicture picture = chip.picture(place);
-            UiItemSpritePlace thing;
-            thing.centre = picture.centre;
-            thing.box = picture.box;
-            thing.opacity = picture.opacity;
-            tool.drawing.draw(canvas, frame, thing);
-        }
+        const UiHexChipPicture picture = chip.picture(place);
+        UiItemSpritePlace symbol;
+        symbol.centre = picture.centre;
+        symbol.box = picture.box;
+        symbol.opacity = picture.opacity;
+        tool.drawing.draw(canvas, frame, symbol);
         drawn_.push_back(FanDrawn{shown.tool, place});
     }
     canvas.draw_set_transform_matrix(::godot::Transform2D());

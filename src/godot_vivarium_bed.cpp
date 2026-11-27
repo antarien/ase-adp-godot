@@ -44,30 +44,30 @@ using ase::kernel::HostStatus;
 
 bool VivariumView::can_bed() const {
     // A running host, a scene to tap into and a configured brook whose width and water the bed takes.
-    return resources_.running() && failure_text_.is_empty() && scene_ != nullptr && !start_.brooks.empty() &&
+    return resources_.running() && failure_text_.is_empty() && scene_state_.scene_ != nullptr && !start_.brooks.empty() &&
            !resources_.get_terrain().empty();
 }
 
 void VivariumView::toggle_bedding() {
-    if (!bedding_ && !can_bed()) {
+    if (!scene_state_.bedding_ && !can_bed()) {
         note("bed mode result=disabled");
         return;
     }
-    bedding_ = !bedding_;
-    bed_started_ = false;
+    scene_state_.bedding_ = !scene_state_.bedding_;
+    scene_state_.bed_started_ = false;
     // one mode at a time: a tap in the scene either cuts, lays a bed or levels a disc
-    pruning_ = false;
-    flattening_ = false;
-    note(::godot::String("bed mode ") + (bedding_ ? "on" : "off"));
+    scene_state_.pruning_ = false;
+    scene_state_.flattening_ = false;
+    note(::godot::String("bed mode ") + (scene_state_.bedding_ ? "on" : "off"));
     node_->queue_redraw();
 }
 
 bool VivariumView::pick_ground(const ::godot::Vector2& at, float& x, float& z, float& nearest_px) const {
     // THE GROUND UNDER THE FINGER. Every terrain sample goes through the current camera onto the surface;
-    // the nearest within pick_px_ is hit. The view computes no geometry of its own: the place of a sample
+    // the nearest within scene_state_.pick_px_ is hit. The view computes no geometry of its own: the place of a sample
     // is the one ase-terrain laid on the terrain port, the same numbers the ground is drawn with.
     nearest_px = -1.0f;
-    if (scene_ == nullptr) {
+    if (scene_state_.scene_ == nullptr) {
         return false;
     }
     ::godot::Camera3D* camera = node_->get_viewport()->get_camera_3d();
@@ -75,7 +75,7 @@ bool VivariumView::pick_ground(const ::godot::Vector2& at, float& x, float& z, f
         return false;
     }
     bool hit = false;
-    float hit_px = pick_px_;
+    float hit_px = scene_state_.pick_px_;
     for (const VivariumTerrainView& sample : resources_.get_terrain()) {
         const ::godot::Vector3 place(static_cast<float>(sample.x), static_cast<float>(sample.height),
                                      static_cast<float>(sample.z));
@@ -105,24 +105,24 @@ bool VivariumView::bed(const ::godot::Vector2& at) {
              " result=none nearest_px=" + ::godot::String::num(nearest_px, 1));
         return false;
     }
-    if (!bed_started_) {
-        bed_started_ = true;
-        bed_x_ = x;
-        bed_z_ = z;
+    if (!scene_state_.bed_started_) {
+        scene_state_.bed_started_ = true;
+        scene_state_.bed_x_ = x;
+        scene_state_.bed_z_ = z;
         note("bed start x=" + ::godot::String::num(x, 2) + " z=" + ::godot::String::num(z, 2));
         node_->queue_redraw();
         return false;  // the first tap only marks where the bed starts: nothing laid, no toast (applyTerr's bedA)
     }
-    bed_started_ = false;
+    scene_state_.bed_started_ = false;
     // the bed of the player: the two ends tapped, width, depth and water of the first configured brook
     VivariumBrookSpec brook = start_.brooks.front();
-    brook.x = bed_x_;
-    brook.z = bed_z_;
+    brook.x = scene_state_.bed_x_;
+    brook.z = scene_state_.bed_z_;
     brook.end_x = x;
     brook.end_z = z;
     const HostStatus status = resources_.lay_brook(brook);
     if (status == ase::kernel::HostStatusOk) {
-        player_beds_.push_back(brook);
+        scene_state_.player_beds_.push_back(brook);
     }
     note("bed lay from x=" + ::godot::String::num(brook.x, 2) + " z=" + ::godot::String::num(brook.z, 2) +
          " to x=" + ::godot::String::num(brook.end_x, 2) + " z=" + ::godot::String::num(brook.end_z, 2) +

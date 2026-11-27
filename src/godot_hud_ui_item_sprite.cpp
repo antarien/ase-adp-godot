@@ -13,8 +13,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-23
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -25,7 +25,8 @@
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_stroke.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/sprite/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -112,20 +113,30 @@ bool UiItemSprite::set(const std::string& name, std::string& failed) {
         failed = "item_art.items." + name;
         return false;
     }
+    return set_entry("item_art.items." + name, entry, failed);
+}
+
+bool UiItemSprite::set_entry(const std::string& source_name, const ::godot::Dictionary& entry, std::string& failed) {
+    // One reader for every file in the format of item_art.json: the things of item_art.json and the activity symbols
+    // of activity_art.json (MIG_ASE_SKILL_RSM B7) are read and refused by the same checks.
+    if (theme_ == nullptr) {
+        failed = "hud.item_sprite.unbound";
+        return false;
+    }
     if (!read_number(entry, "vw", vw_) || !read_number(entry, "vh", vh_) || !(vw_ > 0.0) || !(vh_ > 0.0)) {
-        failed = "item_art.items." + name + ".vw/vh";
+        failed = source_name + ".vw/vh";
         return false;
     }
     const ::godot::Variant art = entry.get("art", ::godot::Variant());
     if (art.get_type() != ::godot::Variant::ARRAY) {
-        failed = "item_art.items." + name + ".art";
+        failed = source_name + ".art";
         return false;
     }
     const ::godot::Array list = art;
     paths_.clear();
     shadows_.clear();  // a kept silhouette is the mask of the drawing read before
     for (int64_t index = 0; index < list.size(); ++index) {
-        const std::string where = "item_art.items." + name + ".art." + std::to_string(index);
+        const std::string where = source_name + ".art." + std::to_string(index);
         const ::godot::Variant item = list[index];
         if (item.get_type() != ::godot::Variant::DICTIONARY) {
             failed = where;
@@ -165,7 +176,7 @@ bool UiItemSprite::set(const std::string& name, std::string& failed) {
     if (has_level_) {
         ::godot::Dictionary level;
         if (!read_section(entry, "level", level) || !read_level(*theme_, level, level_)) {
-            failed = "item_art.items." + name + ".level";
+            failed = source_name + ".level";
             return false;
         }
     }

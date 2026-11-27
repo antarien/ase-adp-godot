@@ -50,6 +50,8 @@ struct VivariumSurvivalFireView {
     double   breath_normal = 0.0;  // ATM_CONST_BREATHABILITY_NORMAL: the grade the owner gives normal air
     double   ash_kg = 0.0;     // HUB_ENT_ASH_REQ_ASH: kg of ash the cell has left since it was laid (ingle.left.v1 ash_kg)
     double   burn_left = 0.0;  // HUB_FIRE_CELL_BURN_LEFT: seconds the fuel lasts at the burn rate of this tick (ingle.left.v1 burn_left)
+    double   drying = 0.0;     // mark HUB_FIRE_CELL_DRYG: 1 while the face of unburnt wood boils its water off, steam (ingle.left.v1 drying)
+    double   smoking = 0.0;    // mark HUB_FIRE_CELL_SMOK: 1 while the dry face gives off its gases before they catch, smoke (ingle.left.v1 smoking)
 };
 
 }  // namespace ase::adp::godot

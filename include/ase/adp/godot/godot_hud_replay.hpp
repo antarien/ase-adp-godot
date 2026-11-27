@@ -41,7 +41,7 @@
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/debug/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 
 #include <cstdint>

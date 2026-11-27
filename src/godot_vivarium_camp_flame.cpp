@@ -13,7 +13,12 @@
  *                             the cell, its fuel left and its heat, lower over charcoal, a glow at the foot while the
  *                             wood heats and while it glows as ember, gone under ash;
  *                the light    an omni light on the ground and the figure, strongest over a flame;
- *                the smoke    particles rising while the cell burns or glows, as many as its heat gives;
+ *                the steam    white puffs while wood that does not burn yet boils its water off (ingle.left.v1 drying,
+ *                             mark HUB_FIRE_CELL_DRYG);
+ *                the smoke    particles rising while the cell burns or glows, as many as its heat gives, and while
+ *                             wood that does not burn yet gives off its gases before they catch (ingle.left.v1
+ *                             smoking, mark HUB_FIRE_CELL_SMOK); a log far from the fire steams first, smokes later
+ *                             and catches last, a log that touches a burning one catches at once;
  *                the sparks   particles thrown up by a flame only;
  *                the bed      a grey disc where the cell is ash.
  *
@@ -29,8 +34,8 @@
  * @usecase     usecase:5436 - kindle fire
  * @actor       Funken (FNKN)
  * @created     2026-11-23
- * @modified    2026-11-23
- * @version     00.00.01.00001 [init]
+ * @modified    2026-11-25
+ * @version     00.00.02.00001 [feat]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -77,6 +82,7 @@ constexpr const char* kCampFlameName = "CampFlame_";  // the prefix of a flame n
 constexpr const char* kFlameTongue = "Tongue";        // the quad camp_flame.gdshader draws upright toward the eye
 constexpr const char* kFlameGlow = "Glow";            // the light the fire throws on the ground and the figure
 constexpr const char* kFlameSmoke = "Smoke";          // the smoke particles rising from the cell
+constexpr const char* kFlameSteam = "Steam";          // the steam puffs of wood that boils its water off
 constexpr const char* kFlameSparks = "Sparks";        // the sparks a flame throws up
 constexpr const char* kFlameBed = "Bed";              // the ash bed the cell leaves
 constexpr const char* kFlameHeatShare = "heat_share";  // instance uniform of camp_flame.gdshader
@@ -87,7 +93,9 @@ constexpr uint32_t kStageFlame = 1u;     // mark flame (HUB_FIRE_CELL_FLAM)
 constexpr uint32_t kStageCharcoal = 2u;  // mark charcoal (HUB_FIRE_CELL_CHAR)
 constexpr uint32_t kStageEmber = 3u;     // mark ember (HUB_FIRE_CELL_EMBR)
 constexpr uint32_t kStageAsh = 4u;       // mark ash (HUB_FIRE_CELL_ASH)
-constexpr uint32_t kFlameNoteShift = 1u;  // stage << 1 | framed: one key per noted state of a flame
+constexpr uint32_t kFlameNoteShift = 3u;  // stage << 3 | steam | smoke | framed: one key per noted state of a flame
+constexpr uint32_t kFlameNoteSteam = 4u;  // the bit of the key while the wood steams
+constexpr uint32_t kFlameNoteSmoke = 2u;  // the bit of the key while the unburnt wood smokes
 constexpr float kFlameTallM = 0.9f;       // tongue of the largest cell at full heat and full fuel, metres
 constexpr float kFlameWideShare = 0.55f;  // width of a tongue over its height
 constexpr float kFlameLowShare = 0.45f;   // a charcoal tongue's height over the flame's: the volatiles are burnt
@@ -111,6 +119,16 @@ constexpr float kSmokeLiftAccel = 0.15f;  // the buoyancy of hot smoke, metres p
 constexpr float kSmokeEmberShare = 0.3f;  // smoke of ember over a flame's
 constexpr float kSmokeSourceM = 0.12f;    // radius of the sphere the particles start in
 constexpr float kSmokePuffM = 0.5f;       // edge of the quad a puff is drawn on
+constexpr float kSmokeUnburntShare = 0.5f;  // smoke of wood that gives off its gases before they catch, over a flame's
+constexpr int32_t kSteamAmount = 32;      // steam puffs alive while the wood boils its water off
+constexpr double kSteamLifeS = 2.5;       // seconds a steam puff rises before it is gone in the air
+constexpr float kSteamSpeedLow = 0.25f;   // rise of a steam puff, metres per second, slowest
+constexpr float kSteamSpeedHigh = 0.45f;  // and fastest
+constexpr float kSteamScaleLow = 0.15f;   // size of a steam puff, smallest
+constexpr float kSteamScaleHigh = 0.4f;   // and largest
+constexpr float kSteamSpreadDeg = 18.0f;  // cone of the rise, degrees
+constexpr float kSteamLiftAccel = 0.1f;   // the buoyancy of warm vapour, metres per second squared upward
+constexpr float kSteamPuffM = 0.4f;       // edge of the quad a steam puff is drawn on
 constexpr int32_t kSparkAmount = 24;      // sparks alive over a full flame
 constexpr double kSparkLifeS = 1.2;       // seconds a spark flies
 constexpr float kSparkSpeedLow = 0.8f;    // throw of a spark, metres per second, slowest
@@ -270,6 +288,12 @@ struct FlameParticles {
     smoke.ramp.push_back(::godot::Color(0.36f, 0.35f, 0.34f, 0.45f));
     smoke.ramp.push_back(::godot::Color(0.5f, 0.5f, 0.5f, 0.0f));
     stand_particles(flame, smoke);
+    FlameParticles steam{kFlameSteam, kSteamAmount, kSteamLifeS, kSteamSpeedLow, kSteamSpeedHigh, kSteamScaleLow,
+                         kSteamScaleHigh, kSteamSpreadDeg, kSteamLiftAccel, kSteamPuffM, {}};
+    steam.ramp.push_back(::godot::Color(0.95f, 0.96f, 0.98f, 0.0f));
+    steam.ramp.push_back(::godot::Color(0.92f, 0.93f, 0.95f, 0.35f));
+    steam.ramp.push_back(::godot::Color(1.0f, 1.0f, 1.0f, 0.0f));
+    stand_particles(flame, steam);
     FlameParticles sparks{kFlameSparks, kSparkAmount, kSparkLifeS, kSparkSpeedLow, kSparkSpeedHigh, kSparkScaleLow,
                           kSparkScaleHigh, kSparkSpreadDeg, -kSparkFallAccel, kSparkQuadM, {}};
     sparks.ramp.push_back(::godot::Color(1.0f, 0.85f, 0.4f, 1.0f));
@@ -297,9 +321,13 @@ struct FlameParticles {
  * The flame of one cell as its owner holds it: the tongue stands at the height its size, its fuel left and its heat
  * give, the light and the smoke follow the stage and the heat, the sparks fly only from a flame and the bed lies only
  * under ash. `heat_share` is the heat of the cell over the hottest cell, `size_share` the fuel the cell was laid with
- * over the largest cell, `fuel_share` the fuel it has left over the fuel it was laid with. Returns the tongue's height.
+ * over the largest cell, `fuel_share` the fuel it has left over the fuel it was laid with. `steaming` and `smoking` are
+ * the marks of wood that does not burn yet: they follow the owner, never the heat share, so a cool log far from the
+ * fire steams and smokes in the picture as soon as ase-fire says its face boils or gives off its gases. Returns the
+ * tongue's height.
  */
-float shape_flame(::godot::Node3D* flame, uint32_t stage, float heat_share, float size_share, float fuel_share) {
+float shape_flame(::godot::Node3D* flame, uint32_t stage, float heat_share, float size_share, float fuel_share,
+                  bool steaming, bool smoking) {
     const bool burning = stage == kStageFlame || stage == kStageCharcoal;
     const float size = kFlameTallM * ::godot::Math::sqrt(size_share);
     const float tall = burning ? size * (kFlameFuelFloor + (1.0f - kFlameFuelFloor) * fuel_share) * heat_share *
@@ -325,9 +353,18 @@ float shape_flame(::godot::Node3D* flame, uint32_t stage, float heat_share, floa
     }
     auto* smoke = ::godot::Object::cast_to<::godot::GPUParticles3D>(flame->get_node_or_null(::godot::NodePath(kFlameSmoke)));
     if (smoke != nullptr) {
-        const float puffs = burning ? heat_share : stage == kStageEmber ? kSmokeEmberShare * heat_share : 0.0f;
+        const float puffs = burning                                ? heat_share
+                            : stage == kStageEmber                 ? kSmokeEmberShare * heat_share
+                            : stage == kStageHeating && smoking    ? kSmokeUnburntShare
+                                                                   : 0.0f;
         smoke->set_amount_ratio(puffs);
         smoke->set_emitting(puffs > 0.0f);
+    }
+    auto* steam = ::godot::Object::cast_to<::godot::GPUParticles3D>(flame->get_node_or_null(::godot::NodePath(kFlameSteam)));
+    if (steam != nullptr) {
+        const bool rising = stage == kStageHeating && steaming;
+        steam->set_amount_ratio(rising ? 1.0f : 0.0f);
+        steam->set_emitting(rising);
     }
     auto* sparks = ::godot::Object::cast_to<::godot::GPUParticles3D>(flame->get_node_or_null(::godot::NodePath(kFlameSparks)));
     if (sparks != nullptr) {
@@ -391,16 +428,20 @@ void follow_camp_flames(VivariumCampState& camp, const std::vector<VivariumSurvi
         const float heat_share = hottest > 0.0f ? measured(cell.heat) / hottest : 0.0f;
         const float size_share = largest > 0.0f ? laid / largest : 0.0f;
         const float fuel_share = laid > 0.0f ? ::godot::Math::clamp(measured(cell.fuel) / laid, 0.0f, 1.0f) : 0.0f;
-        const float tall = shape_flame(flame, stage, heat_share, size_share, fuel_share);
+        const bool steaming = !std::isnan(cell.drying) && cell.drying != 0.0;
+        const bool smoking = !std::isnan(cell.smoking) && cell.smoking != 0.0;
+        const float tall = shape_flame(flame, stage, heat_share, size_share, fuel_share, steaming, smoking);
         const ::godot::Vector3 heart = flame->get_position() + ::godot::Vector3(0.0f, tall * 0.5f, 0.0f);
         const bool framed = eye != nullptr && eye->is_position_in_frustum(heart);
-        const uint32_t state = (stage << kFlameNoteShift) | (framed ? 1u : 0u);
+        const uint32_t state = (stage << kFlameNoteShift) | (steaming ? kFlameNoteSteam : 0u) |
+                               (smoking ? kFlameNoteSmoke : 0u) | (framed ? 1u : 0u);
         const auto noted = camp.flame_noted.find(cell.object_id);
         if (noted == camp.flame_noted.end() || noted->second != state) {
             camp.flame_noted[cell.object_id] = state;
             lines.push_back("camp flame cell=" + ::godot::String::num_uint64(cell.object_id) + " body=" +
                             ::godot::String::num_uint64(static_cast<uint32_t>(cell.body)) + " stage=" +
-                            ::godot::String::num_uint64(stage) + " framed " + (framed ? "1" : "0") + " height " +
+                            ::godot::String::num_uint64(stage) + " steam " + (steaming ? "1" : "0") + " smoke " +
+                            (smoking ? "1" : "0") + " framed " + (framed ? "1" : "0") + " height " +
                             ::godot::String::num(tall, 2));
         }
     }

@@ -17,8 +17,8 @@
  * @actor       Interface Growth Director (INTEGRODIR)
  * @register    carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-24
- * @version     00.00.22.00022 [init]
+ * @modified    2026-11-25
+ * @version     00.00.23.00023 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -27,7 +27,8 @@
 
 #include <ase/adp/godot/godot_hud_compose.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
+#include <ase/adp/godot/hud/touch/types.hpp>
 
 #include <cstring>
 
@@ -79,12 +80,10 @@ bool VivariumHud::load(const ::godot::Dictionary& root, std::string& failed) {
     if (!theme_.load(root, failed) || !resolver_.set_spec(theme_.spec(), failed)) {
         return false;
     }
-    if (!band_.bind(theme_, failed) || !veil_.bind(theme_, failed) || !clouds_.bind(theme_, failed) ||
+    if (!arc_.bind(theme_, failed) || !band_.bind(theme_, failed) || !veil_.bind(theme_, failed) || !clouds_.bind(theme_, failed) ||
         !overcast_.bind(theme_, failed) || !shade_.bind(theme_, failed) ||
         !rail_.bind(theme_, failed) ||
-        !body_.bind(theme_, failed) || !warmth_.bind(theme_, failed) || !states_.bind(theme_, failed) ||
-        !fire_.bind(theme_, failed) || !rest_.bind(theme_, failed) || !air_.bind(theme_, failed) ||
-        !food_.bind(theme_, failed) || !water_.bind(theme_, failed) ||
+        !survival_.bind(theme_, failed) ||
         !signs_.bind(theme_, failed) || !focus_.bind(theme_, failed) || !fan_.bind(theme_, failed) ||
         !prune_.bind(theme_, failed) || !root_cut_.bind(theme_, failed) || !terrain_.bind(theme_, failed) ||
         !trail_.bind(theme_, failed) ||
@@ -92,7 +91,9 @@ bool VivariumHud::load(const ::godot::Dictionary& root, std::string& failed) {
         !world_.bind(theme_, failed) || !tap_.bind(theme_, failed) || !sow_.bind(theme_, failed) ||
         !shade_tree_.bind(theme_, failed) ||
         !hand_.bind(theme_, failed) || !belt_.bind(theme_, failed) ||
-        !bag_icon_.bind(theme_, failed) || !window_.bind(theme_, failed) || !pack_.bind(theme_, failed) ||
+        !bag_icon_.bind(theme_, failed) || !bars_.bind(theme_, root, failed) || !rings_.bind(theme_, failed) ||
+        !window_.bind(theme_, failed) ||
+        !pack_.bind(theme_, failed) ||
         !pouch_.bind(theme_, failed) || !select_.bind(theme_, failed) || !debug_.bind(theme_, failed) ||
         !drag_.bind(theme_, failed) ||
         !toast_.bind(theme_, failed)) {
@@ -246,6 +247,10 @@ bool VivariumHud::resolve(VivariumHudFrame& frame, std::string& failed) {
     // The stow bridge answered the drag's place during this frame's fill; the layer takes it now, so a finger
     // held still over a place shows its verdict as the mockup's ghost does.
     drag_.judge(frame.drag);
+    // THE BOTTOM BAND (operator order 2026-11-25): a change of the bars turns it to them, GODOT_RSM_BAND_HOLD_SECONDS
+    // of quiet or the inventory in use (the pack open, a thing dragged) turn it back to the slots, the switch turns
+    // it by hand. The wall clock counts, as the long presses do: the hold is a promise in real seconds.
+    bars_.step(frame.bars.bars, wall_, window_.pack_open() || !drag_.dragged().empty());
     fill(frame);
     return set_rail(failed);
 }
@@ -300,6 +305,7 @@ void VivariumHud::fill(VivariumHudFrame& now) const {
     now.terrain.reticle.verb = verb_;
     now.debug.open = drawer_open_;
     now.debug.tab = debug_tab_;
+    now.debug.view = debug_view_;
 
     // The surface each dim, the drawer and the veil reach.
     now.veil.cover = now.cover;

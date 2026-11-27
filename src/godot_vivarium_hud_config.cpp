@@ -23,8 +23,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-12
- * @modified    2026-11-12
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -33,7 +33,7 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/hand/types.hpp>
 
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -45,40 +45,49 @@ namespace ase::adp::godot {
 
 bool VivariumView::load_hud(const ::godot::Dictionary& root) {
     std::string failed;
-    if (!hud_.load(root, failed)) {
+    // the activity symbols of SHA's activity_art.json: a missing or unreadable file refuses the configuration
+    if (!hud_state_.hud_activities_.load(root, failed)) {
         return fail_config(("hud " + failed).c_str());
     }
+    // the verb chips of the hand, the chips of the fan and the offer of a sign draw these symbols (MIG_ASE_SKILL_RSM
+    // B7); bound BEFORE the HUD loads, since its load binds the fan and the signs. Both live in hud_state_ together.
+    hud_state_.hud_.bind_activities(hud_state_.hud_activities_);
+    if (!hud_state_.hud_.load(root, failed)) {
+        return fail_config(("hud " + failed).c_str());
+    }
+    // the language the words of this start are read in, hud.language or the word after modes.language (row E15)
+    note(::godot::String::utf8(("hud language=" + hud_state_.hud_.theme().language()).c_str()));
     // the ridges of hills on the horizon take their measures from the same theme (row N05)
-    if (!hud_ridge_.bind(hud_.theme(), failed)) {
+    if (!hud_state_.hud_ridge_.bind(hud_state_.hud_.theme(), failed)) {
         return fail_config(("hud " + failed).c_str());
     }
     // the ground's colour by season, snow, depth and horizon from the same theme (row N06)
-    if (!hud_ground_season_.bind(hud_.theme(), failed)) {
+    if (!hud_state_.hud_ground_season_.bind(hud_state_.hud_.theme(), failed)) {
         return fail_config(("hud " + failed).c_str());
     }
     // the leaf's colour by season and the olive it turns toward while its stand wilts from the same theme (B0278)
-    if (!hud_leaf_season_.bind(hud_.theme(), failed)) {
+    if (!hud_state_.hud_leaf_season_.bind(hud_state_.hud_.theme(), failed)) {
         return fail_config(("hud " + failed).c_str());
     }
     // the sky the brook reflects and the strokes of its current from the same theme (row N07)
-    if (!hud_brook_reflection_.bind(hud_.theme(), failed)) {
+    if (!hud_state_.hud_brook_reflection_.bind(hud_state_.hud_.theme(), failed)) {
         return fail_config(("hud " + failed).c_str());
     }
     // the cadence the HUD samples the simulation at and the longest step of its clock from the same theme (row T10)
-    if (!hud_refresh_.bind(hud_.theme(), failed)) {
+    if (!hud_state_.hud_refresh_.bind(hud_state_.hud_.theme(), failed)) {
         return fail_config(("hud " + failed).c_str());
     }
     // the frames per second in the status line's gap against the floor of view.frame_budget_ms, read by load_view
     // before load_hud (operator order 2026-11-24: never under 30 frames per second)
-    if (!frame_rate_.bind(hud_.theme(), order_budget_.frame_budget_ms, failed)) {
+    if (!hud_state_.frame_rate_.bind(hud_state_.hud_.theme(), scene_state_.order_budget_.frame_budget_ms, failed)) {
         return fail_config(("hud " + failed).c_str());
     }
     // The mockup's units onto the logical surface: hud_frame_width of them span its width.
     double frame_w = 0.0;
-    if (!hud_.theme().measure("hud_frame_width", frame_w) || !(frame_w > 0.0) || !(layout_.size.x > 0.0f)) {
+    if (!hud_state_.hud_.theme().measure("hud_frame_width", frame_w) || !(frame_w > 0.0) || !(layout_.size.x > 0.0f)) {
         return fail_config("hud_frame_width");
     }
-    hud_unit_ = static_cast<double>(layout_.size.x) / frame_w;
+    hud_state_.hud_unit_ = static_cast<double>(layout_.size.x) / frame_w;
 
     // What each ground tool does: its operation and the radius of its disc, view.flatten_m where it names none.
     ::godot::Dictionary hud;
@@ -86,29 +95,29 @@ bool VivariumView::load_hud(const ::godot::Dictionary& root) {
     if (!read_section(root, "hud", hud) || !read_section(hud, "verbs", verbs)) {
         return fail_config("hud.verbs");
     }
-    if (!load_hud_bridge(hud_.theme())) {
+    if (!load_hud_bridge(hud_state_.hud_.theme())) {
         return false;  // the failing hud_bridge_* token of SHA stands on the error panel already
     }
-    if (!load_figure_hud(hud_.theme())) {
+    if (!load_figure_hud(hud_state_.hud_.theme())) {
         return false;  // the failing hud_figure_* token of SHA stands on the error panel already (07.9)
     }
     read_hud_still();
     std::string carry_failed;
     // The start screen's choice (operator order 2026-11-19): its chips, words and measures are SHA's like the HUD's.
-    if (!start_choice_.bind(hud_.theme(), carry_failed)) {
+    if (!start_choice_.bind(hud_state_.hud_.theme(), carry_failed)) {
         return fail_config(("hud " + carry_failed).c_str());
     }
-    if (!hud_carry_.load(hud_.theme(), carry_failed)) {
+    if (!hud_state_.hud_carry_.load(hud_state_.hud_.theme(), carry_failed)) {
         return fail_config(carry_failed.c_str());  // the mockup's inventory: a hud_bridge_* token SHA does not state
     }
-    if (!hud_hand_.load(hud_.theme(), carry_failed)) {
+    if (!hud_state_.hud_hand_.load(hud_state_.hud_.theme(), carry_failed)) {
         return fail_config(carry_failed.c_str());  // the hand's readings: a hud_bridge_hand_* token SHA does not state
     }
     // the loosened soil on the ground square load_host_config read before (N0456, row N08)
-    if (!hud_loose_.load(hud_.theme(), start_.ground, hud_bridge_loose_, carry_failed)) {
+    if (!hud_state_.hud_loose_.load(hud_state_.hud_.theme(), start_.ground, hud_state_.hud_bridge_loose_, carry_failed)) {
         return fail_config(carry_failed.c_str());  // a hud_bridge_loose_* token SHA does not state
     }
-    hud_verbs_.clear();
+    hud_state_.hud_verbs_.clear();
     const ::godot::Array names = verbs.keys();
     for (int64_t i = 0; i < names.size(); ++i) {
         const ::godot::String name = names[i];
@@ -136,12 +145,12 @@ bool VivariumView::load_hud(const ::godot::Dictionary& root) {
             verb.op == VivariumHud::OP_LOOSEN || verb.op == VivariumHud::OP_FLATTEN) {
             const std::string token = GODOT_HUD_VERB_TOKEN + key + GODOT_HUD_VERB_BRUSH_TAIL;
             double brush_m = 0.0;
-            if (!hud_.theme().measure(token, brush_m) || !(brush_m > 0.0)) {
+            if (!hud_state_.hud_.theme().measure(token, brush_m) || !(brush_m > 0.0)) {
                 return fail_config(token.c_str());  // a hud_verb_<v>_brush_m token SHA does not state
             }
             verb.brush_m = brush_m;
         } else {
-            verb.brush_m = static_cast<double>(flatten_m_);
+            verb.brush_m = static_cast<double>(scene_state_.flatten_m_);
         }
         // A spade stroke moves the ground by a set amount (applyTerr, m.html 987: elevar and rebaixar move the
         // height by 0.3 under the brush); the amount is the verb's depth_m, required where the verb digs or heaps.
@@ -175,7 +184,7 @@ bool VivariumView::load_hud(const ::godot::Dictionary& root) {
         verb.tone = tone.utf8().get_data();
         verb.toast = toast.utf8().get_data();
         verb.roots = roots.utf8().get_data();
-        hud_verbs_[key] = verb;
+        hud_state_.hud_verbs_[key] = verb;
     }
     return true;
 }
@@ -187,12 +196,12 @@ void VivariumView::read_hud_still() {
     const int32_t platform = display != nullptr ? display->accessibility_should_reduce_animation() : -1;
     const bool launched = launched_with(modes_.still_argument);
     const bool still = launched || platform == 1;
-    if (hud_still_read_ && still == hud_still_ && platform == hud_still_platform_) {
+    if (hud_state_.hud_still_read_ && still == hud_state_.hud_still_ && platform == hud_state_.hud_still_platform_) {
         return;
     }
-    hud_still_read_ = true;
-    hud_still_ = still;
-    hud_still_platform_ = platform;
+    hud_state_.hud_still_read_ = true;
+    hud_state_.hud_still_ = still;
+    hud_state_.hud_still_platform_ = platform;
     note(::godot::String(("hud still=" + std::to_string(still ? 1 : 0) + " launch=" + std::to_string(launched ? 1 : 0) +
                           " platform=" + std::to_string(platform)).c_str()));
 }

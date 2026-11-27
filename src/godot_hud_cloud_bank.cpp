@@ -22,7 +22,7 @@
  */
 
 #include <ase/adp/godot/godot_hud_cloud_bank.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/weather/types.hpp>
 
 #include <ase/math/math.hpp>
 

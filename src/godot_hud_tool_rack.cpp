@@ -23,7 +23,9 @@
 
 #include <ase/adp/godot/godot_hud_tool_rack.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
+#include <ase/adp/godot/hud/touch/types.hpp>
 
 #include <ase/math/math.hpp>
 

@@ -107,15 +107,15 @@ uint32_t VivariumView::scene_parts_built() const {
     // The five parts of the scene the first picture needs: the ground of the latest relief, the beds of the
     // latest brooks, the organ templates, the organs, and the camera aimed at the focused birch. Without a
     // scene (a headless host) there is nothing to build, and every part counts as standing.
-    if (scene_ == nullptr) {
+    if (scene_state_.scene_ == nullptr) {
         return GODOT_INIT_SCENE_PARTS;
     }
     uint32_t built = 0u;
-    built += scene_terrain_ == resources_.terrain_generation() ? 1u : 0u;
-    built += water_marks_.streams == resources_.stream_generation() ? 1u : 0u;
+    built += scene_state_.scene_terrain_ == resources_.terrain_generation() ? 1u : 0u;
+    built += scene_state_.water_marks_.streams == resources_.stream_generation() ? 1u : 0u;
     built += resources_.template_generation() > 0u ? 1u : 0u;
-    built += scene_organs_ > 0u ? 1u : 0u;
-    built += scene_focus_ != GODOT_NO_PLACE ? 1u : 0u;
+    built += scene_state_.scene_organs_ > 0u ? 1u : 0u;
+    built += scene_state_.scene_focus_ != GODOT_NO_PLACE ? 1u : 0u;
     return built;
 }
 
@@ -132,7 +132,7 @@ double VivariumView::initialisation_progress() const {
     }
     const double sky_and_clock = ((resources_.get_sky().known ? 1.0 : 0.0) +
                                   (resources_.get_clock().known ? 1.0 : 0.0)) / 2.0;
-    const double figure = figure_load_share(figure_look_.load);
+    const double figure = figure_load_share(figure_state_.figure_look_.load);
     const double brooks = start_.brooks.empty()
                               ? 1.0
                               : static_cast<double>(resources_.get_streams().size()) /
@@ -185,7 +185,7 @@ void VivariumView::follow_initialisation() {
     const bool jumping = debug_.jump.running;
     // the figure file loads in a task of the WorkerThreadPool (godot_figure_load.hpp); its figures and its
     // pipelines belong to the first visible frame, so the screen holds until follow_figure took the pack
-    const bool figure_loading = figure_load_running(figure_look_.load);
+    const bool figure_loading = figure_load_running(figure_state_.figure_look_.load);
     // THE LOG NAMES THE STEP THAT HOLDS THE SCREEN (B0357): the first step of the bar still missing, in the
     // order of initialisation_progress, chosen once by start_hold_step (godot_start_hold.hpp); a line stands
     // each time that step changes, never per frame. The new pipelines and the quiet frames are one step,
@@ -222,7 +222,7 @@ void VivariumView::follow_initialisation() {
              ::godot::String::num_uint64(start_.brooks.size()) + " parts=" +
              ::godot::String::num_uint64(scene_parts_built()) + "/" +
              ::godot::String::num_uint64(GODOT_INIT_SCENE_PARTS) + " figure=" +
-             ::godot::String::num(figure_load_share(figure_look_.load), 2) + " " + measure(GODOT_NO_PLACE));
+             ::godot::String::num(figure_load_share(figure_state_.figure_look_.load), 2) + " " + measure(GODOT_NO_PLACE));
     }
     if (step != GODOT_HOLD_RENDER || compiled) {
         start_hold_.render_frames = 0u;
@@ -234,7 +234,7 @@ void VivariumView::follow_initialisation() {
     }
     initialised_ = true;
     // the figure file compiled its pipelines behind the screen (warm_figure); its warming instance leaves now
-    end_figure_warmth(scene_);
+    end_figure_warmth(scene_state_.scene_);
     note("start_screen lifted prev=" + start_hold_.hold + " held_ms=" +
          ::godot::String::num_uint64(now_ms - start_hold_.hold_since_ms) +
          " brooks=" + ::godot::String::num_uint64(resources_.get_streams().size()) +

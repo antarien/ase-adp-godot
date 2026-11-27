@@ -24,7 +24,8 @@
 #include <ase/adp/godot/godot_hud_drag_layer.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_word_fill.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/drag/types.hpp>
+#include <ase/adp/godot/hud/touch/types.hpp>
 
 #include <ase/math/math.hpp>
 #include <ase/math/random.hpp>

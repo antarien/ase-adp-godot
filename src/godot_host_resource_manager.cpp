@@ -13,8 +13,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-23
- * @version     00.00.28.00028 [seed]
+ * @modified    2026-11-25
+ * @version     00.00.29.00029 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -106,9 +106,11 @@
 // Own header FIRST
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
 #include <ase/adp/godot/godot_host_record.hpp>
+#include <ase/adp/godot/godot_hud_debug_rsm.hpp>
 #include <ase/adp/godot/godot_organ_records.hpp>
 #include <ase/adp/godot/godot_salt_records.hpp>
 #include <ase/adp/godot/godot_terrain_samples.hpp>
+#include <ase/adp/godot/arc/types.hpp>
 #include <ase/adp/godot/cap/types.hpp>
 #include <ase/adp/godot/lod/types.hpp>
 #include <ase/adp/godot/host/types.hpp>
@@ -133,6 +135,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -248,7 +251,7 @@ constexpr const char* kFigureKeyZoomDelta = "zoom_delta";  // turn request: chan
 constexpr const char* kFigureKeyItem = "item";      // hold request: catalog id of the thing (AVATAR_HOST_KEY_ITEM)
 constexpr const char* kFigureKeyLitres = "litres";  // drain request: litres the release lets go (AVTR_HOST_KEY_LITRES)
 constexpr const char* kFigureKeyPatch = "patch";    // drain request: patch object the water falls on (AVTR_HOST_KEY_PATCH, N0517)
-constexpr const char* kFigureKeyBearer = "bearer";  // gear record: the figure that carries the piece (AVATAR_HOST_KEY_BEARER)
+constexpr const char* kFigureKeyBearer = "bearer";  // gear record: the figure that carries the piece (AVATAR_HOST_KEY_BEARER); prune request: the figure that made the cut (FLRA_HOST_KEY_BEARER)
 constexpr const char* kSurvivalKeyEffectiveTemp = "effective_temp";  // survival body: MTB_EFFECTIVE_TEMP, degrees (N0530)
 constexpr const char* kSurvivalKeyTempStress = "temp_stress";        // survival body: MTB_TEMP_STRESS, 0 to 1
 constexpr const char* kSurvivalKeyHunger = "hunger";                 // survival body: MTB_HUNGER, 0 to 100
@@ -265,7 +268,33 @@ constexpr const char* kSurvivalKeyIsResting = "is_resting";          // survival
 constexpr const char* kSurvivalKeySleeping = "sleeping";              // survival rest: MTB_IS_SLEEPING, 1 while the resting figure sleeps (N0555)
 constexpr const char* kSurvivalKeyRestQuality = "rest_quality";       // survival rest: MTB_REST_QUALITY, 0 to 1 (FIRECAMP T.11, N0578)
 constexpr const char* kSurvivalKeyRestTarget = "rest_target";         // survival rest: MTB_CONST_REST_QUALITY_TARGET, good rest (N0578)
-constexpr const char* kSurvivalKeySpoil = "spoil";                    // survival food: ENT_FOOD_ROT_CARRIED, 0 fresh to 1 rotten (U07)
+// The skill ports of ase-pl-avatar (usecase:101305, MIG_ASE_SKILL_RSM B3; the names of avatar.skill.v1 and avatar.skill.bar.v1).
+constexpr const char* kSkillKeyBearer = "bearer";                     // skill and bar: the figure entity id
+constexpr const char* kSkillKeyAction = "action";                     // skill and bar: BDI_CONST_ACTION_*, the entry's skill_id
+constexpr const char* kSkillKeyPhase = "phase";                       // skill: 0 active, 1 after-run, 2 relearn, 3 locked, 4 dormant
+constexpr const char* kSkillKeySes = "ses";                           // skill: session seconds
+constexpr const char* kSkillKeyDcd = "dcd";                           // skill: remaining grace seconds
+constexpr const char* kSkillKeyDcdShr = "dcd_shr";                    // skill: the share of the grace left, 0 to 1
+constexpr const char* kSkillKeyQntLeft = "qnt_left";                  // skill qnt: seconds until the running slice ends
+constexpr const char* kSkillKeyQntShr = "qnt_shr";                    // skill qnt: the share of the running slice that has run, 0 to 1
+constexpr const char* kSkillKeySlcLen = "slc_len";                    // skill qnt: slices in the ring so far
+constexpr const char* kSkillKeyAcd = "acd";                           // skill: fluctuation_current
+constexpr const char* kSkillKeyAcdMax = "acd_max";                    // skill: fluctuation_max
+constexpr const char* kSkillKeyTuc = "tuc";                           // skill: seconds
+constexpr const char* kSkillKeyTucMax = "tuc_max";                    // skill: seconds
+constexpr const char* kSkillKeyTul = "tul";                           // skill: seconds
+constexpr const char* kSkillKeyQnt = "qnt";                           // skill: seconds the running slice has run; bar: the quantity
+constexpr const char* kSkillKeySlcHead = "slc_head";                  // skill: ring place of the running slice
+constexpr const char* kSkillKeyEntry = "entry";                       // bar: object id of the learning entry of the slice
+constexpr const char* kSkillKeyQueFill = "que_fill";                  // skill: 0 to 1
+constexpr const char* kSkillKeyLck = "lck";                           // skill: lock seconds
+constexpr const char* kSkillKeyDgexp = "dgexp";                       // skill: dgEXP
+constexpr const char* kSkillKeySlot = "slot";                         // bar: ring place of the slice in its entry
+constexpr const char* kSkillKeyPrg = "prg";                           // skill prg: progress toward the next plateau, 0 to 100
+constexpr const char* kSkillKeyVel = "vel";                           // skill prg: smoothed rate of experience
+constexpr const char* kSkillKeyMsr = "msr";                           // skill prg: seconds the entry has been measured
+constexpr const char* kSkillKeyVol = "vol";                           // skill prg: units of work booked while the session runs
+constexpr const char* kSurvivalKeySpoil = "spoil";                   // survival food: ENT_FOOD_ROT_CARRIED, 0 fresh to 1 rotten (U07)
 constexpr const char* kSurvivalKeySoot = "soot";                      // survival smoke: GIS_LOCAL_SOOT, kg of soot in the air of the figure's cell (U06, D2500)
 constexpr const char* kSurvivalKeySmell = "smell";                    // survival smoke: PER_SMELL_SMOKE, share of smoke the figure's nose caught (B3)
 constexpr const char* kSurvivalKeyKind = "kind";                      // survival stock: the hash of the item_art.json key of the food (T.8)
@@ -304,6 +333,8 @@ constexpr const char* kFireKeyBreath = "breath_state";  // fire cell: ATM_GAS_BT
 constexpr const char* kFireKeyBreathNormal = "breath_normal";  // fire cell: ATM_CONST_BREATHABILITY_NORMAL, the grade of normal air
 constexpr const char* kLeftKeyAshKg = "ash_kg";         // left record: HUB_ENT_ASH_REQ_ASH, kg of ash since the cell was laid (IGL_HOST_KEY_ASH_KG)
 constexpr const char* kLeftKeyBurnLeft = "burn_left";   // left record: HUB_FIRE_CELL_BURN_LEFT, seconds the fuel lasts (IGL_HOST_KEY_BURN_LEFT)
+constexpr const char* kLeftKeyDrying = "drying";        // left record: mark HUB_FIRE_CELL_DRYG, 1 while unburnt wood steams (IGL_HOST_KEY_DRYING)
+constexpr const char* kLeftKeySmoking = "smoking";      // left record: mark HUB_FIRE_CELL_SMOK, 1 while unburnt wood smokes (IGL_HOST_KEY_SMOKING)
 constexpr const char* kWeatherKeyKind = "kind";                // weather record: ATM_WEATHER_KIND (SKY_HOST_KEY_KIND of ase-pl-sky)
 constexpr const char* kWeatherKeyTemperature = "temperature";  // weather record: degrees Celsius (SKY_HOST_KEY_TEMPERATURE of ase-pl-sky)
 constexpr const char* kWeatherKeyWind = "wind";                // current record: ATM_WIND_SPEED, m/s from 0 (SKY_HOST_KEY_WIND of ase-pl-sky)
@@ -2192,11 +2223,11 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         return true;
     }
 
-    if (const toml::table* catch_up = action[GODOT_SELFTEST_KEY_CATCH_UP].as_table()) {
-        const double seconds = (*catch_up)[GODOT_SELFTEST_KEY_SECONDS].value_or(std::nan(""));
-        const int64_t bound = (*catch_up)[GODOT_SELFTEST_KEY_MAX_FRAMES].value_or(int64_t{0});
+    if (const toml::table* away = action[GODOT_SELFTEST_KEY_AWAY].as_table()) {
+        const double seconds = (*away)[GODOT_SELFTEST_KEY_SECONDS].value_or(std::nan(""));
+        const int64_t bound = (*away)[GODOT_SELFTEST_KEY_MAX_FRAMES].value_or(int64_t{0});
         if (!(seconds > 0.0) || !std::isfinite(seconds) || bound <= 0) {
-            report_broken(label, GODOT_SELFTEST_KEY_CATCH_UP, "needs seconds and max_frames", result, report);
+            report_broken(label, GODOT_SELFTEST_KEY_AWAY, "needs seconds and max_frames", result, report);
             return false;
         }
         // One long frame, as the game host meets a return from the background: one tick, then the
@@ -2209,7 +2240,7 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         state.real_s += seconds;
         const double filed = state.real_s;
         if (file_real(host, config, filed) != ase::kernel::HostStatusOk) {
-            report_broken(label, GODOT_SELFTEST_KEY_CATCH_UP, "the real position was refused", result, report);
+            report_broken(label, GODOT_SELFTEST_KEY_AWAY, "the real position was refused", result, report);
             return false;
         }
         // ase-time lays the clock forward to it in one write in its next Dissemination run and reports
@@ -2225,7 +2256,7 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
             }
             laid = laid_real(host, config, state) >= filed_f;
         }
-        report_check(check, "catch_up seconds=" + decimal(seconds) + " frames=" + std::to_string(frames),
+        report_check(check, "away seconds=" + decimal(seconds) + " frames=" + std::to_string(frames),
                      laid ? "laid" : "not laid",
                      "real_laid_s >= " + decimal(filed_f) + " within " + std::to_string(bound) + " frames", laid,
                      result, report);
@@ -2373,7 +2404,7 @@ bool run_action(KernelEmbeddedHost& host, const toml::table& action, const Vivar
         return ran;
     }
     report_broken(label, GODOT_SELFTEST_KEY_DO,
-                  "an action names none of frames, remember, irrigate, wait, catch_up, expect, records, lay, view, "
+                  "an action names none of frames, remember, irrigate, wait, away, expect, records, lay, view, "
                   "camp, hull, part, digest",
                   result, report);
     return false;
@@ -2469,7 +2500,7 @@ HostStatus GodotHostResourceManager::boot(const VivariumStartConfig& config) {
     failure_step_ = GODOT_STEP_NONE;
     failure_status_ = ase::kernel::HostStatusOk;
     elapsed_in_s_ = 0.0;
-    backlog_s_ = 0.0;
+    pending_s_ = 0.0;
     return_real_s_ = 0.0;
     tick_count_ = 0u;
     last_steps_ = 0u;
@@ -2634,6 +2665,9 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     cnpys_.clear();
     clock_ = VivariumClockView{};
     weather_ = VivariumWeatherView{};
+    arc_ = VivariumArcView{};
+    almanac_ = VivariumAlmanacView{};
+    event_codes_ = VivariumEventCodeView{};
     sap_ = VivariumSapView{};
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         organs_[c].clear();
@@ -2919,11 +2953,11 @@ HostStatus GodotHostResourceManager::advance(double elapsed_s) {
     if (filed != ase::kernel::HostStatusOk) {
         return fail(GODOT_STEP_ADVANCE, filed);
     }
-    // A long frame opens a return: its seconds wait as the backlog until the clock record shows
+    // A long frame opens a return: its seconds stand as pending until the clock record shows
     // ase-time laid the position this frame filed.
-    if (elapsed_s > GODOT_CATCH_UP_NOTE_S) {
+    if (elapsed_s > GODOT_AWAY_NOTE_S) {
         return_real_s_ = elapsed_in_s_;
-        backlog_s_ += elapsed_s;
+        pending_s_ += elapsed_s;
     }
 
     const HostStatus read = read_snapshot();
@@ -2934,7 +2968,7 @@ HostStatus GodotHostResourceManager::advance(double elapsed_s) {
     if (return_real_s_ > 0.0 && clock_.known &&
         clock_.real_laid_s >= static_cast<double>(static_cast<float>(return_real_s_))) {
         return_real_s_ = 0.0;
-        backlog_s_ = 0.0;
+        pending_s_ = 0.0;
     }
     return ase::kernel::HostStatusOk;
 }
@@ -3613,6 +3647,22 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     if (rests != ase::kernel::HostStatusOk) {
         return rests;
     }
+    const HostStatus skills = read_skills();
+    if (skills != ase::kernel::HostStatusOk) {
+        return skills;
+    }
+    const HostStatus skill_qnts = read_skill_qnts();
+    if (skill_qnts != ase::kernel::HostStatusOk) {
+        return skill_qnts;
+    }
+    const HostStatus skill_prgs = read_skill_prgs();
+    if (skill_prgs != ase::kernel::HostStatusOk) {
+        return skill_prgs;
+    }
+    const HostStatus skill_bars = read_skill_bars();
+    if (skill_bars != ase::kernel::HostStatusOk) {
+        return skill_bars;
+    }
     const HostStatus foods = read_survival_foods();
     if (foods != ase::kernel::HostStatusOk) {
         return foods;
@@ -3632,6 +3682,10 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     const HostStatus weather = read_weather();
     if (weather != ase::kernel::HostStatusOk) {
         return weather;
+    }
+    const HostStatus arc = read_arc();
+    if (arc != ase::kernel::HostStatusOk) {
+        return arc;
     }
     const HostStatus sap = read_sap();
     if (sap != ase::kernel::HostStatusOk) {
@@ -4544,6 +4598,201 @@ HostStatus GodotHostResourceManager::read_survival_rests() {
     return ase::kernel::HostStatusOk;
 }
 
+namespace {
+
+/**
+ * The order of a slice behind the running one of its entry and the seconds it has stood (usecase:101305, MIG_ASE_SKILL_RSM
+ * B3): the server sends the ring place (slot) of each slice and the head of the ring (slc_head) with its entry, no age and
+ * no order. back = (slc_head - slot + slc_len) % slc_len, the newest at back 0; slice = slc_len - 1 - back, the oldest at
+ * 0; age = qnt of the entry + back * qnt_max, qnt_max being qnt + qnt_left of the entry (rsm_slice_length). All three stay
+ * NaN while no entry of the port carries the slice or its ring.
+ */
+void skill_bar_order(const std::vector<VivariumSkillView>& skills, VivariumSkillBarView& bar) {
+    bar.back = std::numeric_limits<double>::quiet_NaN();
+    bar.slice = std::numeric_limits<double>::quiet_NaN();
+    bar.age = std::numeric_limits<double>::quiet_NaN();
+    for (const VivariumSkillView& entry : skills) {
+        if (static_cast<double>(entry.object_id) != bar.entry) {
+            continue;
+        }
+        bar.back = rsm_slice_back(entry.slc_head, bar.slot, entry.slc_len);
+        bar.slice = std::isfinite(bar.back) ? entry.slc_len - 1.0 - bar.back : bar.back;  // 0 the oldest booked slice
+        bar.age = rsm_slice_age(entry.qnt, bar.back, entry.qnt_max);
+        return;
+    }
+}
+
+}  // namespace
+
+HostStatus GodotHostResourceManager::read_skills() {
+    // THE LEARNING ENTRIES ARE READ EVERY SNAPSHOT (usecase:101305, MIG_ASE_SKILL_RSM B3): ase-pl-avatar replaces the
+    // whole set of avatar.skill.v1 in every Regulation pass (2 Hz), one record per learning entry of a figure, and the
+    // adapter shows the last set in every frame without counting anything. A host without the port offers none: the
+    // table shows no column. A key the record does not carry stays NaN; a key that stands but is not finite is refused.
+    skills_.clear();
+    if (!skill_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.skill_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    skills_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumSkillView view;
+        view.object_id = record.object_id;
+        view.bearer = record_value(record, kSkillKeyBearer);
+        view.action = record_value(record, kSkillKeyAction);
+        view.phase = record_value(record, kSkillKeyPhase);
+        view.ses = record_value(record, kSkillKeySes);
+        view.dcd = record_value(record, kSkillKeyDcd);
+        view.dcd_shr = record_value(record, kSkillKeyDcdShr);
+        view.dcd_max = rsm_grace_length(view.dcd, view.dcd_shr);  // no key of avatar.skill.v1: grace left over its share
+        view.acd = record_value(record, kSkillKeyAcd);
+        view.acd_max = record_value(record, kSkillKeyAcdMax);
+        view.tuc = record_value(record, kSkillKeyTuc);
+        view.tuc_max = record_value(record, kSkillKeyTucMax);
+        view.tul = record_value(record, kSkillKeyTul);
+        view.lck = record_value(record, kSkillKeyLck);
+        // qnt, slc_head, que_fill and dgexp come with avatar.skill.qnt.v1 (read_skill_qnts joins them by the entry and
+        // computes qnt_max and slc_max from them).
+        for (const double value : {view.bearer, view.action, view.phase, view.ses, view.dcd, view.dcd_max, view.dcd_shr,
+                                   view.acd, view.acd_max, view.tuc, view.tuc_max, view.tul, view.qnt, view.qnt_max,
+                                   view.slc_head, view.slc_max, view.que_fill, view.lck, view.dgexp}) {
+            if (std::isinf(value)) {
+                skills_.clear();
+                return refuse_record(*host_, config_.skill_port, record.object_id, "skill value not finite");
+            }
+        }
+        skills_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_skill_qnts() {
+    // THE RUNNING TIME SLICES ARE READ EVERY SNAPSHOT (usecase:101305, MIG_ASE_SKILL_RSM B3): avatar.skill.qnt.v1 lays one
+    // record per learning entry, its object id the entry the skill port's record has, with the seconds the running slice
+    // has run, the seconds until it ends, its share, the head of the ring and its length so far, the fill of the queue and
+    // dgEXP. The values join the entries by that id; a record of no entry of the skill port is dropped, an entry without
+    // a record keeps NaN in these values. A host without the port offers none.
+    const double none = std::numeric_limits<double>::quiet_NaN();
+    for (VivariumSkillView& entry : skills_) {
+        entry.qnt = entry.qnt_left = entry.qnt_shr = entry.slc_head = entry.slc_len = entry.que_fill = entry.dgexp = none;
+        entry.qnt_max = entry.slc_max = none;
+    }
+    if (!skill_qnt_offered() || skills_.empty()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.skill_qnt_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        for (VivariumSkillView& entry : skills_) {
+            if (entry.object_id != record.object_id) {
+                continue;
+            }
+            entry.qnt = record_value(record, kSkillKeyQnt);
+            entry.qnt_left = record_value(record, kSkillKeyQntLeft);
+            entry.qnt_shr = record_value(record, kSkillKeyQntShr);
+            entry.slc_head = record_value(record, kSkillKeySlcHead);
+            entry.slc_len = record_value(record, kSkillKeySlcLen);
+            entry.que_fill = record_value(record, kSkillKeyQueFill);
+            entry.dgexp = record_value(record, kSkillKeyDgexp);
+            entry.qnt_max = rsm_slice_length(entry.qnt, entry.qnt_left);  // no key: the run plus the rest of the slice
+            entry.slc_max = entry.slc_len;                                // no key: the ring the server has booked
+            for (const double value : {entry.qnt, entry.qnt_left, entry.qnt_shr, entry.slc_head, entry.slc_len,
+                                       entry.que_fill, entry.dgexp}) {
+                if (std::isinf(value)) {
+                    skills_.clear();
+                    return refuse_record(*host_, config_.skill_qnt_port, record.object_id, "skill qnt value not finite");
+                }
+            }
+            break;
+        }
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_skill_prgs() {
+    // THE MEASUREMENTS OF EACH ENTRY ARE READ EVERY SNAPSHOT (usecase:101305, MIG_ASE_SKILL_RSM B3): avatar.skill.prg.v1
+    // lays one record per learning entry, its object id the entry the skill port's record has, with the progress toward
+    // the next plateau, the smoothed rate of experience, the seconds the entry has been measured and the units of work
+    // booked while the session runs. The values join the entries by that id; a record of no entry of the skill port is
+    // dropped, an entry without a record keeps NaN in these values. A host without the port offers none.
+    const double none = std::numeric_limits<double>::quiet_NaN();
+    for (VivariumSkillView& entry : skills_) {
+        entry.prg = entry.vel = entry.msr = entry.vol = none;
+    }
+    if (!skill_prg_offered() || skills_.empty()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.skill_prg_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        for (VivariumSkillView& entry : skills_) {
+            if (entry.object_id != record.object_id) {
+                continue;
+            }
+            entry.prg = record_value(record, kSkillKeyPrg);
+            entry.vel = record_value(record, kSkillKeyVel);
+            entry.msr = record_value(record, kSkillKeyMsr);
+            entry.vol = record_value(record, kSkillKeyVol);
+            for (const double value : {entry.prg, entry.vel, entry.msr, entry.vol}) {
+                if (std::isinf(value)) {
+                    skills_.clear();
+                    return refuse_record(*host_, config_.skill_prg_port, record.object_id, "skill prg value not finite");
+                }
+            }
+            break;
+        }
+    }
+    return ase::kernel::HostStatusOk;
+}
+
+HostStatus GodotHostResourceManager::read_skill_bars() {
+    // THE TIME SLICES ARE READ EVERY SNAPSHOT (usecase:101305, MIG_ASE_SKILL_RSM B3): one record per time slice of a
+    // figure, at most 20 per figure, the whole set replaced in every Regulation pass; a host without the port offers none.
+    skill_bars_.clear();
+    if (!skill_bar_offered()) {
+        return ase::kernel::HostStatusOk;
+    }
+    uint32_t written = 0u;
+    const HostStatus status = snapshot_all(*host_, config_.skill_bar_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk) {
+        return status;
+    }
+    skill_bars_.reserve(written);
+    for (uint32_t i = 0u; i < written; ++i) {
+        const KernelHostRecord& record = organ_records_[i];
+        VivariumSkillBarView view;
+        view.object_id = record.object_id;
+        view.entry = record_value(record, kSkillKeyEntry);
+        view.bearer = record_value(record, kSkillKeyBearer);
+        view.action = record_value(record, kSkillKeyAction);
+        view.slot = record_value(record, kSkillKeySlot);
+        view.qnt = record_value(record, kSkillKeyQnt);
+        // slice and age are no keys of avatar.skill.bar.v1: skill_bar_order computes both from the ring of the entry.
+        for (const double value : {view.entry, view.bearer, view.action, view.slot, view.qnt}) {
+            if (std::isinf(value)) {
+                skill_bars_.clear();
+                return refuse_record(*host_, config_.skill_bar_port, record.object_id, "skill bar value not finite");
+            }
+        }
+        skill_bar_order(skills_, view);
+        skill_bars_.push_back(view);
+    }
+    return ase::kernel::HostStatusOk;
+}
+
 HostStatus GodotHostResourceManager::read_survival_foods() {
     // THE SPOIL IS READ EVERY SNAPSHOT (T.8, U07, N0530): ase-entropy rots every piece of food in a bag by the
     // temperature it lies at in each Coordination pass and lays the share of the bearer as ENT_FOOD_ROT_CARRIED, and
@@ -4641,6 +4890,8 @@ HostStatus GodotHostResourceManager::read_survival_fires() {
         // left record names this cell, neither is measured.
         view.ash_kg = std::nan("");
         view.burn_left = std::nan("");
+        view.drying = std::nan("");
+        view.smoking = std::nan("");
         for (const double value : {view.flame, view.charcoal, view.ember, view.ash, view.fuel, view.fuel_laid,
                                    view.heat, view.body, view.oxygen, view.toxicity, view.breath_state,
                                    view.breath_normal}) {
@@ -4674,14 +4925,18 @@ HostStatus GodotHostResourceManager::read_survival_left() {
         const KernelHostRecord& record = organ_records_[i];
         const double ash_kg = record_value(record, kLeftKeyAshKg);
         const double burn_left = record_value(record, kLeftKeyBurnLeft);
-        if (std::isinf(ash_kg) || std::isinf(burn_left)) {
+        const double drying = record_value(record, kLeftKeyDrying);
+        const double smoking = record_value(record, kLeftKeySmoking);
+        if (std::isinf(ash_kg) || std::isinf(burn_left) || std::isinf(drying) || std::isinf(smoking)) {
             return refuse_record(*host_, config_.survival_left_port, record.object_id,
-                                 "fire cell ash or burn time not finite");
+                                 "fire cell ash, burn time, steam or smoke not finite");
         }
         for (VivariumSurvivalFireView& view : survival_fires_) {
             if (view.object_id == record.object_id) {
                 view.ash_kg = ash_kg;
                 view.burn_left = burn_left;
+                view.drying = drying;
+                view.smoking = smoking;
             }
         }
     }
@@ -4792,6 +5047,146 @@ HostStatus GodotHostResourceManager::read_weather() {
     return ase::kernel::HostStatusOk;
 }
 
+namespace {
+
+/** One code of flora.event_code.v1: its key and where it stands in the view. */
+struct ArcCodeSlot {
+    const char* key;
+    double VivariumEventCodeView::*member;
+};
+
+constexpr ArcCodeSlot kArcCodeSlots[GODOT_EVENT_CODE_KEYS] = {
+    {GODOT_KEY_CODE_NONE, &VivariumEventCodeView::none},
+    {GODOT_KEY_CODE_KIND_COUNT, &VivariumEventCodeView::kind_count},
+    {GODOT_KEY_CODE_HUNT, &VivariumEventCodeView::hunt},
+    {GODOT_KEY_CODE_SEASON, &VivariumEventCodeView::season},
+    {GODOT_KEY_CODE_VECTUM, &VivariumEventCodeView::vectum},
+    {GODOT_KEY_CODE_STAGE, &VivariumEventCodeView::stage},
+    {GODOT_KEY_CODE_PERIOD, &VivariumEventCodeView::period},
+    {GODOT_KEY_CODE_DAWN, &VivariumEventCodeView::dawn},
+    {GODOT_KEY_CODE_DUSK, &VivariumEventCodeView::dusk},
+    {GODOT_KEY_CODE_MOONRISE, &VivariumEventCodeView::moonrise},
+    {GODOT_KEY_CODE_FULLMOON, &VivariumEventCodeView::fullmoon},
+    {GODOT_KEY_CODE_ECLIPSE, &VivariumEventCodeView::eclipse},
+    {GODOT_KEY_CODE_CONJ, &VivariumEventCodeView::conj},
+    {GODOT_KEY_CODE_CONJ_GREAT, &VivariumEventCodeView::conj_great},
+    {GODOT_KEY_CODE_ANTARES, &VivariumEventCodeView::antares},
+    {GODOT_KEY_CODE_ARCTURUS, &VivariumEventCodeView::arcturus},
+    {GODOT_KEY_CODE_TUMBRAE, &VivariumEventCodeView::tumbrae},
+    {GODOT_KEY_CODE_LUNBREX, &VivariumEventCodeView::lunbrex},
+    {GODOT_KEY_CODE_RING_DAY, &VivariumEventCodeView::ring_day},
+    {GODOT_KEY_CODE_RING_LUN, &VivariumEventCodeView::ring_lun},
+    {GODOT_KEY_CODE_RING_YEAR, &VivariumEventCodeView::ring_year}};
+
+/** The codes of the records merged by key; false when a key stands on no record or on one twice. */
+bool merge_arc_codes(const std::vector<KernelHostRecord>& records, uint32_t written, VivariumEventCodeView& out) {
+    out = VivariumEventCodeView{};
+    std::size_t found = 0u;
+    for (uint32_t index = 0u; index < written; ++index) {
+        for (const ArcCodeSlot& slot : kArcCodeSlots) {
+            const double value = record_value(records[index], slot.key);
+            if (std::isfinite(value)) {
+                out.*(slot.member) = value;
+                found += 1u;
+            }
+        }
+    }
+    out.known = found == GODOT_EVENT_CODE_KEYS;
+    return out.known;
+}
+
+/** One occurrence of flora.almanac.v1; false when a value is missing. */
+bool read_occurrence(const KernelHostRecord& record, double& seq, VivariumOccurrenceView& out) {
+    out.kind = record_value(record, GODOT_KEY_OCC_KIND);
+    out.ring = record_value(record, GODOT_KEY_OCC_RING);
+    out.body = record_value(record, GODOT_KEY_BODY);
+    out.share = record_value(record, GODOT_KEY_OCC_SHARE);
+    out.span = record_value(record, GODOT_KEY_OCC_SPAN);
+    seq = record_value(record, GODOT_KEY_SEQ);
+    return std::isfinite(out.kind) && std::isfinite(out.ring) && std::isfinite(out.body) && std::isfinite(out.share) &&
+           std::isfinite(out.span) && std::isfinite(seq);
+}
+
+}  // namespace
+
+HostStatus GodotHostResourceManager::read_arc() {
+    // THE SKY ARC IS READ EVERY SNAPSHOT (N0448, PLAN_ASE_VIVARIUM_PHASE_06_HUD_EXT, "Die Brücke"). flora.arc.v1 files
+    // one record every frame: the shares of now against the anchor of each ring, the number of the set, the next
+    // event. flora.almanac.v1 files one record per occurrence and is read again ONLY when that number differs from the
+    // set held, and adopted only when every record carries the arc's number, so anchor and occurrences never come from
+    // two states. flora.event_code.v1 files the codes of the kinds and rings on two records, merged by key; the
+    // adapter compares against them and holds no number of its own. A port not offered or without a record leaves
+    // its view unknown, and the HUD's bridge draws the mockup's arc of SHA; a record with a value missing, or two
+    // arc records, are refused.
+    arc_ = VivariumArcView{};
+    uint32_t written = 0u;
+    if (!event_codes_.known && !config_.event_code_port.empty() && host_->has_port(config_.event_code_port.c_str())) {
+        const HostStatus status = snapshot_all(*host_, config_.event_code_port, organ_records_, written);
+        if (status != ase::kernel::HostStatusOk) {
+            return status;
+        }
+        if (written > 0u && !merge_arc_codes(organ_records_, written, event_codes_)) {
+            return refuse_record(*host_, config_.event_code_port, organ_records_[0].object_id,
+                                 "event codes incomplete: every code stands on the two records once");
+        }
+    }
+    if (config_.arc_port.empty() || !host_->has_port(config_.arc_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    HostStatus status = snapshot_all(*host_, config_.arc_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk || written == 0u) {
+        return status;
+    }
+    if (written > 1u) {
+        return refuse_record(*host_, config_.arc_port, organ_records_[1].object_id, "more than one arc");
+    }
+    const KernelHostRecord& record = organ_records_[0];
+    arc_.day_now = record_value(record, GODOT_KEY_ARC_DAY_NOW);
+    arc_.lun_now = record_value(record, GODOT_KEY_ARC_LUN_NOW);
+    arc_.year_now = record_value(record, GODOT_KEY_ARC_YEAR_NOW);
+    arc_.seq = record_value(record, GODOT_KEY_SEQ);
+    arc_.next_kind = record_value(record, GODOT_KEY_ARC_NEXT_KIND);
+    arc_.next_body = record_value(record, GODOT_KEY_ARC_NEXT_BODY);
+    arc_.next_in_h = record_value(record, GODOT_KEY_ARC_NEXT_IN_H);
+    arc_.next_in_d = record_value(record, GODOT_KEY_ARC_NEXT_IN_D);
+    const double parts[] = {arc_.day_now,   arc_.lun_now,   arc_.year_now, arc_.seq,
+                            arc_.next_kind, arc_.next_body, arc_.next_in_h, arc_.next_in_d};
+    std::size_t finite = 0u;
+    for (const double part : parts) {
+        finite += std::isfinite(part) ? 1u : 0u;
+    }
+    if (finite != std::size(parts) || !whole(arc_.seq)) {
+        arc_ = VivariumArcView{};
+        return refuse_record(*host_, config_.arc_port, record.object_id,
+                             "arc incomplete: the three shares of now, the whole number of the set and the next "
+                             "event come together");
+    }
+    arc_.known = true;
+    if ((almanac_.known && almanac_.seq == arc_.seq) || config_.almanac_port.empty() ||
+        !host_->has_port(config_.almanac_port.c_str())) {
+        return ase::kernel::HostStatusOk;
+    }
+    status = snapshot_all(*host_, config_.almanac_port, organ_records_, written);
+    if (status != ase::kernel::HostStatusOk || written == 0u) {
+        return status;
+    }
+    std::vector<VivariumOccurrenceView> set(written);
+    for (uint32_t index = 0u; index < written; ++index) {
+        double seq = 0.0;
+        if (!read_occurrence(organ_records_[index], seq, set[index])) {
+            return refuse_record(*host_, config_.almanac_port, organ_records_[index].object_id,
+                                 "occurrence incomplete: kind, ring, body, share, span and the number of the set");
+        }
+        if (seq != arc_.seq) {
+            return ase::kernel::HostStatusOk;  // a set of another number than the arc's: the held one stands until it is filed
+        }
+    }
+    almanac_.occurrences = std::move(set);
+    almanac_.seq = arc_.seq;
+    almanac_.known = true;
+    return ase::kernel::HostStatusOk;
+}
+
 HostStatus GodotHostResourceManager::read_sap() {
     // THE SAP IS READ EVERY SNAPSHOT (N0457): ase-pl-flora files one record for the birch's tap on flora.sap.v1, whether
     // it runs, the litres the bark vessel holds now and the litres it holds when full; the vessel fills on the owner's
@@ -4832,11 +5227,15 @@ HostStatus GodotHostResourceManager::read_loose() {
     // THE LOOSENED SOIL IS THE SOIL'S OWN, READ EVERY SNAPSHOT (N0456, m.html patchLoose): ase-terrain keeps the
     // compaction of every macro cell (TerrainStaMcroCpctComponent, ase-gis GIS_CAT_LITHO_CPCT), the spade lowers it,
     // rain settles it back, and its rows HUB_TERN_MCRO reach the host through ase-pl-flora (FloraHostCpctExptSystem):
-    // one record per cell on terrain.loose.v1 with the cell's centre x and z, its edge cell_m and cpct_share 0..1.
-    // The looseness the HUD draws is the complement of that share; the adapter keeps the cells as the grid they form
-    // and never computes a compaction. A port not offered or no record filed leaves the raster unknown and the HUD's
-    // loose bridge draws the mockup's grid. Cells of different edges, a share out of 0..1, a cell twice or a cell
-    // missing from the grid the records span is a broken raster and refused.
+    // one record per cell on terrain.loose.v1 with the cell's centre x and z, its edge cell_m, cpct_share 0..1 and
+    // cpct_start, the owner's compaction of undisturbed topsoil (TER_CONST_SOIL_CPCT_START) the rain settles a cell
+    // back to. The looseness the HUD draws is how far the share lies below that start, (start - share) / start, 0
+    // on untouched ground and on ground packed harder than it: measured 2026-11-25, the complement 1 - share read the
+    // untouched ground at 0.43 as 0.57 loose and laid crumbs over the whole map. The adapter keeps the cells as the
+    // grid they form and never computes a compaction. A port not offered or no record filed leaves the raster
+    // unknown and the HUD's loose bridge draws the mockup's grid. Cells of different edges, a share out of 0..1, a
+    // start share not above 0 and up to 1, a cell twice or a cell missing from the grid the records span is a broken
+    // raster and refused.
     loose_ = VivariumLooseView{};
     if (config_.loose_port.empty() || !host_->has_port(config_.loose_port.c_str())) {
         return ase::kernel::HostStatusOk;
@@ -4862,10 +5261,13 @@ HostStatus GodotHostResourceManager::read_loose() {
         const double x = record_value(record, GODOT_KEY_X);
         const double z = record_value(record, GODOT_KEY_Z);
         const double share = record_value(record, GODOT_KEY_CPCT_SHARE);
+        const double start = record_value(record, GODOT_KEY_CPCT_START);
         if (!std::isfinite(x) || !std::isfinite(z) || record_value(record, GODOT_KEY_CELL_M) != cell_m ||
-            !std::isfinite(share) || share < 0.0 || share > 1.0) {
+            !std::isfinite(share) || share < 0.0 || share > 1.0 || !std::isfinite(start) || !(start > 0.0) ||
+            start > 1.0) {
             return refuse_record(*host_, config_.loose_port, record.object_id,
-                                 "loose cell incomplete: x, z, the raster's cell_m and cpct_share 0..1 come together");
+                                 "loose cell incomplete: x, z, the raster's cell_m, cpct_share 0..1 and cpct_start "
+                                 "above 0 up to 1 come together");
         }
         west_x = ase::math::min(west_x, x);
         east_x = ase::math::max(east_x, x);
@@ -4887,7 +5289,8 @@ HostStatus GodotHostResourceManager::read_loose() {
         if (!std::isnan(loose[cell])) {
             return refuse_record(*host_, config_.loose_port, record.object_id, "loose cell filed twice");
         }
-        loose[cell] = 1.0 - record_value(record, GODOT_KEY_CPCT_SHARE);
+        const double start = record_value(record, GODOT_KEY_CPCT_START);
+        loose[cell] = ase::math::max(0.0, (start - record_value(record, GODOT_KEY_CPCT_SHARE)) / start);
     }
     loose_.known = true;
     loose_.loose = std::move(loose);
@@ -5397,14 +5800,18 @@ HostStatus GodotHostResourceManager::irrigate(uint32_t object_id, double amount_
     return host_->submit(config_.patch_port.c_str(), config_.op_irrigate.c_str(), &input);
 }
 
-HostStatus GodotHostResourceManager::prune(uint32_t object_id) {
-    // The cut names only the internode: which branch it sits on and what falls with it is
-    // ase-phytomer's. The request goes on the port the internode is laid out on.
+HostStatus GodotHostResourceManager::prune(uint32_t object_id, uint32_t figure) {
+    // The cut names the internode and the figure that made it: which branch it sits on and what falls with it
+    // is ase-phytomer's, and whether the figure books the cut as work is checked by ase-pl-flora and booked by
+    // ase-phytomer (MIG_ASE_SKILL_RSM B2). The request goes on the port the internode is laid out on.
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
     KernelHostInput input{};
     input.object_id = object_id;
+    if (!put_value(input, kFigureKeyBearer, static_cast<double>(figure))) {
+        return ase::kernel::HostStatusCapacity;
+    }
     return host_->submit(config_.organ_ports[GODOT_ORGAN_SEGMENT].c_str(), config_.op_prune.c_str(), &input);
 }
 
@@ -5455,8 +5862,9 @@ HostStatus GodotHostResourceManager::lay_rack(uint32_t patch, double x, double z
     return host_->submit(config_.toolrack_scene_port.c_str(), config_.op_lay.c_str(), &input);
 }
 
-HostStatus GodotHostResourceManager::lower(double x, double z, double radius_m, double depth_m) {
+HostStatus GodotHostResourceManager::lower(double x, double z, double radius_m, double depth_m, uint32_t figure) {
     // A spade stroke names a place, no patch: ase-pl-flora files it as a dig order, ase-terrain lowers the disc.
+    // The figure that made it rides along as the bearer, as with prune, so the stroke can be booked as its work.
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
@@ -5465,11 +5873,15 @@ HostStatus GodotHostResourceManager::lower(double x, double z, double radius_m, 
     (void)put_value(input, GODOT_KEY_Z, z);
     (void)put_value(input, GODOT_KEY_HALF, radius_m);
     (void)put_value(input, GODOT_KEY_DEPTH, depth_m);
+    if (!put_value(input, kFigureKeyBearer, static_cast<double>(figure))) {
+        return ase::kernel::HostStatusCapacity;
+    }
     return host_->submit(config_.lower_port.c_str(), config_.op_lower.c_str(), &input);
 }
 
-HostStatus GodotHostResourceManager::raise(double x, double z, double radius_m, double height_m) {
-    // The heap stroke carries its height under the same key as the dig depth: one stroke, one amount.
+HostStatus GodotHostResourceManager::raise(double x, double z, double radius_m, double height_m, uint32_t figure) {
+    // The heap stroke carries its height under the same key as the dig depth: one stroke, one amount; the
+    // figure rides along as the bearer, as with lower.
     if (!running()) {
         return ase::kernel::HostStatusInvalidState;
     }
@@ -5478,6 +5890,9 @@ HostStatus GodotHostResourceManager::raise(double x, double z, double radius_m, 
     (void)put_value(input, GODOT_KEY_Z, z);
     (void)put_value(input, GODOT_KEY_HALF, radius_m);
     (void)put_value(input, GODOT_KEY_DEPTH, height_m);
+    if (!put_value(input, kFigureKeyBearer, static_cast<double>(figure))) {
+        return ase::kernel::HostStatusCapacity;
+    }
     return host_->submit(config_.raise_port.c_str(), config_.op_raise.c_str(), &input);
 }
 
@@ -5540,6 +5955,19 @@ HostStatus GodotHostResourceManager::seek_date(double seq, double year, double m
     (void)put_value(input, GODOT_KEY_MONTH_DAY, month_day);
     (void)put_value(input, GODOT_KEY_HOUR, hour);
     return host_->submit(config_.date_port.c_str(), config_.op_seek_date.c_str(), &input);
+}
+
+HostStatus GodotHostResourceManager::seek_event(double seq, double kind) {
+    // The request names the kind only: which occurrence comes next and how long before it the jump lands
+    // is ase-calendar's to compute with its own constants, whether the target lies behind the clock
+    // ase-time's to judge; the verdict comes back with `seq` on the channel of every seek.
+    if (!running()) {
+        return ase::kernel::HostStatusInvalidState;
+    }
+    KernelHostInput input{};
+    (void)put_value(input, GODOT_KEY_SEQ, seq);
+    (void)put_value(input, GODOT_KEY_KIND, kind);
+    return host_->submit(config_.event_port.c_str(), config_.op_seek_event.c_str(), &input);
 }
 
 HostStatus GodotHostResourceManager::shape(double height_scale_m, double base_height_m) {
@@ -5625,6 +6053,18 @@ const VivariumClockView& GodotHostResourceManager::get_clock() const {
 
 const VivariumWeatherView& GodotHostResourceManager::get_weather() const {
     return weather_;
+}
+
+const VivariumArcView& GodotHostResourceManager::get_arc() const {
+    return arc_;
+}
+
+const VivariumAlmanacView& GodotHostResourceManager::get_almanac() const {
+    return almanac_;
+}
+
+const VivariumEventCodeView& GodotHostResourceManager::get_event_codes() const {
+    return event_codes_;
 }
 
 const VivariumSapView& GodotHostResourceManager::get_sap() const {
@@ -5790,6 +6230,30 @@ const std::vector<VivariumSurvivalRestView>& GodotHostResourceManager::get_survi
     return survival_rests_;
 }
 
+const std::vector<VivariumSkillView>& GodotHostResourceManager::get_skills() const {
+    return skills_;
+}
+
+bool GodotHostResourceManager::skill_offered() const {
+    return host_ && !config_.skill_port.empty() && host_->has_port(config_.skill_port.c_str());
+}
+
+const std::vector<VivariumSkillBarView>& GodotHostResourceManager::get_skill_bars() const {
+    return skill_bars_;
+}
+
+bool GodotHostResourceManager::skill_qnt_offered() const {
+    return host_ && !config_.skill_qnt_port.empty() && host_->has_port(config_.skill_qnt_port.c_str());
+}
+
+bool GodotHostResourceManager::skill_prg_offered() const {
+    return host_ && !config_.skill_prg_port.empty() && host_->has_port(config_.skill_prg_port.c_str());
+}
+
+bool GodotHostResourceManager::skill_bar_offered() const {
+    return host_ && !config_.skill_bar_port.empty() && host_->has_port(config_.skill_bar_port.c_str());
+}
+
 bool GodotHostResourceManager::survival_rest_offered() const {
     return host_ && !config_.survival_rest_port.empty() && host_->has_port(config_.survival_rest_port.c_str());
 }
@@ -5937,7 +6401,7 @@ const VivariumBundleInfo& GodotHostResourceManager::get_bundle() const {
 }
 
 double GodotHostResourceManager::simulation_seconds() const {
-    return elapsed_in_s_ - backlog_s_;
+    return elapsed_in_s_ - pending_s_;
 }
 
 double GodotHostResourceManager::stage_seconds() const {
@@ -5957,8 +6421,8 @@ uint32_t GodotHostResourceManager::last_steps() const {
     return last_steps_;
 }
 
-double GodotHostResourceManager::backlog_seconds() const {
-    return backlog_s_;
+double GodotHostResourceManager::pending_seconds() const {
+    return pending_s_;
 }
 
 uint32_t GodotHostResourceManager::system_count() const {
@@ -6039,6 +6503,9 @@ void GodotHostResourceManager::clear_all() {
     cnpys_.clear();
     clock_ = VivariumClockView{};
     weather_ = VivariumWeatherView{};
+    arc_ = VivariumArcView{};
+    almanac_ = VivariumAlmanacView{};
+    event_codes_ = VivariumEventCodeView{};
     records_.clear();
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         organs_[c].clear();
@@ -6080,6 +6547,8 @@ void GodotHostResourceManager::clear_all() {
     racks_.clear();             // and its tool racks
     survival_bodies_.clear();   // and its figures' bodies
     survival_rests_.clear();    // and their rest
+    skills_.clear();            // and their learning entries
+    skill_bars_.clear();        // and their time slices
     survival_foods_.clear();    // and the spoil of their food
     survival_smokes_.clear();   // and the soot in the air of their cells
     survival_fires_.clear();    // and its fire cells

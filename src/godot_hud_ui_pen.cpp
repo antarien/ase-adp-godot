@@ -229,6 +229,23 @@ void UiPen::draw_polyline(const ::godot::PackedVector2Array& points, const ::god
     canvas_.draw_polyline(trimmed(moved(points), drawn), tinted(color), drawn, true);
 }
 
+void UiPen::draw_polyline_colors(const ::godot::PackedVector2Array& points, const ::godot::PackedColorArray& colors,
+                                 float width) {
+    if (points.size() < 2 || colors.size() != points.size()) {
+        return;
+    }
+    plain();
+    const float drawn = pen_core(pixels(width));
+    ::godot::PackedColorArray shades;
+    shades.resize(colors.size());
+    const ::godot::Color* from = colors.ptr();
+    ::godot::Color* to = shades.ptrw();
+    for (int64_t index = 0; index < colors.size(); ++index) {
+        to[index] = tinted(from[index]);
+    }
+    canvas_.draw_polyline_colors(trimmed(moved(points), drawn), shades, drawn, true);
+}
+
 void UiPen::draw_multiline(const ::godot::PackedVector2Array& pairs, const ::godot::Color& color, float width,
                            bool antialiased) {
     (void)antialiased;

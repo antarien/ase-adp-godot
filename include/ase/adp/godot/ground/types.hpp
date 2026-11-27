@@ -10,9 +10,9 @@
  *              GODOT_GROUND_TILE_CELLS cells, and the line from the eye passes over a tile whose highest sample stays
  *              under it without asking a place in it.
  *
- *              WHY A TYPES HEADER OF ITS OWN: the adapter hud/types.hpp is included by ninety-nine own files of the
- *              avt build and takes no new line for them (header ratchet, operator decision 2026-11-21). These two
- *              names are read by GroundTops and its test only.
+ *              WHY A TYPES HEADER OF ITS OWN: a constant goes into the narrowest header its readers include (header
+ *              ratchet, operator decision 2026-11-21); the adapter hud/types.hpp is a collector of its purpose
+ *              headers and takes no line of its own. These two names are read by GroundTops and its test only.
  *
  * @module      ase-adp-godot
  * @layer       5 (Adapter)

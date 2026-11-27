@@ -157,19 +157,49 @@ void VivariumHudPlaces::band_place(const VivariumHud& hud, ::godot::Rect2& sky, 
     hidden = !hud.shows(VivariumHud::LAYER_BAND);
 }
 
+void VivariumHudPlaces::arc_place(const VivariumHud& hud, ::godot::Rect2& arc, ::godot::Rect2& needle, bool& hidden) {
+    arc = hud.arc_.arc_place();
+    needle = hud.arc_.needle_place();
+    arc.position.y += static_cast<float>(hud.cover_.head);  // the sky arc stands on the top band
+    needle.position.y += static_cast<float>(hud.cover_.head);
+    hidden = !hud.shows(VivariumHud::LAYER_ARC);
+}
+
 void VivariumHudPlaces::bottom_places(const VivariumHud& hud, ::godot::Rect2& bag, bool& bag_hidden,
                                       HandThingPlace& hand, bool& hand_hidden) {
     // The bag icon and the hand stand on the bottom band, cover_.hand below the middle one (hit() asks there).
     const float band = static_cast<float>(hud.cover_.hand);
-    bag_hidden = !hud.bag_icon_.place(bag) || !hud.shows(VivariumHud::LAYER_INVENTORY);
+    // While the bars hold the whole band, the slots stand hidden and hit() asks them no more (operator order 2026-11-25).
+    const bool slots = hud.bars_.band() != GODOT_RSM_BAND_BARS;
+    bag_hidden = !hud.bag_icon_.place(bag) || !hud.shows(VivariumHud::LAYER_INVENTORY) || !slots;
     bag.position.y += band;
     hand = hud.hand_.place();
-    hand_hidden = hand.key.empty() || !hud.shows(VivariumHud::LAYER_INVENTORY);
+    hand_hidden = hand.key.empty() || !hud.shows(VivariumHud::LAYER_INVENTORY) || !slots;
     hand.box.position.y += band;
     hand.stow.position.y += band;
     for (std::pair<std::string, ::godot::Rect2>& verb : hand.verbs) {
         verb.second.position.y += band;
     }
+}
+
+void VivariumHudPlaces::bars_places(const VivariumHud& hud, std::vector<ActivityBarPlace>& out) {
+    // The bars stand on the bottom band right of the hand, cover_.hand below the middle one, as hit() asks them.
+    out.clear();
+    if (!hud.shows(VivariumHud::LAYER_INVENTORY)) {
+        return;
+    }
+    hud.bars_.bars(out);
+    for (ActivityBarPlace& bar : out) {
+        bar.y += static_cast<double>(hud.cover_.hand);
+    }
+}
+
+void VivariumHudPlaces::band_place(const VivariumHud& hud, ::godot::Rect2& out, bool& hidden, uint32_t& shows) {
+    // The band switch stands on the bottom band in the gap of the dividers over the hand, cover_.hand below the
+    // middle one, as hit() asks it; it stands while there is a bar to turn to.
+    shows = hud.bars_.band();
+    hidden = !hud.shows(VivariumHud::LAYER_INVENTORY) || !hud.bars_.switch_place(out);
+    out.position.y += static_cast<float>(hud.cover_.hand);
 }
 
 void VivariumHudPlaces::fan_places(const VivariumHud& hud, std::vector<ActionFanPlace>& out) {

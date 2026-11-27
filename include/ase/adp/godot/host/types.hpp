@@ -88,7 +88,7 @@ constexpr const char* GODOT_SELFTEST_KEY_FRAMES = "frames";          // action: 
 constexpr const char* GODOT_SELFTEST_KEY_REMEMBER = "remember";      // action: keep a value for a later plus
 constexpr const char* GODOT_SELFTEST_KEY_IRRIGATE = "irrigate";      // action: submit one pour
 constexpr const char* GODOT_SELFTEST_KEY_WAIT = "wait";              // action: advance until a value holds
-constexpr const char* GODOT_SELFTEST_KEY_CATCH_UP = "catch_up";      // action: a return from the background
+constexpr const char* GODOT_SELFTEST_KEY_AWAY = "away";              // action: a return from the background
 constexpr const char* GODOT_SELFTEST_KEY_EXPECT = "expect";          // action: compare one value
 constexpr const char* GODOT_SELFTEST_KEY_RECORDS = "records";        // action: compare a record count
 constexpr const char* GODOT_SELFTEST_KEY_IDS = "ids";                // digest: keys carrying an entity id
@@ -101,7 +101,7 @@ constexpr const char* GODOT_SELFTEST_KEY_OP = "op";                  // eq ne lt
 constexpr const char* GODOT_SELFTEST_KEY_VALUE = "value";            // the value an op compares with
 constexpr const char* GODOT_SELFTEST_KEY_PLUS = "plus";              // a remembered value added to value
 constexpr const char* GODOT_SELFTEST_KEY_MAX_FRAMES = "max_frames";  // wait: the bound of a few frames, never a target
-constexpr const char* GODOT_SELFTEST_KEY_SECONDS = "seconds";        // catch_up: real seconds the one long frame files at once
+constexpr const char* GODOT_SELFTEST_KEY_SECONDS = "seconds";        // away: real seconds the one long frame files at once
 constexpr const char* GODOT_SELFTEST_KEY_AMOUNT = "amount_mm";       // irrigate: water poured, mm
 constexpr const char* GODOT_SELFTEST_KEY_STATUS = "status";          // irrigate: the expected HostStatus
 constexpr const char* GODOT_SELFTEST_KEY_COUNT = "count";            // records: the expected count
@@ -239,7 +239,7 @@ constexpr uint32_t GODOT_HOOK_EXIT_HASH = 3218959716u;            // signature v
  * ase-time sets its clock forward over it in one write and reports the position it laid
  * (TIM_REAL_LAID_S); nothing is replayed in ticks.
  */
-constexpr double GODOT_CATCH_UP_NOTE_S = 1.0;   // a frame longer than this is a return from the background and gets one line
+constexpr double GODOT_AWAY_NOTE_S = 1.0;       // a frame longer than this is a return from the background and gets one line
 constexpr uint32_t GODOT_SOWING_FIRST = 0u;      // the first sowing of a view: the seeds of the start configuration (godot_new_seed.hpp)
 constexpr uint64_t GODOT_WATER_WAIT_STEPS = 3u;  // Dissemination runs a pour may take to show in the soil water: plugin, hydro, balance, publish
 constexpr double GODOT_WATER_ARRIVED_SHARE = 0.5;  // share of the expected rise (the pour, or the room up to field capacity if smaller) the soil water must gain before the pour counts as arrived; drift between press and arrival moves it by thousandths of a millimetre

@@ -159,6 +159,10 @@ struct VivariumStartConfig {
     std::string toolrack_rack_port;  // host port of the tool rack bodies of ase-physics (ase-pl-toolrack: toolrack.rack.v1)
     std::string survival_body_port;  // host port of each figure's body for the rail CORPO (survival.body.v1, N0530, P0715)
     std::string survival_rest_port;  // host port of each figure's rest and sleep for the rest card (survival.rest.v1, U05, N0555)
+    std::string skill_port;          // host port of every learning entry of a figure for the RSM table of the debug layer (avatar.skill.v1, usecase:101305, MIG_ASE_SKILL_RSM B3)
+    std::string skill_qnt_port;      // host port of the running time slice of each learning entry, joined to skill_port by the entry (avatar.skill.qnt.v1, usecase:101305, MIG_ASE_SKILL_RSM B3)
+    std::string skill_bar_port;    // host port of every time slice of the activity bars, ordered by the adapter from slot and slc_head (avatar.skill.bar.v1, usecase:101305, MIG_ASE_SKILL_RSM B3)
+    std::string skill_prg_port;    // host port of the progress, the rate, the measured time and the work of each learning entry, joined to skill_port by the entry (avatar.skill.prg.v1, usecase:101305, MIG_ASE_SKILL_RSM B3)
     std::string survival_fire_port;  // host port of every fire cell for the card FOGUEIRA (ase-pl-ingle: ingle.fire.v1, B0657)
     std::string survival_left_port;  // host port of the ash and the burn time of every fire cell for the card FOGUEIRA (ase-pl-ingle: ingle.left.v1, E0257)
     std::string survival_food_port;  // host port of the spoil of the food each figure carries for the ring ESTRAGO (survival.food.v1, U07, N0530)
@@ -197,9 +201,13 @@ struct VivariumStartConfig {
     std::string seek_port;           // host port the debug mode moves the game clock to a computed hour through (ase-pl-flora: flora.seek.v1)
     std::string real_port;           // host port every frame files the absolute real position on, sleep included (ase-pl-flora: flora.real.v1)
     std::string date_port;           // host port of the SURA date record and of the date jumps of the debug mode (ase-pl-flora: flora.date.v1)
+    std::string event_port;          // host port of the event jumps of the debug mode: the next occurrence of a kind, ase-calendar computes its date (ase-pl-flora: flora.event.v1)
     std::string day_port;            // host port of the day record: sunrise, sunset, daylight, season and the shares of day and year (ase-pl-flora: flora.day.v1, N0460)
     std::string phase_port;          // host port of the six phase records: start hour and share of each period (ase-pl-flora: flora.phase.v1, N0460)
     std::string season_port;         // host port of the four season records: first LUN and hours of light (ase-pl-flora: flora.season.v1, N0460)
+    std::string arc_port;            // host port of the one record of the sky arc's shares of now, read every frame (ase-pl-flora: flora.arc.v1, N0448)
+    std::string almanac_port;        // host port of the occurrences of the sky arc, one record each (ase-pl-flora: flora.almanac.v1, N0448)
+    std::string event_code_port;     // host port of the codes of the calendar's kinds and rings, two records (ase-pl-flora: flora.event_code.v1, N0448)
     std::string weather_port;        // host port of the current weather and the forecast of each coming period (ase-pl-sky: sky.weather.v1, N0449)
     std::string weather_code_port;   // host port of the one record of ase-atmosphere's weather kind codes (ase-pl-sky: sky.weather.code.v1, N0449)
     std::string sap_port;            // host port of the one record of the birch's tap and bark vessel (ase-pl-flora: flora.sap.v1, N0457)
@@ -263,6 +271,7 @@ struct VivariumStartConfig {
     std::string op_pace;             // submit operation that runs the host's game clock at a time scale (debug time lapse)
     std::string op_seek;             // submit operation that moves the host's game clock to an absolute game hour (a host joining a world)
     std::string op_seek_date;        // submit operation that moves the host's game clock to a SURA date, ase-calendar computes its hour
+    std::string op_seek_event;       // submit operation that moves the host's game clock to the next occurrence of an event kind, ase-calendar computes its date and lead
     std::string op_real;             // submit operation that files the host's real seconds since its start (a return from the background is one such filing)
     std::string op_shape;            // submit operation that sets the height amplitude and the ground level of the relief
     std::string op_view;             // submit operation that tells the engine where the view's camera stands (level of detail)

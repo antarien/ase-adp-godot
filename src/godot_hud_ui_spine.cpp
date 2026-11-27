@@ -12,8 +12,8 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-09
- * @modified    2026-11-10
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.39.00039 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -21,8 +21,9 @@
  */
 
 #include <ase/adp/godot/godot_hud_ui_spine.hpp>
+#include <ase/adp/godot/godot_hud_spine_pure.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/ring/types.hpp>
 
 #include <ase/math/math.hpp>
 
@@ -91,6 +92,7 @@ bool UiSpine::bind(const UiTheme& theme, std::string& failed) {
         !read_token(theme, "hud_focus_row_label_size", label_size_, failed) ||
         !read_token(theme, "hud_focus_row_label_delay", label_delay_, failed) ||
         !read_token(theme, "hud_focus_row_value_x", value_x_, failed) ||
+        !read_token(theme, "hud_survival_rail_track_left", rail_left_, failed) ||
         !read_token(theme, "hud_focus_row_value_size", value_size_, failed) ||
         !read_token(theme, "hud_focus_row_value_strong_size", value_strong_size_, failed) ||
         !read_token(theme, "hud_focus_row_value_delay", value_delay_, failed) ||
@@ -140,12 +142,29 @@ bool UiSpine::set(const std::vector<UiSpineRow>& rows, std::string& failed) {
     return true;
 }
 
+double UiSpine::need(const UiPen& canvas, const ::godot::Transform2D& frame) {
+    // B1001: the values end at spine_value_end under the rail; what lies between that end and the rail's content
+    // counts to the row, so a column placed at rail_left - need keeps every label left of its value.
+    const double room = rail_left_ - spine_value_end(value_x_, true, rail_left_);
+    double widest = 0.0;
+    for (size_t index = 0; index < rows_.size(); ++index) {
+        UiSpineLine& line = lines_[index];
+        const double label_w = line.label.width(canvas, frame, label_size_);
+        const double value_w = line.digits ? line.number.width(canvas, frame, value_size_)
+                                           : line.word.width(canvas, frame, value_strong_size_);
+        widest = ase::math::max(widest, text_dx_ + label_w + text_dx_ + value_w + room);
+    }
+    return widest;
+}
+
 void UiSpine::draw(UiPen& canvas, const ::godot::Transform2D& frame, double column_x, double elapsed,
-                   bool still, bool debug) {
+                   bool still, bool debug, bool rail) {
     // Dots, ticks, bars and pips draw in the mockup's units: under the frame, as every text block leaves it.
     canvas.draw_set_transform_matrix(frame);
     const double text_x = column_x + text_dx_;
-    const double bar_w = value_x_ - text_x;
+    // B0937: while the body rail draws beside the card, the values and the bars yield the rail's content.
+    const double value_end = spine_value_end(value_x_, rail, rail_left_);
+    const double bar_w = spine_bar_width(value_end, text_x);
     for (size_t index = 0; index < rows_.size(); ++index) {
         const UiSpineRow& row = rows_[index];
         UiSpineLine& line = lines_[index];
@@ -176,7 +195,7 @@ void UiSpine::draw(UiPen& canvas, const ::godot::Transform2D& frame, double colu
         line.label.draw(canvas, frame, label);
 
         UiTextPlace value = label;
-        value.at = ::godot::Vector2(static_cast<float>(value_x_), static_cast<float>(y));
+        value.at = ::godot::Vector2(static_cast<float>(value_end), static_cast<float>(y));
         value.size = line.digits ? value_size_ : value_strong_size_;
         value.anchor = GODOT_TEXT_ANCHOR_END;
         value.color = row.alert ? row.tone : ink_;
@@ -204,7 +223,7 @@ void UiSpine::draw(UiPen& canvas, const ::godot::Transform2D& frame, double colu
         }
         if (debug && !row.source.empty()) {
             UiTextPlace source;
-            source.at = ::godot::Vector2(static_cast<float>(value_x_), static_cast<float>(y + debug_dy_));
+            source.at = ::godot::Vector2(static_cast<float>(value_end), static_cast<float>(y + debug_dy_));
             source.size = debug_size_;
             source.anchor = GODOT_TEXT_ANCHOR_END;
             source.color = debug_;

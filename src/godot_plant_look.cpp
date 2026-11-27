@@ -36,7 +36,7 @@
 #include <ase/adp/godot/asset/types.hpp>
 #include <ase/adp/godot/cap/godot_plant_cap.hpp>
 #include <ase/adp/godot/cap/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 

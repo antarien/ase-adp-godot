@@ -24,7 +24,7 @@
 #include <ase/adp/godot/godot_hud_sign_marker.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_plant_water.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/sign/types.hpp>
 
 #include <godot_cpp/variant/string.hpp>
 
@@ -206,16 +206,18 @@ void SignMarker::follow_brook(const VivariumStreamView& stream, const PlantMeshA
     // THE STATIONS HOLD WHILE NOTHING THEY STAND ON MOVED (P0692): the vertex loop of build_water_line and the march
     // of UiGround::sees over each water point ran every frame, 16 heights a metre of sight for each of the 1716
     // hidden points of run 20261113-d2309-tri, with the ground, the brook and the eye unchanged. The ground's
-    // revision, every field of the brook's port and the eye decide; any change reads the stations anew.
+    // revision, the eye and the fields of the brook's port the stations are read of decide: its line (x, z, end_x,
+    // end_z), its half width (station_of), its depth (stream_levels) and its groundwater table (table_of). The flow
+    // of the port, velocity_m_s, discharge_m3_s and groundwater_reach_m, lays no station: ase-hydro moves them with
+    // every sample, and each change re-marched every water point (P0692). They colour the table (flow_at), never
+    // the line.
     const auto level = [](double a, double b) { return a == b || (!std::isfinite(a) && !std::isfinite(b)); };
     const VivariumStreamView& held = kept.stream;
     const bool same_brook = held.object_id == stream.object_id && level(held.x, stream.x) &&
                             level(held.z, stream.z) && level(held.end_x, stream.end_x) &&
                             level(held.end_z, stream.end_z) && level(held.half_m, stream.half_m) &&
-                            level(held.depth_m, stream.depth_m) && level(held.velocity_m_s, stream.velocity_m_s) &&
-                            level(held.discharge_m3_s, stream.discharge_m3_s) &&
-                            level(held.groundwater_level_m, stream.groundwater_level_m) &&
-                            level(held.groundwater_reach_m, stream.groundwater_reach_m);
+                            level(held.depth_m, stream.depth_m) &&
+                            level(held.groundwater_level_m, stream.groundwater_level_m);
     if (!kept.laid || kept.ground != revision || !same_brook || kept.eyed != eyed || (eyed && kept.eye != sight.eye)) {
         kept.water.clear();
         build_water_line(stream, ground, eyed ? sees : nullptr, &sight, kept.water);

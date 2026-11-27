@@ -136,16 +136,16 @@ void VivariumView::tap(const ::godot::Vector2& at) {
         toggle_flattening();
         return;
     }
-    if (pruning_) {
+    if (scene_state_.pruning_) {
         prune(at);  // in the cutting mode a tap in the scene cuts and selects no place
         return;
     }
-    if (bedding_) {
+    if (scene_state_.bedding_) {
         bed(at);  // in the bed mode a tap in the scene marks an end of the bed and selects no place
         return;
     }
-    if (flattening_) {
-        flatten(at, flatten_m_);  // in the flatten mode a tap in the scene levels a disc of view.flatten_m there and selects no place
+    if (scene_state_.flattening_) {
+        flatten(at, scene_state_.flatten_m_);  // in the flatten mode a tap in the scene levels a disc of view.flatten_m there and selects no place
         return;
     }
     for (std::size_t place = 0; place < layout_.place_rects.size(); ++place) {
@@ -158,9 +158,9 @@ void VivariumView::tap(const ::godot::Vector2& at) {
 
 void VivariumView::zoom(int32_t steps) {
     // The camera is aimed anew in the next frame (follow_scene), at the new zoom.
-    zoom_ = patch_focus_zoom(zoom_, steps);
-    scene_focus_ = GODOT_NO_PLACE;
-    note("zoom " + ::godot::String::num(zoom_, 3));
+    scene_state_.zoom_ = patch_focus_zoom(scene_state_.zoom_, steps);
+    scene_state_.scene_focus_ = GODOT_NO_PLACE;
+    note("zoom " + ::godot::String::num(scene_state_.zoom_, 3));
 }
 
 void VivariumView::select(uint32_t place) {

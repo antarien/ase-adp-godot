@@ -37,8 +37,8 @@
  * @actor       Hänge-Birke (Betula pendula)
  * @register    N0461 (the state fields of each sign case), N0449 (the weather signatures), carrier N0448
  * @created     2026-11-10
- * @modified    2026-11-13
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -125,6 +125,9 @@ struct BrookSight {
 /** The signs of the care view. */
 class SignMarker {
 public:
+    /** Hands the activity symbols on to the offer of the reading (SignReading::bind_activities); before bind(). */
+    void bind_activities(const UiActivityArt& activities) { reading_.bind_activities(activities); }
+
     /** Binds measures, colours, glyphs, words and levels and the reading; false with the missing name. */
     bool bind(const UiTheme& theme, std::string& failed);
 

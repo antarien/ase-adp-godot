@@ -28,7 +28,7 @@
 
 #include <ase/adp/godot/godot_asset_binding.hpp>
 #include <ase/adp/godot/asset/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 
 #include <cstdint>
 #include <string>

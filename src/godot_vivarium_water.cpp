@@ -38,7 +38,7 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/log/types.hpp>
 #include <ase/kernel/kernel_types.hpp>
 #include <ase/math/math.hpp>
 
@@ -90,14 +90,14 @@ bool VivariumView::water_from_can(double litres, bool emptied) {
     // The litres leave the can in ase-equipment (07.14) through the drain port of the figure led, with the patch
     // they fall on; the level comes back on the gear port (engine_fill) and the column on the patch port. The
     // amount it lays is the owner's, so the pour waits for a rise and expects no number (water_pending_.mm 0).
-    if (!can_water() || !(litres > 0.0) || !figure_controls_.led_known) {
+    if (!can_water() || !(litres > 0.0) || !figure_state_.figure_controls_.led_known) {
         note("water can " + measure(selected_place_) + " litres=" + ::godot::String::num(litres, GODOT_LOG_DECIMALS) +
              " result=disabled");
         return false;
     }
     const VivariumPatchView* patch = resources_.get_patch_at(selected_place_);
     const double soil_before = patch->soil_mm;
-    const HostStatus status = resources_.drain_figure(figure_controls_.led, litres, patch->object_id);
+    const HostStatus status = resources_.drain_figure(figure_state_.figure_controls_.led, litres, patch->object_id);
     note("water can " + measure(selected_place_) + " litres=" + ::godot::String::num(litres, GODOT_LOG_DECIMALS) +
          " result=" + GodotHostResourceManager::status_name(status));
     const bool taken = status == ase::kernel::HostStatusOk;
@@ -151,7 +151,7 @@ void VivariumView::follow_water() {
         const std::vector<HudPortValue> rise{HudPortValue{"mm", hud_decimals(rise_mm, 0)}};
         const char* key = water_pending_.empty ? VivariumHud::TOAST_WATERED_EMPTY : VivariumHud::TOAST_WATERED;
         water_pending_.empty = false;
-        if (hud_live() && !hud_.toast(key, rise, VivariumHud::COLOUR_WATER, failed)) {
+        if (hud_live() && !hud_state_.hud_.toast(key, rise, VivariumHud::COLOUR_WATER, failed)) {
             fail_hud(failed);
         }
         return;

@@ -76,6 +76,13 @@
  *              debug mode stand in godot_vivarium_debug.hpp, the records of the measurement run and the ground
  *              watch in godot_vivarium_watch.hpp.
  *
+ *              ITS STATE BY RESPONSIBILITY, EACH IN ITS OWN HEADER: the view holds three records as members,
+ *              scene_state_ (godot_vivarium_scene_state.hpp: the asset set, the 3D scene and its ground modes),
+ *              figure_state_ (godot_vivarium_figure_state.hpp: the figures and the controls that lead one) and
+ *              hud_state_ (godot_vivarium_hud_state.hpp: the HUD, its frame, clock, frame rate and bridges). A
+ *              new member of one of them is written into its record, never into this header; this header keeps
+ *              the lifecycle, the configuration, the host, the start screen and the log.
+ *
  *              THE CARE VIEW SHOWS THE HUD (PLAN_ASE_VIVARIUM_PHASE_06_HUD 06.5): once the world stands
  *              initialised and no error panel stands, the canvas over the scene is VivariumHud
  *              (godot_hud_compose.hpp) and every touch goes through it. Its frame maps the mockup's units
@@ -90,55 +97,35 @@
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-05
  * @modified    2026-11-25
- * @version     00.00.27.00027 [refine]
+ * @version     00.00.28.00028 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
  * SPDX-License-Identifier: LicenseRef-ASE-LIC
  */
 
-#include <ase/adp/godot/godot_asset_binding.hpp>
-#include <ase/adp/godot/godot_figure_glass.hpp>
-#include <ase/adp/godot/godot_figure_scene.hpp>
 #include <ase/adp/godot/godot_garden_return.hpp>
 #include <ase/adp/godot/godot_host_resource_manager_class.hpp>
-#include <ase/adp/godot/godot_hud_compose.hpp>
-#include <ase/adp/godot/godot_hud_brook_reflection.hpp>
-#include <ase/adp/godot/godot_hud_ground_season.hpp>
-#include <ase/adp/godot/godot_hud_horizon_ridge.hpp>
-#include <ase/adp/godot/godot_hud_leaf_season.hpp>
-#include <ase/adp/godot/godot_hud_ui_anchor.hpp>
-#include <ase/adp/godot/godot_hud_ui_ground.hpp>
-#include <ase/adp/godot/godot_hud_ui_frame_rate.hpp>
-#include <ase/adp/godot/godot_hud_ui_refresh.hpp>
-#include <ase/adp/godot/godot_vivarium_figure_controls.hpp>
-#include <ase/adp/godot/godot_order_budget.hpp>
-#include <ase/adp/godot/godot_plant_scene.hpp>
 #include <ase/adp/godot/godot_view_layout.hpp>
 #include <ase/adp/godot/godot_vivarium_debug.hpp>
-#include <ase/adp/godot/godot_vivarium_hud_carry.hpp>
-#include <ase/adp/godot/godot_vivarium_hud_hand.hpp>
-#include <ase/adp/godot/godot_vivarium_hud_loose.hpp>
-#include <ase/adp/godot/godot_vivarium_hud_sample.hpp>
-#include <ase/adp/godot/godot_vivarium_hud_sign_rules.hpp>
-#include <ase/adp/godot/godot_vivarium_hud_trail.hpp>
+#include <ase/adp/godot/godot_vivarium_figure_state.hpp>
+#include <ase/adp/godot/godot_vivarium_hud_state.hpp>
+#include <ase/adp/godot/godot_vivarium_scene_state.hpp>
 #include <ase/adp/godot/godot_vivarium_start_choice.hpp>
 #include <ase/adp/godot/godot_vivarium_start_hold.hpp>
 #include <ase/adp/godot/godot_vivarium_start_mode.hpp>
 #include <ase/adp/godot/godot_vivarium_view_config.hpp>
 #include <ase/adp/godot/godot_vivarium_camp.hpp>
-#include <ase/adp/godot/godot_vivarium_water_marks.hpp>
 #include <ase/adp/godot/godot_vivarium_water_pending.hpp>
 #include <ase/adp/godot/godot_vivarium_watch.hpp>
 #include <ase/adp/godot/host/types.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 #include <ase/adp/godot/patch/types.hpp>
 #include <ase/adp/godot/scene/types.hpp>
 
 #include <godot_cpp/classes/font_file.hpp>
 #include <godot_cpp/classes/input_event.hpp>
 #include <godot_cpp/classes/node2d.hpp>
-#include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -149,7 +136,6 @@
 
 #include <cstdint>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace ase::adp::godot {
@@ -273,7 +259,7 @@ private:
     bool load_figure_hud(const UiTheme& theme);  // the hud_figure_* measures, colours and words of the phone's controls (07.9)
     [[nodiscard]] bool figure_input(const ::godot::Ref<::godot::InputEvent>& local);  // the stick, the orbit drag and cam.mode; true: taken
     void draw_figure_hud(UiPen& pen);      // the stick and cam.mode over the HUD (07.9)
-    void follow_catch_up(double elapsed_s, double now_s);  // the return to the garden (godot_garden_return.hpp)
+    void follow_return(double elapsed_s, double now_s);  // the return to the garden (godot_garden_return.hpp)
     void follow_frame_rate(double elapsed_s);  // the frames per second in the status line's gap, a line on every edge of the floor (godot_vivarium_frame_rate.cpp)
     void drain_log();
     void note(const ::godot::String& line);
@@ -328,6 +314,7 @@ private:
     void bridge_pace(HourglassFrame& glass);  // the factor the clock runs at while flora.pace.v1 reports none: the last asked, else hud_bridge_pace_factor (N0459), its gap logged
     void bridge_skill(HudGameState& game);  // the level while flora.skill.v1 files none: the start level of SHA, hud.perception.start (N0453), its gap logged
     void bridge_trail(TrailViewFrame& trail, YearRingFrame& year);  // the past events and the ring's dots of hud_bridge_trail_* of SHA while flora.trail.v1 files none (N0450), its gap logged per record
+    void bridge_arc(SkyArcFrame& arc, const VivariumClockView& clock);  // the sky arc from flora.arc.v1, flora.almanac.v1, flora.event_code.v1, hud_bridge_arc_* of SHA while a port files none (N0448), its gap logged per port
     void bridge_body(SurvivalBodyFrame& body);  // the figure's body for the rail CORPO of hud_bridge_survival_* of SHA while no host port reports its MTB_* (N0530), its gap logged
     void bridge_fire(SurvivalFireFrame& fire);  // the camp fire for the card FOGUEIRA from ingle.fire.v1, hud_bridge_survival_fire_* of SHA while no cell stands (B0657, B0662), its gap logged
     void bridge_air(SurvivalAirFrame& air);  // the owner's grade of the air for the air mark from ingle.fire.v1 breath_state, hud_bridge_survival_air_toxic of SHA while no graded record stands (N0530), its gap logged
@@ -365,54 +352,9 @@ private:
     VivariumSurvivalWatch    survival_watch_;  // the survival states the HUD last logged (U0245)
     ViewSurface              drawn_surface_;   // the surface the last frame was placed on
     ViewPlacement            placement_;       // the layout's placement on that surface
-    uint32_t                 play_stage_ = 0;  // play stage whose asset names the view binds (play_stage)
-    ::godot::String          asset_root_;      // res:// directory of the manifest's files
-    std::unordered_map<std::string, std::string> asset_roles_;  // role the view draws with → asset name of that stage
-    std::vector<std::string> asset_names_;     // the stage's asset names in list order, materials first
-    ::godot::String          asset_manifest_;  // the manifest of the asset set: read, broken or absent
-    VivariumAssetBinding     assets_;          // bound files and missing names, bound at configuration
-    std::vector<std::string> asset_materials_;  // the stage's material names; every other name of asset_names_ is an organ template
-    ::godot::Node3D*         showcase_ = nullptr;  // root of the asset showcase (modes.assets), nullptr without its launch argument
-    ::godot::Node3D*         scene_ = nullptr;     // root of the 3D scene of the care view, built once the host booted (03.1)
-    PlantSceneCamera         scene_camera_;        // the near view (view.camera_*)
-    float                    zoom_ = GODOT_ZOOM_START;  // the near view's zoom, moved by the mouse wheel or a pinch
-    PlantSceneLook           scene_look_;         // materials and organ templates of the scene, bound once at the start (03.2)
-    FigureSceneLook          figure_look_;        // the figure file of the stage or its stand-in material, bound once at the start (07.9)
-    FigureSceneGlass         figure_glass_;       // the red glass pane of the chunk edge, SHA's measures and colour, bound with the HUD (07.13, usecase:101612)
-    bool                     figure_view_shown_ = false;   // the scene's camera stood at the player camera's eye last frame (07.6)
-    bool                     figure_edge_shown_ = false;   // ase-physics held the followed figure at a chunk border last frame (07-G, RAND DES AREALS)
-    bool                     figure_bound_shown_ = false;  // ase-camera held the player camera on the rim of the area last frame (07-G, cam.bound, usecase:101612)
-    std::vector<uint32_t>    figure_area_bound_;           // the figures bound to the area plate they first stood on (07.7), each once
-    std::vector<uint32_t>    figure_stocked_;              // the figures of this seat given their start outfit (T.8 stock, N0590 pack), each once
-    bool                     figure_switch_held_ = false;  // the key of cam.mode was held last frame: one switch per press
-    bool                     figure_steered_ = false;      // the stick was off its rest last frame: a released stick is sent once at rest
-    bool                     figure_zoomed_ = false;       // a zoom key was held last frame: the eye the rail settled at is noted once on release (07.6)
-    bool                     figure_hand_sent_ = false;    // a hold or drop for the figure's hand went out since its figure was led (07.10)
-    uint32_t                 figure_hand_figure_ = 0;      // the figure the last hold or drop named
-    uint32_t                 figure_hand_item_ = 0;        // the item the last hold named, 0 after a drop: one request per change of the hand
-    VivariumFigureControls   figure_controls_;             // the phone's stick, orbit drag and cam.mode (07.9)
-    OrderBudget              order_budget_;        // the axis orders the bark shader shows, by frame time (view, 03.6 V8, B0295)
-    std::unordered_map<uint32_t, PlantOrigin> scene_origins_;  // stem base per patch object, last placed
-    uint64_t                 scene_organs_ = 0;    // organ generation the plant was last filled from
-    uint64_t                 scene_bark_ = 0;      // bark generation the tubes were last laid from: only a body that ticked moves it (usecase:101613)
-    uint64_t                 scene_terrain_ = 0;   // terrain generation the ground was last built from
-    PlantGroundSurface       ground_surface_;      // the ground as last handed to Godot, the input of its patch (P0690)
-    VivariumWaterMarks       water_marks_;         // the brook, pit and current generations the water was last laid from
-    int64_t                  scene_hour_ = -1;     // whole game hour of the day of the last `scene hour` line, -1 before the clock
-    uint64_t                 scene_stars_ = 0;     // star generation of the sky port at the last `scene sky` line, 0 before the first star set
-    uint64_t                 scene_templates_ = 0; // template generation the plant was last filled from (usecase:101011 tessellate the organ templates)
-    uint32_t                 scene_focus_ = GODOT_NO_PLACE;  // the place the camera last looked at
-    float                    pick_px_ = 0.0f;      // logical pixels around a tap that hit an internode's middle (view.pick_px)
-    float                    least_ring_px_ = 0.0f;  // screen pixels a bark ring narrower than this is held at (view.least_ring_px)
-    bool                     pruning_ = false;     // the cutting mode is on: a tap in the scene cuts, it selects no place
-    bool                     bedding_ = false;     // the bed mode is on: a tap in the scene marks a bed's end, it selects no place
-    bool                     bed_started_ = false; // the first end of the bed is marked
-    float                    bed_x_ = 0.0f;        // the first end, world metres east
-    float                    bed_z_ = 0.0f;        // the first end, world metres north
-    std::vector<VivariumBrookSpec> player_beds_;   // the beds the player laid in this host, marked on the ground like the configured ones
-    bool                     flattening_ = false;  // the flatten mode is on: a tap in the scene levels a disc, it selects no place
-    float                    flatten_m_ = 0.0f;    // radius of the disc one tap levels, metres (view.flatten_m)
-    std::vector<PlantGroundDisc> player_flats_;    // the discs the player levelled in this host; their height is the ground's at the centre
+    VivariumSceneState       scene_state_;     // the bound asset set and the 3D scene with its ground modes (godot_vivarium_scene_state.hpp)
+    VivariumFigureState      figure_state_;    // the figures and the controls that lead one (godot_vivarium_figure_state.hpp)
+    VivariumHudState         hud_state_;       // the HUD, its frame, clock, frame rate and bridges (godot_vivarium_hud_state.hpp)
     std::vector<std::string> selftest_report_;  // written through the game host once it is up
     uint32_t                 selftest_errors_ = 0;
     bool                     selftest_ran_ = false;
@@ -435,65 +377,7 @@ private:
     VivariumWaterPending     water_pending_;                         // the pour whose arrival is not yet seen (godot_vivarium_water_pending.hpp)
     VivariumCampState        camp_;                                  // the camp fire laid through ase-pl-ingle and its bodies (T.3, T.7)
     int64_t                  last_frame_ns_ = 0;                     // the previous frame on the boot clock, 0 = none yet
-    GardenReturn             garden_return_;                         // a return from the background and since when it is caught up
-    VivariumHud              hud_;              // the HUD of the care view (06.5): every block, its mode and its gestures
-    VivariumHudFrame         hud_now_;          // the frame the HUD was last resolved and drawn with
-    HorizonRidge             hud_ridge_;        // the two ridges of hills on the horizon, bound from the HUD's theme (N05)
-    GroundSeason             hud_ground_season_; // the ground's colour by season, snow, depth and horizon, bound from the HUD's theme (N06)
-    LeafSeason               hud_leaf_season_;  // the leaf's colour by season and drought, bound from the HUD's theme (B0278)
-    BrookReflection          hud_brook_reflection_; // the sky the brook reflects and the strokes of its current, bound from the HUD's theme (N07)
-    UiAnchor                 hud_anchor_;       // the scene camera through the inverse of hud_frame_
-    UiGround                 hud_ground_;       // the terrain port's ground on its lattice
-    VivariumCarryBridge      hud_carry_;        // the mockup's inventory while flora.carry.v1 files no record (N0451, N0452)
-    VivariumHandBridge       hud_hand_;         // the hand's readings while flora.patch.v1 previews no pour (N0454, N0463)
-    VivariumLooseBridge      hud_loose_;        // the loosened soil point by point while flora.patch.v1 carries none (N0456)
-    VivariumSignRules        hud_sign_rules_;   // the thresholds and values of the mockup's signs() while no port reports a sign (N0461, N0449)
-    VivariumTrailBridge      hud_trail_;        // the mockup's S.log while flora.trail.v1 files no event (N0450)
-    StowAnswer               hud_stow_;         // the bridge's verdict for the drag's place while flora.stow.v1 judges none
-    std::vector<VivariumInstanceView> hud_segments_;  // the internodes of the plant in focus this frame
-    std::unordered_map<std::string, VivariumHudVerb> hud_verbs_;  // hud.verbs: what each ground tool does
-    uint8_t                  hud_stage_seen_ = GODOT_STAGE_NONE;  // the patch stage of the last frame: a rise is NOVO ESTÁGIO (m.html 1033)
-    BrookSight               hud_brook_;        // the brook's stations as the eye last saw them and the flank last told (P0692, B0285)
-    std::string              hud_verb_seen_;    // the HUD's verb of the last frame: a change drops the bed's start (S.bedA=null, m.html 947)
-    std::string              hud_mode_seen_;    // the HUD's mode of the last frame: setMode drops the bed's start too (m.html 933)
-    ::godot::Transform2D     hud_frame_;        // mockup units onto the canvas: the middle band, logical over mockup width
-    double                   hud_unit_ = 0.0;   // logical pixels per mockup unit (logical_size.width / hud_frame_width)
-    double                   hud_clock_ = 0.0;  // seconds the HUD's clock has run: the real time of the frames
-    double                   hud_dt_ = 0.0;     // seconds of the last frame, at most hud_frame_dt_max (UiRefresh::step)
-    UiRefresh                hud_refresh_;      // hud_refresh_ms: when the HUD samples the simulation again (T10, m.html 1037)
-    UiFrameRate              frame_rate_;       // the frames per second of every frame against the floor of view.frame_budget_ms
-    VivariumHudSample        hud_shown_;        // what the HUD read at its last sample (godot_vivarium_hud_sample.hpp)
-    bool                     hud_still_ = false;        // every HUD motion held (read_hud_still)
-    bool                     hud_still_read_ = false;   // the platform was asked once
-    int32_t                  hud_still_platform_ = -1;  // its last answer: 1 still, 0 moving, -1 cannot say
-    double                   hud_cloud_run_ = 0.0;  // seconds the cloud banks have drifted, each weighed by the wind's pace across the picture (cloud_drift_share, D2293)
-    std::string              hud_mode_;         // the mode the HUD was in last frame
-    double                   hud_mode_since_ = 0.0;  // hud_clock_ when that mode opened
-    bool                     hud_down_ = false; // a finger is down on the HUD
-    ::godot::Vector2         hud_finger_;       // where it is, canvas units
-    std::vector<std::string> hud_gaps_;         // the gaps already logged, each as id/request or id/port field
-    VivariumClockView        hud_bridge_clock_; // hud_bridge_clock_* of SHA: the mockup's date, day, phases and seasons (N0460)
-    const char*              hud_bridge_weather_ = nullptr;   // hud_bridge_weather_kind: the mockup's sky, a GODOT_HUD_WEATHER_* key (N0449)
-    uint32_t                 hud_bridge_level_ = 0;           // hud.perception.start, or the level modes.perception names on the launch (N0453)
-    double                   hud_bridge_temperature_ = 0.0;   // hud_bridge_weather_temperature
-    double                   hud_bridge_wind_ = 0.0;          // hud_bridge_weather_wind
-    std::vector<ForecastPhase> hud_bridge_forecast_;          // hud_bridge_forecast_<n>_*: the coming phases in their order
-    double                   hud_bridge_growth_ = 0.0;        // hud_bridge_patch_growth_share: the mockup's way to the next stage (N0454)
-    double                   hud_bridge_grow_per_hour_ = 0.0; // hud_bridge_patch_grow_per_hour: the mockup's growth an hour, a share
-    double                   hud_bridge_loose_ = 0.0;         // hud_bridge_patch_loose_share: the mockup's loosened soil (N0456)
-    bool                     hud_bridge_sap_running_ = false; // hud_bridge_patch_sap_running: the mockup's tap (N0457)
-    double                   hud_bridge_pace_factor_ = 0.0;   // hud_bridge_pace_factor: the mockup's S.factor, the clock's pace (N0459)
-    SurvivalBodyFrame        hud_bridge_body_;                // hud_bridge_survival_*: the mockup's body for the rail CORPO (N0530)
-    SurvivalFireFrame        hud_bridge_fire_;                // hud_bridge_survival_fire_*: the mockup's camp fire for the card FOGUEIRA (B0657)
-    SurvivalAirFrame         hud_bridge_air_;                 // hud_bridge_survival_air_toxic: the mockup's poisoned air for the air mark (N0530)
-    SurvivalSpoilFrame       hud_bridge_food_;                // hud_bridge_survival_food_*: the mockup's food of the bag for the spoil ring (N0530)
-    SurvivalRestFrame        hud_bridge_rest_;               // hud_bridge_survival_rest_*: the mockup's resting figure for the rest card (N0530)
-    double                   hud_bridge_sap_l_ = 0.0;         // hud_bridge_patch_sap_l: litres in the vessel
-    double                   hud_bridge_sap_cap_l_ = 0.0;     // hud_bridge_patch_sap_cap_l: litres the vessel holds
-    double                   hud_bridge_next_share_ = 0.0;    // hud_bridge_patch_next_share: the share of the year of the next stage's day (N0454)
-    double                   hud_bridge_soil_full_ = 0.0;     // hud_bridge_mark_soil_full_rel: the soil share from which water has no room
-    bool                     hud_bridge_branch_uncut_ = false; // hud_bridge_mark_branch_uncut: the mockup's crown has an uncut candidate
-    std::string              hud_places_;       // the debug places last logged, every line joined: a change logs them anew
+    GardenReturn             garden_return_;                         // a return from the background and since when it is pending
     bool                     configured_ = false;
 };
 

@@ -48,8 +48,8 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-10-11
- * @modified    2026-11-14
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -102,6 +102,12 @@ void aim_plant_camera(::godot::Node3D* scene, const PlantSceneCamera& camera, co
  * writes only what moved and send_ground_patch hands Godot those spans; the mesh is built anew only
  * otherwise, and hold_ground_surface then reads where Godot keeps its vertices into `surface`.
  */
+/**
+ * Draws the ground mesh in `material`, the ground of the focused patch's soil, with its grid lines `step_m` apart: no
+ * vertex is written. A new focus changes the soil the ground shows, never its places (operator order 2026-11-25).
+ */
+void shade_plant_ground(::godot::Node3D* scene, float step_m, const ::godot::Ref<::godot::Material>& material);
+
 void fill_plant_ground(::godot::Node3D* scene, const std::vector<VivariumTerrainView>& samples,
                        const std::vector<VivariumGroundCellView>& cells, const std::vector<PlantGroundDisc>& discs,
                        const std::vector<PlantGroundBed>& beds, float step_m,

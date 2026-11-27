@@ -26,7 +26,7 @@
 #include <ase/adp/godot/godot_hud_ui_stroke.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_class.hpp>
 #include <ase/adp/godot/godot_hud_ui_pen_cover.hpp>
-#include <ase/adp/godot/hud/types.hpp>
+#include <ase/adp/godot/hud/style/types.hpp>
 #include <ase/adp/godot/stroke/godot_stroke_mesh.hpp>
 
 #include <ase/math/math.hpp>

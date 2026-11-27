@@ -2,11 +2,12 @@
  * ASE GODOT ADAPTER - VIVARIUM VIEW HOST CONFIGURATION
  *
  * @file        godot_vivarium_host_config.cpp
- * @brief       VivariumView - the ports and operations the game host is booted with, land in host_land
+ * @brief       VivariumView - the record ports the game host is booted with, land in host_land
  * @description PLAN_ASE_VIVARIUM_PHASE_01_INTEG 01.3 and PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8: everything
  *              GodotHostResourceManager::boot needs beside the stage stands in the start configuration -
- *              the name of every port and operation the view reads or writes, the patches the game host
- *              lays, the measured square of the ground and its brooks, and the pour.
+ *              the name of every port the view reads, the patches the game host lays, the measured square of
+ *              the ground and its brooks, and the pour. The request ports the view writes to and every submit
+ *              operation are read by read_request_config (godot_vivarium_request_config.cpp).
  *              A missing or broken key stops the view with that key on its error panel; the manager
  *              checks the same configuration again before a host exists.
  *
@@ -16,8 +17,8 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-18
- * @modified    2026-11-23
- * @version     00.00.21.00021 [init]
+ * @modified    2026-11-25
+ * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -26,8 +27,10 @@
 
 #include <ase/adp/godot/godot_vivarium_node.hpp>
 #include <ase/adp/godot/godot_vivarium_camp.hpp>
+#include <ase/adp/godot/godot_vivarium_request_config.hpp>
 #include <ase/adp/godot/godot_config_read.hpp>
 #include <ase/adp/godot/godot_view_support.hpp>
+#include <ase/adp/godot/godot_vivarium_host_config_arc.hpp>
 #include <ase/adp/godot/port/types.hpp>
 #include <ase/math/math.hpp>
 
@@ -285,56 +288,6 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.salt");
     }
     start_.salt_port = utf8_of(text);
-    // The level requests of the player (PLAN_ASE_VIVARIUM_PHASE_03_ASSETS 03.8 point 2): a port of their
-    // own, the patch port takes only pours.
-    if (!read_text(ports, "level", text)) {
-        return fail_config("ports.level");
-    }
-    start_.level_port = utf8_of(text);
-    // The flatten requests of the player at a place (03.8): a port of their own, they name no patch.
-    if (!read_text(ports, "flatten", text)) {
-        return fail_config("ports.flatten");
-    }
-    start_.flatten_port = utf8_of(text);
-    // The spade strokes of the player at a place: one port per direction, so the direction is never a branch.
-    if (!read_text(ports, "lower", text)) {
-        return fail_config("ports.lower");
-    }
-    start_.lower_port = utf8_of(text);
-    if (!read_text(ports, "raise", text)) {
-        return fail_config("ports.raise");
-    }
-    start_.raise_port = utf8_of(text);
-    // The hoe strokes at a place (soltar, furar; B0649): a port of their own, they loosen the topsoil and move
-    // no height.
-    if (!read_text(ports, "loosen", text)) {
-        return fail_config("ports.loosen");
-    }
-    start_.loosen_port = utf8_of(text);
-    // The pace requests of the debug mode (the time lapse of this host's clock): a port of their own,
-    // they name no object.
-    if (!read_text(ports, "pace", text)) {
-        return fail_config("ports.pace");
-    }
-    start_.pace_port = utf8_of(text);
-    // The seek requests of the debug mode (this host's clock moved to a computed moment): a port of
-    // their own beside the time lapse, they name no object.
-    if (!read_text(ports, "seek", text)) {
-        return fail_config("ports.seek");
-    }
-    start_.seek_port = utf8_of(text);
-    // The real position of the host (its real seconds since the start, sleep included), filed every
-    // frame: a port of its own, it names no object; a return from the background is one such filing.
-    if (!read_text(ports, "real", text)) {
-        return fail_config("ports.real");
-    }
-    start_.real_port = utf8_of(text);
-    // The date requests of the debug mode (this host's clock moved to a SURA date): a port of their own
-    // beside the seek, they name no object; ase-calendar turns the date into the hour.
-    if (!read_text(ports, "date", text)) {
-        return fail_config("ports.date");
-    }
-    start_.date_port = utf8_of(text);
     // The day record (N0460): the day's sunrise, sunset and daylight, the season and the shares of the day, the sun
     // and the year, a port of its own because the clock and the date record are full; the sheet reads it once
     // ase-pl-flora offers it.
@@ -352,6 +305,10 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         return fail_config("ports.season");
     }
     start_.season_port = utf8_of(text);
+    const char* arc_missing = nullptr;
+    if (!read_arc_ports(ports, start_, arc_missing)) {
+        return fail_config(arc_missing);  // the sky arc's three ports (N0448)
+    }
     // The weather of the sky (N0449, usecase:5606 observe the sky): the current record and one forecast record per
     // coming period on one port, ase-atmosphere's codes of the kinds on a port of their own; the HUD reads both
     // once ase-pl-flora offers them.
@@ -370,26 +327,16 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
     }
     start_.sap_port = utf8_of(text);
     // The looseness raster of the soil (N0456, CAUSA_ASE_TERRAIN loosened soil): one record per macro cell with x, z,
-    // cell_m and cpct_share 0..1, the compaction ase-terrain owns (TerrainStaMcroCpctComponent, ase-gis
-    // GIS_CAT_LITHO_CPCT), filed by FloraHostCpctExptSystem of ase-pl-flora; the looseness is its complement.
+    // cell_m, cpct_share 0..1, the compaction ase-terrain owns (TerrainStaMcroCpctComponent, ase-gis
+    // GIS_CAT_LITHO_CPCT), and cpct_start, the share of undisturbed topsoil, filed by FloraHostCpctExptSystem of
+    // ase-pl-flora. The looseness is how far the share lies below the start, (start - share) / start, 0 on untouched
+    // ground; never the complement 1 - share, which drew crumbs of 0.57 over the whole map (measured 2026-11-25).
     // GodotHostResourceManager::read_loose reads it; until the port is offered the
     // HUD's loose bridge keeps the share of SHA.
     if (!read_text(ports, "loose", text)) {
         return fail_config("ports.loose");
     }
     start_.loose_port = utf8_of(text);
-    // The relief of the ground (the height amplitude and the ground level of the whole terrain): a port
-    // of its own, it names no object.
-    if (!read_text(ports, "elevation", text)) {
-        return fail_config("ports.elevation");
-    }
-    start_.elevation_port = utf8_of(text);
-    // The place of the view's camera (03.11 point 7, the level of detail): a port of its own, it names no
-    // object.
-    if (!read_text(ports, "view", text)) {
-        return fail_config("ports.view");
-    }
-    start_.view_port = utf8_of(text);
     // One port per organ class, keyed by the class's word (GodotHostResourceManager::organ_word).
     for (uint32_t c = 0u; c < GODOT_ORGAN_COUNT; ++c) {
         if (!read_text(ports, GodotHostResourceManager::organ_word(c), text)) {
@@ -405,67 +352,12 @@ bool VivariumView::load_host_config(const ::godot::Dictionary& root) {
         }
         start_.instance_ports[c] = utf8_of(text);
     }
-
-    ::godot::Dictionary operations;
-    if (!read_section(root, "operations", operations)) {
-        return fail_config("operations");
+    // The request ports the view writes to (a level, a stroke, the pace, a seek, a date or an event jump, the
+    // relief, the camera place) and every submit operation (godot_vivarium_request_config.cpp).
+    const char* request_missing = read_request_config(root, start_);
+    if (request_missing != nullptr) {
+        return fail_config(request_missing);
     }
-    if (!read_text(operations, "irrigate", text)) {
-        return fail_config("operations.irrigate");
-    }
-    start_.op_irrigate = utf8_of(text);
-    if (!read_text(operations, "prune", text)) {
-        return fail_config("operations.prune");
-    }
-    start_.op_prune = utf8_of(text);
-    if (!read_text(operations, "level", text)) {
-        return fail_config("operations.level");
-    }
-    start_.op_level = utf8_of(text);
-    if (!read_text(operations, "flatten", text)) {
-        return fail_config("operations.flatten");
-    }
-    start_.op_flatten = utf8_of(text);
-    if (!read_text(operations, "lower", text)) {
-        return fail_config("operations.lower");
-    }
-    start_.op_lower = utf8_of(text);
-    if (!read_text(operations, "raise", text)) {
-        return fail_config("operations.raise");
-    }
-    start_.op_raise = utf8_of(text);
-    if (!read_text(operations, "loosen", text)) {
-        return fail_config("operations.loosen");
-    }
-    start_.op_loosen = utf8_of(text);
-    if (!read_text(operations, "pace", text)) {
-        return fail_config("operations.pace");
-    }
-    start_.op_pace = utf8_of(text);
-    if (!read_text(operations, "seek", text)) {
-        return fail_config("operations.seek");
-    }
-    start_.op_seek = utf8_of(text);
-    if (!read_text(operations, "seek_date", text)) {
-        return fail_config("operations.seek_date");
-    }
-    start_.op_seek_date = utf8_of(text);
-    if (!read_text(operations, "real", text)) {
-        return fail_config("operations.real");
-    }
-    start_.op_real = utf8_of(text);
-    if (!read_text(operations, "shape", text)) {
-        return fail_config("operations.shape");
-    }
-    start_.op_shape = utf8_of(text);
-    if (!read_text(operations, "view", text)) {
-        return fail_config("operations.view");
-    }
-    start_.op_view = utf8_of(text);
-    if (!read_text(operations, "lay", text)) {
-        return fail_config("operations.lay");
-    }
-    start_.op_lay = utf8_of(text);
     if (!load_patches(root)) {
         return false;  // the failing key stands on the error panel already
     }

@@ -53,7 +53,7 @@ struct VivariumMeasurement {
     std::vector<uint32_t> frame_usec;           // per recorded frame: the interval since the previous frame
     uint64_t              pss_start_kib = 0;    // PSS when the recording began
     bool                  pss_start_read = false;
-    uint32_t              catch_ups = 0;        // returns from the background that fell into the recording
+    uint32_t              returned = 0;        // returns from the background that fell into the recording
     uint32_t              boots_at_start = 0;   // host boots counted when the recording began
     CycleMeasure          cycles;               // the line of one game day (03.6), cursors since the recording began
     bool                  cycles_ready = false; // units, schedules and organ ports named, cursors set
