@@ -25,7 +25,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-11-21
- * @modified    2026-11-21
+ * @modified    2026-11-27
  * @version     00.00.01.00001 [seed]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -520,6 +520,10 @@ public:
     // (usecase:101635, D2455): the grow position takes grow_at_h, the mature position mtur_at_h, by the key
     // the position is read under; every other position and an unknown one have no forecast (GODOT_HOUR_NONE).
     [[nodiscard]] double stage_due_h(const VivariumPatchView& patch, uint8_t position) const;
+    // The growing days ase-plant reports the patch lacks to the stage at a position of the stage record when its
+    // growth time ends first (PLT_GROW_SHRT_D, register D2676): the stage is unreachable for this individual. Only
+    // the grow position carries one; a reachable stage, every other position and an unknown one give NaN.
+    [[nodiscard]] double stage_short_d(const VivariumPatchView& patch, uint8_t position) const;
     [[nodiscard]] bool has_patch(uint32_t object_id) const;
     /**
      * The cap radius of the fruit body of every patch whose species carries one, in metres, keyed by the patch's
@@ -911,6 +915,7 @@ private:
     std::unordered_map<uint32_t, VivariumPatchView>  patches_;
     std::unordered_map<uint32_t, uint32_t>           places_;      // place → object id of the last snapshot
     std::unordered_map<uint32_t, double>             caps_;        // patch object id → cap radius in metres of the cap port, last read (usecase:101362 scale the organ templates)
+    std::unordered_map<uint32_t, double>             grow_shorts_; // patch object id → growing days the stand lacks to CRESCENDO (PLT_GROW_SHRT_D, forecast port, register D2676); a patch without an entry reaches it
     std::unordered_map<uint32_t, VivariumLodView>    lods_;        // patch object id → graded level of its plant body of the level port, last read (usecase:101657 grade plants by picture height)
     std::unordered_map<uint32_t, VivariumCnpyView>   cnpys_;       // patch object id → canopy of its raster cell of the canopy port, last read (usecase:100387 view the plant)
     VivariumClockView                                clock_;

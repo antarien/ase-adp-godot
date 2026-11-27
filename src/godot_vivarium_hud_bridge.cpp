@@ -39,7 +39,7 @@
  * @usecase     usecase:101440 - grow the interface with skills
  * @actor       Interface Growth Director (INTEGRODIR)
  * @created     2026-11-10
- * @modified    2026-11-25
+ * @modified    2026-11-27
  * @version     00.00.22.00022 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -249,10 +249,21 @@ void VivariumView::bridge_patch(FocusClusterFrame& focus, const VivariumPatchVie
         clock.known && clock.hours_per_day > 0.0 ? clock.hours_per_day : hud_state_.hud_bridge_clock_.hours_per_day;
     // The forecast of the next position, by the key of the stage record it is read under (usecase:101635, D2455).
     const double due_h = patch != nullptr ? resources_.stage_due_h(*patch, static_cast<uint8_t>(next)) : GODOT_HOUR_NONE;
+    // A stage the growth time of this individual ends before (PLT_GROW_SHRT_D, register D2676) has no hour; ase-plant
+    // reports it unreachable with the growing days it lacks, and that is an answer of the port, never a gap.
+    const double short_d = patch != nullptr ? resources_.stage_short_d(*patch, static_cast<uint8_t>(next)) : std::nan("");
+    focus.next_unreachable = false;
     if (due_h >= 0.0 && clock.known && hours > 0.0) {
         const double now_h = clock.day * hours + clock.hour;
         focus.next_days = ase::math::max(0.0, (due_h - now_h) / hours);
         close_gap(GODOT_HUD_GAP_PATCH, "forecast.due_h");
+        close_gap(GODOT_HUD_GAP_PATCH, "forecast.unreachable");
+    } else if (std::isfinite(short_d) && short_d > 0.0) {
+        focus.next_unreachable = true;
+        focus.next_days = short_d;
+        close_gap(GODOT_HUD_GAP_PATCH, "forecast.due_h");
+        // The edge of an unreachable stage is logged once, as a gap of its own the reachable forecast closes again.
+        open_gap(GODOT_HUD_GAP_PATCH, "forecast.unreachable");
     } else {
         // ase-plant: PLT_GROW_AT_H and PLT_MTUR_AT_H of the forecast port; Broto carries none.
         open_gap(GODOT_HUD_GAP_PATCH, "forecast.due_h");

@@ -126,7 +126,7 @@ endif()
 # manager it drives: a .cpp whose name carries resource_manager is a resource manager implementation
 # (file_types.json, resource_mgr_impl). Each target writes its own log file - ABSOLUTE, like the
 # user:// path the node hands over - so no run rotates the file of another.
-foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap lod skill)
+foreach(_adp_godot_bundle_test host clock refusal scene tree figure camera cap lod skill short)
     if(_adp_godot_bundle_test STREQUAL "host")
         set(_adp_godot_bundle_source test_godot_host.cpp)
     else()

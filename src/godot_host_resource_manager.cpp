@@ -13,7 +13,7 @@
  * @usecase     usecase:100364 - host the engine embedded
  * @actor       Entity Registry Steward (ENTIREGSTE)
  * @created     2026-10-05
- * @modified    2026-11-25
+ * @modified    2026-11-27
  * @version     00.00.29.00029 [refine]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -112,6 +112,7 @@
 #include <ase/adp/godot/godot_terrain_samples.hpp>
 #include <ase/adp/godot/arc/types.hpp>
 #include <ase/adp/godot/cap/types.hpp>
+#include <ase/adp/godot/forecast/types.hpp>
 #include <ase/adp/godot/lod/types.hpp>
 #include <ase/adp/godot/host/types.hpp>
 #include <ase/adp/godot/loose/types.hpp>
@@ -2661,6 +2662,7 @@ HostStatus GodotHostResourceManager::fail(const char* step, HostStatus status) {
     patches_.clear();
     places_.clear();
     caps_.clear();
+    grow_shorts_.clear();
     lods_.clear();
     cnpys_.clear();
     clock_ = VivariumClockView{};
@@ -3076,6 +3078,9 @@ HostStatus GodotHostResourceManager::read_snapshot() {
     // (HUB_CONST_HOST_VALUES_MAX), so ase-pl-flora files grow_at_h and mtur_at_h as one record per patch
     // with a forecast, its object id the patch. A patch without such a record keeps both unmeasured; a
     // record that names no patch of the patch port is a broken port.
+    // Beside the two hours the record carries the growing days the stand lacks to CRESCENDO while its growth time
+    // ends first (register D2676); the key stands only then, so a patch without it keeps no entry and reaches it.
+    grow_shorts_.clear();
     status = snapshot_all(*host_, config_.forecast_port, records_, written);
     if (status != ase::kernel::HostStatusOk) {
         patches_.clear();
@@ -3088,10 +3093,15 @@ HostStatus GodotHostResourceManager::read_snapshot() {
         if (found == patches_.end()) {
             patches_.clear();
             places_.clear();
+            grow_shorts_.clear();
             return refuse_record(*host_, config_.forecast_port, record.object_id, "forecast of no patch");
         }
         found->second.grow_at_h = record_value(record, GODOT_KEY_GROW_AT_H);
         found->second.mtur_at_h = record_value(record, GODOT_KEY_MTUR_AT_H);
+        const double grow_short_d = record_value(record, GODOT_KEY_GROW_SHORT_D);
+        if (std::isfinite(grow_short_d) && grow_short_d > GODOT_SHORT_NONE_D) {
+            grow_shorts_[record.object_id] = grow_short_d;
+        }
     }
 
     // THE SOIL WATER HAS A PORT OF ITS OWN (FLORA_HOST_PORT_SOIL, usecase:101340 - show the bed condition): the
@@ -6037,6 +6047,15 @@ double GodotHostResourceManager::stage_due_h(const VivariumPatchView& patch, uin
         return patch.mtur_at_h;
     }
     return GODOT_HOUR_NONE;
+}
+
+double GodotHostResourceManager::stage_short_d(const VivariumPatchView& patch, uint8_t position) const {
+    // Only the grow position has a lack: ase-plant forecasts the mature stage from the age, which always grows.
+    if (!stage_named(position, GODOT_KEY_STGE_GROW)) {
+        return std::nan("");
+    }
+    const auto found = grow_shorts_.find(patch.object_id);
+    return found == grow_shorts_.end() ? std::nan("") : found->second;
 }
 
 bool GodotHostResourceManager::has_patch(uint32_t object_id) const {

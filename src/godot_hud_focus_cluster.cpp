@@ -12,7 +12,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
- * @modified    2026-11-25
+ * @modified    2026-11-27
  * @version     00.00.39.00039 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -94,6 +94,8 @@ bool FocusCluster::bind(const UiTheme& theme, std::string& failed) {
              {"focus_sap_fill", &sap_fill_words_},
              {"next_in_days", &next_days_words_},
              {"next_soon", &next_soon_words_},
+             {"next_unreachable_days", &next_unrc_days_words_},
+             {"next_unreachable", &next_unrc_words_},
              {"selection_of", &selection_words_},
              {"species", &species},
              {"next_stage", &next_stage}}) {
@@ -359,10 +361,14 @@ bool FocusCluster::draw_next(UiPen& canvas, const ::godot::Transform2D& frame,
         return false;
     }
     const std::string days = hud_whole(static_cast<int64_t>(::godot::Math::ceil(now.next_days)));
+    // An unreachable stage (register D2676) names the stage and, from levels[2] on, the growing days it lacks;
+    // a reachable one the days until it is reached.
+    const std::vector<HudRun>& with_days = now.next_unreachable ? next_unrc_days_words_ : next_days_words_;
+    const std::vector<HudRun>& without_days = now.next_unreachable ? next_unrc_words_ : next_soon_words_;
     const bool set =
         now.level >= level_numbers_
-            ? filled(next_days_words_, {HudPortValue{"stage", word}, HudPortValue{"days", days}}, value, failed)
-            : filled(next_soon_words_, {HudPortValue{"stage", word}}, value, failed);
+            ? filled(with_days, {HudPortValue{"stage", word}, HudPortValue{"days", days}}, value, failed)
+            : filled(without_days, {HudPortValue{"stage", word}}, value, failed);
     if (!set) {
         return false;
     }

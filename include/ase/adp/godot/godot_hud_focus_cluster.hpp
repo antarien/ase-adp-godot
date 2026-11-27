@@ -51,7 +51,7 @@
  * @usecase     usecase:100387 - view the plant
  * @actor       Plant Keeper (PLNTKEEPER)
  * @created     2026-11-10
- * @modified    2026-11-25
+ * @modified    2026-11-27
  * @version     00.00.39.00039 [core]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
@@ -97,6 +97,7 @@ struct FocusClusterFrame {
     double growth_share = 0.0;     // N0454: the share of the way to the next stage, 0..1
     bool next_due = false;         // the stand has a stage after this one
     double next_days = 0.0;        // game days until it is reached
+    bool next_unreachable = false; // ase-plant reports the next stage unreachable for this individual (PLT_GROW_SHRT_D, register D2676); next_days then holds the growing days it lacks
 
     double loose_share = 0.0;      // N0456: the loosened share of the soil, 0..1
 
@@ -196,6 +197,8 @@ private:
     std::vector<HudRun> sap_fill_words_;        // texts.hud.focus_sap_fill
     std::vector<HudRun> next_days_words_;       // texts.hud.next_in_days
     std::vector<HudRun> next_soon_words_;       // texts.hud.next_soon
+    std::vector<HudRun> next_unrc_days_words_;  // texts.hud.next_unreachable_days
+    std::vector<HudRun> next_unrc_words_;       // texts.hud.next_unreachable
     std::vector<HudRun> selection_words_;       // texts.hud.selection_of
 
     FocusRing ring_;
