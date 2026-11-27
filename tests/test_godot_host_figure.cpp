@@ -389,11 +389,13 @@ TEST_CASE("usecase:100411 learn skills by experience: the led figure cuts a bran
     // Those days lie in summer, as the days of B0299 do: the hour of MADURA measured 2026-11-27 (3.2485e6 h) lands on
     // year day 3737, HALITRIX, where the leaves fall (growth_steps 1 → 0 leaves); one seek carries the clock to the
     // first day of IGNIX first (register T0415).
+    const bool branched = test::shoot_branched(resources);  // the summer and the days run only without a branch (B1012)
+    CAPTURE(branched);
     double seq = 2.0;
     const double summer_h = test::hours_to_summer(resources.get_clock());
     CAPTURE(summer_h);
     REQUIRE(summer_h >= 0.0);
-    if (summer_h > 0.0) {
+    if (!branched && summer_h > 0.0) {
         const VivariumClockView& clock = resources.get_clock();
         REQUIRE(clock.seconds_per_hour > 0.0);
         const double target_h = clock.elapsed_s / clock.seconds_per_hour + summer_h;
@@ -403,7 +405,7 @@ TEST_CASE("usecase:100411 learn skills by experience: the led figure cuts a bran
         growth_steps += "|summer ";
         still = test::await_still_shoot(resources, growth_steps);
     }
-    for (uint32_t day = 1u; day <= test::kDaysAfterJump; ++day) {
+    for (uint32_t day = 1u; !branched && day <= test::kDaysAfterJump; ++day) {
         const VivariumClockView& clock = resources.get_clock();
         REQUIRE(clock.seconds_per_hour > 0.0);
         REQUIRE(clock.hours_per_day > 0.0);

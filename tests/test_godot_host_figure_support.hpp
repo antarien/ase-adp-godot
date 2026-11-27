@@ -24,8 +24,8 @@
  * @usecase     usecase:101588 - move player figure over ground
  * @actor       SS/PC
  * @created     2026-11-18
- * @modified    2026-11-18
- * @version     00.00.22.00022 [init]
+ * @modified    2026-11-27
+ * @version     00.00.23.00023 [init]
  *
  * Copyright (c) Jan Ohlmann. All rights reserved.
  * Licensed to ANTARES SIMULACAO LTDA. Use is governed by LICENSE.md and PJV.md in this repository.
@@ -208,6 +208,21 @@ inline uint32_t await_still_shoot(GodotHostResourceManager& resources, std::stri
         leaf_size = leaves;
     }
     return still;
+}
+
+/**
+ * Whether the organ port carries a segment of order 1 or above now: a branch beside the stem (B1012). A founder that
+ * bears its branches already at the hour of MADURA needs no seek past it - place 2 stood with 1045 internodes up to
+ * order 2 right after the jump, and the seek to summer of 5670 h dropped that shoot to one internode of order 0 without
+ * a leaf (run 2026-11-27, data/probes/runs/tests_b1012_figure_1127c.txt).
+ */
+inline bool shoot_branched(GodotHostResourceManager& resources) {
+    for (const VivariumOrganView& organ : resources.get_organs(GODOT_ORGAN_SEGMENT)) {
+        if (organ.order >= 1.0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** The figure `object_id` as the body port carries it now, nullptr when it carries no such figure. */
